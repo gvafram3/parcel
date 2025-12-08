@@ -1,0 +1,267 @@
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .all-\[unset\] {
+    all: unset;
+  }
+}
+
+:root {
+  --body-lg-bold-font-family: "Lato", Helvetica;
+  --body-lg-bold-font-size: 20px;
+  --body-lg-bold-font-style: normal;
+  --body-lg-bold-font-weight: 700;
+  --body-lg-bold-letter-spacing: 0px;
+  --body-lg-bold-line-height: 32px;
+  --body-lg-font-family: "Lato", Helvetica;
+  --body-lg-font-size: 20px;
+  --body-lg-font-style: normal;
+  --body-lg-font-weight: 400;
+  --body-lg-letter-spacing: 0px;
+  --body-lg-line-height: 32px;
+  --body-lg-semibold-font-family: "Lato", Helvetica;
+  --body-lg-semibold-font-size: 20px;
+  --body-lg-semibold-font-style: normal;
+  --body-lg-semibold-font-weight: 400;
+  --body-lg-semibold-letter-spacing: 0px;
+  --body-lg-semibold-line-height: 32px;
+  --body-md-bold-font-family: "Lato", Helvetica;
+  --body-md-bold-font-size: 16px;
+  --body-md-bold-font-style: normal;
+  --body-md-bold-font-weight: 700;
+  --body-md-bold-letter-spacing: 0px;
+  --body-md-bold-line-height: 24px;
+  --body-md-font-family: "Lato", Helvetica;
+  --body-md-font-size: 16px;
+  --body-md-font-style: normal;
+  --body-md-font-weight: 400;
+  --body-md-letter-spacing: 0px;
+  --body-md-line-height: 24px;
+  --body-md-semibold-font-family: "Lato", Helvetica;
+  --body-md-semibold-font-size: 16px;
+  --body-md-semibold-font-style: normal;
+  --body-md-semibold-font-weight: 400;
+  --body-md-semibold-letter-spacing: 0px;
+  --body-md-semibold-line-height: 24px;
+  --body-sm-font-family: "Lato", Helvetica;
+  --body-sm-font-size: 12px;
+  --body-sm-font-style: normal;
+  --body-sm-font-weight: 400;
+  --body-sm-letter-spacing: 0px;
+  --body-sm-line-height: 20px;
+  --heading-h3-font-family: "Lato", Helvetica;
+  --heading-h3-font-size: 40px;
+  --heading-h3-font-style: normal;
+  --heading-h3-font-weight: 400;
+  --heading-h3-letter-spacing: 0px;
+  --heading-h3-line-height: 48px;
+  --heading-h4-font-family: "Lato", Helvetica;
+  --heading-h4-font-size: 32px;
+  --heading-h4-font-style: normal;
+  --heading-h4-font-weight: 400;
+  --heading-h4-letter-spacing: 0px;
+  --heading-h4-line-height: 40px;
+  --heading-h5-font-family: "Lato", Helvetica;
+  --heading-h5-font-size: 24px;
+  --heading-h5-font-style: normal;
+  --heading-h5-font-weight: 400;
+  --heading-h5-letter-spacing: 0px;
+  --heading-h5-line-height: 28px;
+  --p-font-family: "Roboto", Helvetica;
+  --p-font-size: 16px;
+  --p-font-style: normal;
+  --p-font-weight: 400;
+  --p-letter-spacing: 0px;
+  --p-line-height: normal;
+}
+
+:root {
+  --animate-spin: spin 1s linear infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 1s var(--animation-delay, 0s) ease forwards;
+}
+
+.animate-fade-up {
+  animation: fade-up 1s var(--animation-delay, 0s) ease forwards;
+}
+
+.animate-marquee {
+  animation: marquee var(--duration) infinite linear;
+}
+
+.animate-marquee-vertical {
+  animation: marquee-vertical var(--duration) linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 8s infinite;
+}
+
+.animate-spin {
+  animation: var(--animate-spin);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes image-glow {
+  0% {
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.74, 0.25, 0.76, 1);
+  }
+
+  10% {
+    opacity: 0.7;
+    animation-timing-function: cubic-bezier(0.12, 0.01, 0.08, 0.99);
+  }
+
+  to {
+    opacity: 0.4;
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  90%,
+  to {
+    background-position: calc(-100% - var(--shimmer-width)) 0;
+  }
+
+  30%,
+  60% {
+    background-position: calc(100% + var(--shimmer-width)) 0;
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translate(0);
+  }
+
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes marquee-vertical {
+  0% {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+
+    --card: transparent;
+    --card-foreground: 222.2 47.4% 11.2%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 215 20.2% 65.1%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+
+    --card: transparent;
+    --card-foreground: 213 31% 91%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 1.2%;
+
+    --secondary: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 216 34% 17%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}

@@ -1,0 +1,1 @@
+export { ParcelRegistration } from "./ParcelRegistration";
