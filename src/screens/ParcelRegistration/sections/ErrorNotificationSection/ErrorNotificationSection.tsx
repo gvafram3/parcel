@@ -4,62 +4,73 @@ const steps = [
   {
     number: "1",
     label: "Parcel Details",
-    isActive: true,
   },
   {
     number: "2",
     label: "Costs and POD",
-    isActive: false,
   },
   {
     number: "3",
     label: "Review & Submit",
-    isActive: false,
   },
 ];
 
-export const ErrorNotificationSection = (): JSX.Element => {
+interface ErrorNotificationSectionProps {
+  currentStep?: number;
+}
+
+export const ErrorNotificationSection = ({
+  currentStep,
+}: ErrorNotificationSectionProps): JSX.Element => {
+  // If currentStep is not provided, don't render the progress indicator
+  if (currentStep === undefined) {
+    return <></>;
+  }
   return (
-    <div className="flex w-full items-center justify-between gap-6 relative">
-      {steps.map((step, index) => (
-        <React.Fragment key={index}>
-          <div className="flex flex-col items-center gap-2 flex-shrink-0">
-            <div
-              className={`inline-flex flex-col items-center justify-center gap-2.5 px-5 py-2.5 rounded-[52px] ${
-                step.isActive ? "bg-[#ea690c]" : "bg-[#e7e7e7]"
-              }`}
-            >
-              <div
-                className={`font-body-lg font-[number:var(--body-lg-font-weight)] text-[length:var(--body-lg-font-size)] tracking-[var(--body-lg-letter-spacing)] leading-[var(--body-lg-line-height)] [font-style:var(--body-lg-font-style)] ${
-                  step.isActive ? "text-white" : "text-[#4f4f4f]"
-                }`}
-              >
-                {step.number}
-              </div>
-            </div>
+    <div className="w-full rounded-2xl border border-[#d1d1d1] bg-white/80 px-4 py-3 shadow-sm sm:px-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+        {steps.map((step, index) => {
+          const stepNumber = index + 1;
+          const isActive = stepNumber === currentStep;
+          const isCompleted = stepNumber < currentStep;
 
-            <div className="h-6 text-center">
-              <div
-                className={`font-body-md font-[number:var(--body-md-font-weight)] text-[length:var(--body-md-font-size)] tracking-[var(--body-md-letter-spacing)] leading-[var(--body-md-line-height)] [font-style:var(--body-md-font-style)] whitespace-nowrap ${
-                  step.isActive ? "text-[#5d5d5d]" : "text-[#b0b0b0]"
-                }`}
-              >
-                {step.label}
-              </div>
-            </div>
-          </div>
+          return (
+            <React.Fragment key={index}>
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border text-base font-semibold sm:h-12 sm:w-12 ${
+                    isActive || isCompleted
+                      ? "border-transparent bg-[#ea690c] text-white"
+                      : "border-[#e7e7e7] bg-[#f7f7f7] text-[#4f4f4f]"
+                  }`}
+                >
+                  {step.number}
+                </div>
 
-          {index < steps.length - 1 && (
-            <div className="flex-1 relative h-px rotate-[0.37deg]">
-              <img
-                className="absolute w-full left-0 h-1 top-[-3px] rotate-[-0.37deg]"
-                alt="Line"
-                src="/line.svg"
-              />
-            </div>
-          )}
-        </React.Fragment>
-      ))}
+                <div
+                  className={`font-body-md font-[number:var(--body-md-font-weight)] text-[length:var(--body-md-font-size)] tracking-[var(--body-md-letter-spacing)] leading-[var(--body-md-line-height)] [font-style:var(--body-md-font-style)] ${
+                    isActive || isCompleted ? "text-[#5d5d5d]" : "text-[#9a9a9a]"
+                  }`}
+                >
+                  {step.label}
+                </div>
+              </div>
+
+              {index < steps.length - 1 && (
+                <div className="hidden flex-1 sm:block">
+                  <div
+                    className={`h-[2px] w-full rounded-full ${
+                      isCompleted || (isActive && index === currentStep - 2)
+                        ? "bg-gradient-to-r from-[#ea690c] via-[#f3b07d] to-[#f3b07d] opacity-70"
+                        : "bg-[#e7e7e7]"
+                    }`}
+                  />
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
     </div>
   );
 };

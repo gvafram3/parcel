@@ -1,9 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ParcelRegistration } from "./screens/ParcelRegistration";
+import { App } from "./App";
 
 createRoot(document.getElementById("app") as HTMLElement).render(
   <StrictMode>
-    <ParcelRegistration />
+    <App />
   </StrictMode>,
 );
