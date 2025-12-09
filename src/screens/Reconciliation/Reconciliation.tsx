@@ -8,8 +8,6 @@ import {
   XIcon,
   CameraIcon,
 } from "lucide-react";
-import { HeaderSection } from "../ParcelRegistration/sections/HeaderSection";
-import { NavigationSidebarSection } from "../ParcelRegistration/sections/NavigationSidebarSection";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
@@ -99,185 +97,176 @@ export const Reconciliation = (): JSX.Element => {
   };
 
   return (
-    <div className={`bg-slate-50 min-h-screen w-full ${showModal ? "overflow-hidden" : ""}`}>
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:px-12 lg:py-8">
-        <div className="w-full lg:w-[320px]">
-          <NavigationSidebarSection />
-        </div>
-
-        <div className="flex-1 space-y-6">
-          <HeaderSection />
-
-          <main className="flex-1 space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* Cash Reconciliation - Center */}
-              <div className="lg:col-span-3">
-                {selectedItem ? (
-                  <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
-                    <CardContent className="flex flex-col gap-6 p-4 sm:p-6">
-                      <header className="inline-flex items-center gap-2">
-                        <DollarSignIcon className="w-6 h-6 text-[#ea690c]" />
-                        <h2 className="font-body-lg-semibold font-[number:var(--body-lg-semibold-font-weight)] text-[#ea690c] text-[length:var(--body-lg-semibold-font-size)] tracking-[var(--body-lg-semibold-letter-spacing)] leading-[var(--body-lg-semibold-line-height)] [font-style:var(--body-lg-semibold-font-style)]">
-                          Cash Reconciliation
-                        </h2>
-                      </header>
-
-                      <div className="flex flex-col gap-4">
-                        {/* Select Rider */}
-                        <div className="flex flex-col gap-2">
-                          <Label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                            Select Rider<span className="text-[#e22420]">*</span>
-                          </Label>
-                          <select
-                            value={selectedItem.riderName}
-                            disabled
-                            className="w-full rounded border border-[#d1d1d1] bg-gray-50 px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 cursor-not-allowed"
-                          >
-                            <option>{selectedItem.riderName}</option>
-                          </select>
-                        </div>
-
-                        {/* Parcel ID */}
-                        <div className="flex flex-col gap-2">
-                          <Label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                            Parcel ID<span className="text-[#e22420]">*</span>
-                          </Label>
-                          <select
-                            value={selectedItem.parcelId}
-                            disabled
-                            className="w-full rounded border border-[#d1d1d1] bg-gray-50 px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 cursor-not-allowed"
-                          >
-                            <option>{selectedItem.parcelId}</option>
-                          </select>
-                        </div>
-
-                        {/* Parcel Details Box */}
-                        <div className="rounded-lg border-2 border-blue-200 bg-blue-50 p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex flex-col">
-                              <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-base mb-1">
-                                {selectedItem.recipientName}
-                              </span>
-                              <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100 w-fit">
-                                {selectedItem.parcelId}
-                              </Badge>
-                            </div>
-                            <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100 flex items-center gap-1">
-                              <CheckCircleIcon className="w-3 h-3" />
-                              Delivery
-                            </Badge>
-                          </div>
-                          <div className="mt-3 pt-3 border-t border-blue-200">
-                            <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                              Total Amount: GHC {selectedItem.totalAmount.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Amount Received */}
-                        <div className="flex flex-col gap-2">
-                          <Label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                            Amount Received<span className="text-[#e22420]">*</span>
-                          </Label>
-                          <Input
-                            type="number"
-                            placeholder="eg. 20"
-                            value={amountReceived}
-                            onChange={(e) => setAmountReceived(e.target.value)}
-                            className="w-full rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700"
-                          />
-                        </div>
-
-                        {/* Discrepancy Alert */}
-                        {hasDiscrepancy && (
-                          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 flex items-start gap-2">
-                            <AlertCircleIcon className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                            <span className="[font-family:'Lato',Helvetica] font-normal text-orange-800 text-sm">
-                              Discrepancy detected: GHC {discrepancy.toFixed(2)} short
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Proceed Button */}
-                        <Button
-                          onClick={handleProceed}
-                          disabled={!amountReceived || hasDiscrepancy}
-                          className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="[font-family:'Lato',Helvetica] font-semibold text-sm">
-                            Proceed
-                          </span>
-                          <ArrowRightIcon className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
-                    <CardContent className="flex items-center justify-center p-12">
-                      <div className="text-center">
-                        <DollarSignIcon className="w-16 h-16 text-[#9a9a9a] mx-auto mb-4" />
-                        <p className="[font-family:'Lato',Helvetica] font-normal text-[#5d5d5d] text-base">
-                          Select an item from the Remittance Queue to begin reconciliation
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-
-              {/* Remittance Queue - Right Side */}
-              <div className="lg:col-span-1">
-                <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm h-full">
-                  <CardContent className="flex flex-col gap-4 p-4 sm:p-6">
-                    <header className="flex items-center justify-between">
-                      <div className="inline-flex items-center gap-2">
-                        <UserIcon className="w-6 h-6 text-[#ea690c]" />
-                        <h2 className="font-body-lg-semibold font-[number:var(--body-lg-semibold-font-weight)] text-[#ea690c] text-[length:var(--body-lg-semibold-font-size)] tracking-[var(--body-lg-semibold-letter-spacing)] leading-[var(--body-lg-semibold-line-height)] [font-style:var(--body-lg-semibold-font-style)]">
-                          Remittance Queue
-                        </h2>
-                      </div>
-                      <Badge className="bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-100">
-                        28 waiting
-                      </Badge>
+    <div className={`w-full ${showModal ? "overflow-hidden" : ""}`}>
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="flex-1 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Cash Reconciliation - Center */}
+            <div className="lg:col-span-3">
+              {selectedItem ? (
+                <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+                  <CardContent className="flex flex-col gap-6 p-4 sm:p-6">
+                    <header className="inline-flex items-center gap-2">
+                      <DollarSignIcon className="w-6 h-6 text-[#ea690c]" />
+                      <h2 className="font-body-lg-semibold font-[number:var(--body-lg-semibold-font-weight)] text-[#ea690c] text-[length:var(--body-lg-semibold-font-size)] tracking-[var(--body-lg-semibold-letter-spacing)] leading-[var(--body-lg-semibold-line-height)] [font-style:var(--body-lg-semibold-font-style)]">
+                        Cash Reconciliation
+                      </h2>
                     </header>
 
-                    <div className="flex flex-col gap-3 max-h-[600px] overflow-y-auto">
-                      {remittanceQueue.map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            setSelectedItem(item);
-                            setAmountReceived("");
-                          }}
-                          className={`rounded-lg border p-3 text-left hover:bg-gray-50 transition-colors ${
-                            selectedItem?.id === item.id
-                              ? "border-[#ea690c] bg-orange-50"
-                              : "border-[#d1d1d1] bg-white"
-                          }`}
+                    <div className="flex flex-col gap-4">
+                      {/* Select Rider */}
+                      <div className="flex flex-col gap-2">
+                        <Label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                          Select Rider<span className="text-[#e22420]">*</span>
+                        </Label>
+                        <select
+                          value={selectedItem.riderName}
+                          disabled
+                          className="w-full rounded border border-[#d1d1d1] bg-gray-50 px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 cursor-not-allowed"
                         >
-                          <div className="flex flex-col gap-2">
-                            <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                              {item.riderName}
+                          <option>{selectedItem.riderName}</option>
+                        </select>
+                      </div>
+
+                      {/* Parcel ID */}
+                      <div className="flex flex-col gap-2">
+                        <Label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                          Parcel ID<span className="text-[#e22420]">*</span>
+                        </Label>
+                        <select
+                          value={selectedItem.parcelId}
+                          disabled
+                          className="w-full rounded border border-[#d1d1d1] bg-gray-50 px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 cursor-not-allowed"
+                        >
+                          <option>{selectedItem.parcelId}</option>
+                        </select>
+                      </div>
+
+                      {/* Parcel Details Box */}
+                      <div className="rounded-lg border-2 border-blue-200 bg-blue-50 p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex flex-col">
+                            <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-base mb-1">
+                              {selectedItem.recipientName}
                             </span>
-                            <div className="flex items-center justify-between">
-                              <Badge className="bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100">
-                                {item.parcelCount} Parcel
-                              </Badge>
-                              <span className="[font-family:'Lato',Helvetica] font-bold text-neutral-800 text-base">
-                                {item.amount}
-                              </span>
-                            </div>
+                            <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100 w-fit">
+                              {selectedItem.parcelId}
+                            </Badge>
                           </div>
-                        </button>
-                      ))}
+                          <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100 flex items-center gap-1">
+                            <CheckCircleIcon className="w-3 h-3" />
+                            Delivery
+                          </Badge>
+                        </div>
+                        <div className="mt-3 pt-3 border-t border-blue-200">
+                          <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                            Total Amount: GHC {selectedItem.totalAmount.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Amount Received */}
+                      <div className="flex flex-col gap-2">
+                        <Label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                          Amount Received<span className="text-[#e22420]">*</span>
+                        </Label>
+                        <Input
+                          type="number"
+                          placeholder="eg. 20"
+                          value={amountReceived}
+                          onChange={(e) => setAmountReceived(e.target.value)}
+                          className="w-full rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700"
+                        />
+                      </div>
+
+                      {/* Discrepancy Alert */}
+                      {hasDiscrepancy && (
+                        <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 flex items-start gap-2">
+                          <AlertCircleIcon className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                          <span className="[font-family:'Lato',Helvetica] font-normal text-orange-800 text-sm">
+                            Discrepancy detected: GHC {discrepancy.toFixed(2)} short
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Proceed Button */}
+                      <Button
+                        onClick={handleProceed}
+                        disabled={!amountReceived || hasDiscrepancy}
+                        className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span className="[font-family:'Lato',Helvetica] font-semibold text-sm">
+                          Proceed
+                        </span>
+                        <ArrowRightIcon className="w-4 h-4" />
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
-              </div>
+              ) : (
+                <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+                  <CardContent className="flex items-center justify-center p-12">
+                    <div className="text-center">
+                      <DollarSignIcon className="w-16 h-16 text-[#9a9a9a] mx-auto mb-4" />
+                      <p className="[font-family:'Lato',Helvetica] font-normal text-[#5d5d5d] text-base">
+                        Select an item from the Remittance Queue to begin reconciliation
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-          </main>
-        </div>
+
+            {/* Remittance Queue - Right Side */}
+            <div className="lg:col-span-1">
+              <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm h-full">
+                <CardContent className="flex flex-col gap-4 p-4 sm:p-6">
+                  <header className="flex items-center justify-between">
+                    <div className="inline-flex items-center gap-2">
+                      <UserIcon className="w-6 h-6 text-[#ea690c]" />
+                      <h2 className="font-body-lg-semibold font-[number:var(--body-lg-semibold-font-weight)] text-[#ea690c] text-[length:var(--body-lg-semibold-font-size)] tracking-[var(--body-lg-semibold-letter-spacing)] leading-[var(--body-lg-semibold-line-height)] [font-style:var(--body-lg-semibold-font-style)]">
+                        Remittance Queue
+                      </h2>
+                    </div>
+                    <Badge className="bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-100">
+                      28 waiting
+                    </Badge>
+                  </header>
+
+                  <div className="flex flex-col gap-3 max-h-[600px] overflow-y-auto">
+                    {remittanceQueue.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setSelectedItem(item);
+                          setAmountReceived("");
+                        }}
+                        className={`rounded-lg border p-3 text-left hover:bg-gray-50 transition-colors ${selectedItem?.id === item.id
+                            ? "border-[#ea690c] bg-orange-50"
+                            : "border-[#d1d1d1] bg-white"
+                          }`}
+                      >
+                        <div className="flex flex-col gap-2">
+                          <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                            {item.riderName}
+                          </span>
+                          <div className="flex items-center justify-between">
+                            <Badge className="bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100">
+                              {item.parcelCount} Parcel
+                            </Badge>
+                            <span className="[font-family:'Lato',Helvetica] font-bold text-neutral-800 text-base">
+                              {item.amount}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </main>
       </div>
 
       {/* Confirm Reconciliation Modal */}

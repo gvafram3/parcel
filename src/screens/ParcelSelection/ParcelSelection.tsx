@@ -6,8 +6,6 @@ import {
   PhoneIcon,
   ClockIcon,
 } from "lucide-react";
-import { HeaderSection } from "../ParcelRegistration/sections/HeaderSection";
-import { NavigationSidebarSection } from "../ParcelRegistration/sections/NavigationSidebarSection";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -148,9 +146,8 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
   const config = statusConfig[parcel.status];
 
   return (
-    <Card className={`rounded-lg border-2 bg-white shadow-sm hover:shadow-md transition-shadow ${
-      isSelected ? "border-[#ea690c]" : "border-[#d1d1d1]"
-    }`}>
+    <Card className={`rounded-lg border-2 bg-white shadow-sm hover:shadow-md transition-shadow ${isSelected ? "border-[#ea690c]" : "border-[#d1d1d1]"
+      }`}>
       <CardContent className="p-4">
         <div className="flex flex-col gap-4">
           {/* Header with checkbox and package ID */}
@@ -161,11 +158,10 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
                   e.stopPropagation();
                   onToggle();
                 }}
-                className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${
-                  isSelected
-                    ? "border-[#ea690c] bg-[#ea690c]"
-                    : "border-[#d1d1d1] bg-white"
-                }`}
+                className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${isSelected
+                  ? "border-[#ea690c] bg-[#ea690c]"
+                  : "border-[#d1d1d1] bg-white"
+                  }`}
               >
                 {isSelected && <CheckIcon className="w-3 h-3 text-white" />}
               </button>
@@ -273,78 +269,70 @@ export const ParcelSelection = (): JSX.Element => {
   };
 
   return (
-    <div className="bg-slate-50 min-h-screen w-full">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-8 lg:px-12 lg:py-8">
-        <div className="w-full lg:w-[320px]">
-          <NavigationSidebarSection />
-        </div>
+    <div className="w-full">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="flex-1 space-y-6">
+          {/* Banner */}
+          <div className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+            <p className="[font-family:'Lato',Helvetica] font-normal text-blue-800 text-sm">
+              <span className="font-semibold">{selectedParcels.size} Parcel(s) Selected</span>
+              {" - "}
+              10 maximum parcels can be selected and assigned to a rider at once.
+            </p>
+          </div>
 
-        <div className="flex-1 space-y-6">
-          <HeaderSection />
+          {/* Action Bar */}
+          <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+            <CardContent className="flex flex-col sm:flex-row items-center gap-4 p-4">
+              <div className="flex items-center gap-2">
+                <FilterIcon className="w-5 h-5 text-[#5d5d5d]" />
+                <select className="rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm focus:outline-none focus:ring-2 focus:ring-[#ea690c]">
+                  <option>All Status</option>
+                  <option>Waiting Response</option>
+                  <option>No Response</option>
+                  <option>Delivery</option>
+                  <option>Pickup</option>
+                </select>
+              </div>
 
-          <main className="flex-1 space-y-6">
-            {/* Banner */}
-            <div className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-              <p className="[font-family:'Lato',Helvetica] font-normal text-blue-800 text-sm">
-                <span className="font-semibold">{selectedParcels.size} Parcel(s) Selected</span>
-                {" - "}
-                10 maximum parcels can be selected and assigned to a rider at once.
-              </p>
-            </div>
-
-            {/* Action Bar */}
-            <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
-              <CardContent className="flex flex-col sm:flex-row items-center gap-4 p-4">
-                <div className="flex items-center gap-2">
-                  <FilterIcon className="w-5 h-5 text-[#5d5d5d]" />
-                  <select className="rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm focus:outline-none focus:ring-2 focus:ring-[#ea690c]">
-                    <option>All Status</option>
-                    <option>Waiting Response</option>
-                    <option>No Response</option>
-                    <option>Delivery</option>
-                    <option>Pickup</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-2 ml-auto" style={{ width: "300px" }}>
-                  <label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm whitespace-nowrap">
-                    Select rider:
-                  </label>
-                  <select
-                    value={selectedRider}
-                    onChange={(e) => setSelectedRider(e.target.value)}
-                    className="flex-1 rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
-                  >
-                    <option value="">Choose a rider</option>
-                    <option value="rider-1">Kwame Asante</option>
-                    <option value="rider-2">Ama Mensah</option>
-                    <option value="rider-3">Kofi Boateng</option>
-                  </select>
-                </div>
-
-                <Button
-                  onClick={handleAssign}
-                  disabled={selectedParcels.size === 0 || !selectedRider}
-                  className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto">
+                <label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm whitespace-nowrap">
+                  Select rider:
+                </label>
+                <select
+                  value={selectedRider}
+                  onChange={(e) => setSelectedRider(e.target.value)}
+                  className="flex-1 sm:flex-none rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                 >
-                  Assign
-                </Button>
-              </CardContent>
-            </Card>
+                  <option value="">Choose a rider</option>
+                  <option value="rider-1">Kwame Asante</option>
+                  <option value="rider-2">Ama Mensah</option>
+                  <option value="rider-3">Kofi Boateng</option>
+                </select>
+              </div>
 
-            {/* Parcel Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {parcels.map((parcel) => (
-                <ParcelCard
-                  key={parcel.id}
-                  parcel={parcel}
-                  isSelected={selectedParcels.has(parcel.id)}
-                  onToggle={() => toggleParcel(parcel.id)}
-                />
-              ))}
-            </div>
-          </main>
-        </div>
+              <Button
+                onClick={handleAssign}
+                disabled={selectedParcels.size === 0 || !selectedRider}
+                className="w-full sm:w-auto bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Assign
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Parcel Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {parcels.map((parcel) => (
+              <ParcelCard
+                key={parcel.id}
+                parcel={parcel}
+                isSelected={selectedParcels.has(parcel.id)}
+                onToggle={() => toggleParcel(parcel.id)}
+              />
+            ))}
+          </div>
+        </main>
       </div>
     </div>
   );
