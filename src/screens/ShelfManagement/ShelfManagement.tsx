@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Package, AlertCircleIcon } from "lucide-react";
+import { Plus, Trash2, Package, AlertCircleIcon, X } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -15,7 +15,7 @@ export const ShelfManagement = (): JSX.Element => {
     const [shelves, setShelves] = useState<Shelf[]>([]);
     const [parcels, setParcels] = useState<any[]>([]);
     const [newShelfName, setNewShelfName] = useState("");
-    const [showAddForm, setShowAddForm] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
     useEffect(() => {
@@ -26,7 +26,7 @@ export const ShelfManagement = (): JSX.Element => {
                 updateShelfParcelCount(shelf.name, currentStation.id);
             });
             setShelves(getShelvesByStation(currentStation.id));
-            
+
             // Load parcels to check if shelves can be deleted
             const stationParcels = getParcelsByStation(currentStation.id);
             setParcels(stationParcels);
@@ -48,7 +48,7 @@ export const ShelfManagement = (): JSX.Element => {
         const newShelf = addShelf(newShelfName.trim(), currentStation.id, currentUser.id);
         setShelves([...shelves, newShelf]);
         setNewShelfName("");
-        setShowAddForm(false);
+        setShowAddModal(false);
         alert(`Shelf "${newShelf.name}" created successfully!`);
     };
 
@@ -72,6 +72,11 @@ export const ShelfManagement = (): JSX.Element => {
         setDeleteConfirm(null);
     };
 
+    const handleCloseModal = () => {
+        setShowAddModal(false);
+        setNewShelfName("");
+    };
+
     const canManageShelves = userRole === "station-manager" || userRole === "admin";
 
     return (
@@ -88,7 +93,7 @@ export const ShelfManagement = (): JSX.Element => {
                         </div>
                         {canManageShelves && (
                             <Button
-                                onClick={() => setShowAddForm(true)}
+                                onClick={() => setShowAddModal(true)}
                                 className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2"
                             >
                                 <Plus size={20} />
@@ -97,47 +102,71 @@ export const ShelfManagement = (): JSX.Element => {
                         )}
                     </div>
 
-                    {/* Add Shelf Form */}
-                    {showAddForm && canManageShelves && (
-                        <Card className="border border-blue-200 bg-blue-50">
-                            <CardContent className="p-6">
-                                <div className="flex flex-col sm:flex-row gap-3 items-end">
-                                    <div className="flex-1">
-                                        <Label className="block text-sm font-semibold text-neutral-800 mb-2">
-                                            Shelf Name/Code
-                                        </Label>
-                                        <Input
-                                            value={newShelfName}
-                                            onChange={(e) => setNewShelfName(e.target.value)}
-                                            placeholder="e.g., A1, B2, Ground-Left"
-                                            className="border border-[#d1d1d1]"
-                                            onKeyDown={(e) => {
-                                                if (e.key === "Enter") {
-                                                    handleAddShelf();
-                                                }
-                                            }}
-                                        />
+                    {/* Add Shelf Modal */}
+                    {showAddModal && canManageShelves && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <Card className="w-full max-w-md rounded-2xl border border-[#d1d1d1] bg-white shadow-lg">
+                                <CardContent className="p-6">
+                                    {/* Modal Header */}
+                                    <div className="flex items-center justify-between mb-6">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-orange-50 rounded-lg">
+                                                <Plus className="w-5 h-5 text-[#ea690c]" />
+                                            </div>
+                                            <h2 className="text-lg font-bold text-neutral-800">Add New Shelf</h2>
+                                        </div>
+                                        <button
+                                            onClick={handleCloseModal}
+                                            className="text-[#5d5d5d] hover:bg-gray-100 p-1 rounded transition-colors"
+                                        >
+                                            <X size={20} />
+                                        </button>
                                     </div>
-                                    <Button
-                                        onClick={handleAddShelf}
-                                        disabled={!newShelfName.trim()}
-                                        className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
-                                    >
-                                        Create
-                                    </Button>
-                                    <Button
-                                        onClick={() => {
-                                            setShowAddForm(false);
-                                            setNewShelfName("");
-                                        }}
-                                        variant="outline"
-                                        className="border border-[#d1d1d1]"
-                                    >
-                                        Cancel
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
+
+                                    {/* Modal Content */}
+                                    <div className="space-y-4">
+                                        <div>
+                                            <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                                Shelf Name/Code <span className="text-[#e22420]">*</span>
+                                            </Label>
+                                            <Input
+                                                value={newShelfName}
+                                                onChange={(e) => setNewShelfName(e.target.value)}
+                                                placeholder="e.g., A1, B2, Ground-Left"
+                                                className="border border-[#d1d1d1] w-full"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter") {
+                                                        handleAddShelf();
+                                                    }
+                                                }}
+                                                autoFocus
+                                            />
+                                            <p className="text-xs text-[#5d5d5d] mt-1">
+                                                Enter a unique identifier for this shelf
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Modal Actions */}
+                                    <div className="flex gap-3 mt-6">
+                                        <Button
+                                            onClick={handleCloseModal}
+                                            variant="outline"
+                                            className="flex-1 border border-[#d1d1d1] text-neutral-700 hover:bg-gray-50"
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            onClick={handleAddShelf}
+                                            disabled={!newShelfName.trim()}
+                                            className="flex-1 bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Create Shelf
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
                     )}
 
                     {/* Shelves Grid */}

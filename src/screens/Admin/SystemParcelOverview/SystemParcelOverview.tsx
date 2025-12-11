@@ -104,7 +104,7 @@ export const SystemParcelOverview = (): JSX.Element => {
 
     return (
         <div className="w-full">
-            <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-3 lg:py-8">
                 <main className="flex-1 space-y-6">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -244,8 +244,8 @@ export const SystemParcelOverview = (): JSX.Element => {
                                                     filteredParcels.map((parcel, index) => {
                                                         const statusConfig = STATUS_CONFIG[parcel.status] || { label: parcel.status, color: "bg-gray-100 text-gray-800" };
                                                         return (
-                                                            <tr 
-                                                                key={parcel.id} 
+                                                            <tr
+                                                                key={parcel.id}
                                                                 className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                                                             >
                                                                 <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">

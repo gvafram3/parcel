@@ -52,6 +52,7 @@ export interface Shelf {
 export interface Rider {
     id: string;
     name: string;
+    location: string;
     phone: string;
     stationId: string;
     status: "available" | "busy" | "offline";
@@ -67,7 +68,7 @@ export interface Rider {
 export interface Parcel {
     id: string;
     stationId: string;
-    
+
     // Registration data
     recipientName: string;
     recipientPhone: string;
@@ -76,14 +77,14 @@ export interface Parcel {
     shelfLocation: string;
     registeredDate: string;
     registeredBy: string;
-    
+
     // Driver/Vehicle info (for bulk entries)
     driverName?: string;
     vehicleNumber?: string;
-    
+
     // Status
     status: ParcelStatus;
-    
+
     // Call center data
     customerContacted?: boolean;
     contactedDate?: string;
@@ -93,12 +94,12 @@ export interface Parcel {
     deliveryFee?: number;
     preferredDeliveryDate?: string;
     callNotes?: string;
-    
+
     // Assignment data
     assignedRiderId?: string;
     assignedRiderName?: string;
     assignedDate?: string;
-    
+
     // Delivery tracking
     pickedUpDate?: string;
     outForDeliveryDate?: string;
@@ -106,12 +107,12 @@ export interface Parcel {
     deliveryFailedDate?: string;
     failureReason?: string;
     collectedDate?: string;
-    
+
     // Financial
     amountCollected?: number;
     deliveryFeeCollected?: number;
     itemValueCollected?: number;
-    
+
     // Audit
     updatedAt: string;
     updatedBy?: string;
