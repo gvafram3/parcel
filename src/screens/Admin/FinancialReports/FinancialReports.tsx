@@ -1,86 +1,54 @@
-import React, { useState } from "react";
-import { DollarSign, TrendingUp, BarChart3, PieChart as PieChartIcon, Calendar } from "lucide-react";
+import { useState, useEffect } from "react";
+import { DollarSign, TrendingUp, Calendar } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
-import { Badge } from "../../../components/ui/badge";
-
-interface FinancialData {
-    date: string;
-    deliveryFees: number;
-    itemCollections: number;
-    driverPayments: number;
-}
-
-interface StationFinancial {
-    station: string;
-    deliveryFees: number;
-    itemCollections: number;
-    driverPayments: number;
-    netRevenue: number;
-}
-
-const dailyData: FinancialData[] = [
-    { date: "Jan 15", deliveryFees: 1250, itemCollections: 2340, driverPayments: 875 },
-    { date: "Jan 16", deliveryFees: 1480, itemCollections: 2680, driverPayments: 1050 },
-    { date: "Jan 17", deliveryFees: 1320, itemCollections: 2450, driverPayments: 920 },
-    { date: "Jan 18", deliveryFees: 1650, itemCollections: 3120, driverPayments: 1180 },
-    { date: "Jan 19", deliveryFees: 1520, itemCollections: 2890, driverPayments: 1080 },
-    { date: "Jan 20", deliveryFees: 1780, itemCollections: 3340, driverPayments: 1260 },
-];
-
-const stationFinancials: StationFinancial[] = [
-    {
-        station: "Accra Central",
-        deliveryFees: 5625,
-        itemCollections: 8450,
-        driverPayments: 3375,
-        netRevenue: 10700,
-    },
-    {
-        station: "Kumasi Hub",
-        deliveryFees: 4000,
-        itemCollections: 6200,
-        driverPayments: 2400,
-        netRevenue: 7800,
-    },
-    {
-        station: "Tema Port",
-        deliveryFees: 3500,
-        itemCollections: 5100,
-        driverPayments: 2100,
-        netRevenue: 6500,
-    },
-    {
-        station: "Takoradi West",
-        deliveryFees: 2625,
-        itemCollections: 3850,
-        driverPayments: 1575,
-        netRevenue: 4900,
-    },
-];
+import { Label } from "../../../components/ui/label";
+import { calculateFinancialSummary, getStationPerformance, mockStations } from "../../../data/mockData";
+import { formatCurrency } from "../../../utils/dataHelpers";
+import { getStationName } from "../../../utils/dataHelpers";
 
 export const FinancialReports = (): JSX.Element => {
     const [dateRange, setDateRange] = useState({
-        from: "2024-01-15",
-        to: "2024-01-20",
+        from: "",
+        to: "",
     });
+    const [reportType, setReportType] = useState<"daily" | "station">("station");
+    const [systemSummary, setSystemSummary] = useState(calculateFinancialSummary());
+    const [stationPerformance, setStationPerformance] = useState(getStationPerformance());
 
-    const [reportType, setReportType] = useState<"daily" | "station">("daily");
+    useEffect(() => {
+        // Recalculate when date range changes
+        const summary = calculateFinancialSummary(undefined, dateRange.from && dateRange.to ? {
+            from: dateRange.from,
+            to: dateRange.to,
+        } : undefined);
+        setSystemSummary(summary);
+        setStationPerformance(getStationPerformance());
+    }, [dateRange]);
 
-    // Calculate summary metrics
-    const totalDeliveryFees = dailyData.reduce((sum, d) => sum + d.deliveryFees, 0);
-    const totalItemCollections = dailyData.reduce((sum, d) => sum + d.itemCollections, 0);
-    const totalDriverPayments = dailyData.reduce((sum, d) => sum + d.driverPayments, 0);
-    const netRevenue = totalDeliveryFees + totalItemCollections - totalDriverPayments;
+    const handleExport = () => {
+        const headers = ["Station", "Delivery Earnings", "Item Collections", "Driver Payments", "Net Revenue"];
+        const rows = stationPerformance.map((station) => [
+            station.stationName,
+            formatCurrency(station.deliveryEarnings),
+            formatCurrency(systemSummary.totalItemCollections / stationPerformance.length), // Approximate
+            formatCurrency(station.driverPaymentsOwed),
+            formatCurrency(station.deliveryEarnings - station.driverPaymentsOwed),
+        ]);
 
-    // Station summary
-    const stationTotalFees = stationFinancials.reduce((sum, s) => sum + s.deliveryFees, 0);
-    const stationTotalCollections = stationFinancials.reduce((sum, s) => sum + s.itemCollections, 0);
-    const stationTotalPayments = stationFinancials.reduce((sum, s) => sum + s.driverPayments, 0);
+        const csv = [
+            headers.join(","),
+            ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
+        ].join("\n");
 
-    const maxDeliveryFees = Math.max(...dailyData.map((d) => d.deliveryFees));
-    const maxItemCollections = Math.max(...dailyData.map((d) => d.itemCollections));
+        const blob = new Blob([csv], { type: "text/csv" });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `financial-report-${new Date().toISOString().split("T")[0]}.csv`;
+        a.click();
+    };
 
     return (
         <div className="w-full">
@@ -88,359 +56,186 @@ export const FinancialReports = (): JSX.Element => {
                 <main className="flex-1 space-y-6">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-3xl font-bold text-neutral-800">Financial Reports</h1>
-                            <p className="text-sm text-[#5d5d5d] mt-1">
-                                Comprehensive financial analytics and insights
-                            </p>
-                        </div>
-                        <Button className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2">
+                        <div className="flex-1"></div>
+                        <Button
+                            onClick={handleExport}
+                            className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2"
+                        >
                             <Calendar size={18} />
                             Export Report
                         </Button>
                     </div>
 
-                    {/* Report Type Selection */}
-                    <div className="flex gap-2">
-                        <Button
-                            onClick={() => setReportType("daily")}
-                            className={`flex items-center gap-2 ${reportType === "daily"
-                                ? "bg-[#ea690c] text-white"
-                                : "border border-[#d1d1d1] text-neutral-700 hover:bg-gray-50"
-                                }`}
-                        >
-                            <BarChart3 size={18} />
-                            Daily Report
-                        </Button>
-                        <Button
-                            onClick={() => setReportType("station")}
-                            className={`flex items-center gap-2 ${reportType === "station"
-                                ? "bg-[#ea690c] text-white"
-                                : "border border-[#d1d1d1] text-neutral-700 hover:bg-gray-50"
-                                }`}
-                        >
-                            <PieChartIcon size={18} />
-                            Station Report
-                        </Button>
-                    </div>
-
                     {/* Date Range Filter */}
-                    {reportType === "daily" && (
-                        <Card className="border border-[#d1d1d1] bg-white">
+                    <Card className="border border-[#d1d1d1] bg-white">
+                        <CardContent className="p-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                <div>
+                                    <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                        From Date
+                                    </Label>
+                                    <Input
+                                        type="date"
+                                        value={dateRange.from}
+                                        onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
+                                        className="border border-[#d1d1d1]"
+                                    />
+                                </div>
+                                <div>
+                                    <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                        To Date
+                                    </Label>
+                                    <Input
+                                        type="date"
+                                        value={dateRange.to}
+                                        onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
+                                        className="border border-[#d1d1d1]"
+                                    />
+                                </div>
+                                <div className="flex items-end">
+                                    <Button
+                                        onClick={() => setDateRange({ from: "", to: "" })}
+                                        variant="outline"
+                                        className="w-full border border-[#d1d1d1]"
+                                    >
+                                        Clear Filters
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Card className="border border-[#d1d1d1] bg-white shadow-sm">
                             <CardContent className="p-6">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-semibold text-neutral-800 mb-2">
-                                            From Date
-                                        </label>
-                                        <Input
-                                            type="date"
-                                            value={dateRange.from}
-                                            onChange={(e) => setDateRange({ ...dateRange, from: e.target.value })}
-                                            className="border border-[#d1d1d1]"
-                                        />
+                                <div className="flex items-center justify-between">
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-sm text-[#5d5d5d]">Total Delivery Earnings</p>
+                                        <h3 className="text-2xl font-bold text-neutral-800">
+                                            {formatCurrency(systemSummary.totalDeliveryEarnings)}
+                                        </h3>
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-semibold text-neutral-800 mb-2">
-                                            To Date
-                                        </label>
-                                        <Input
-                                            type="date"
-                                            value={dateRange.to}
-                                            onChange={(e) => setDateRange({ ...dateRange, to: e.target.value })}
-                                            className="border border-[#d1d1d1]"
-                                        />
-                                    </div>
+                                    <DollarSign className="w-10 h-10 text-green-500 opacity-20" />
                                 </div>
                             </CardContent>
                         </Card>
-                    )}
 
-                    {reportType === "daily" ? (
-                        <>
-                            {/* Summary Metrics */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                <Card className="border border-[#d1d1d1] bg-white">
-                                    <CardContent className="p-6">
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-sm text-[#5d5d5d]">Total Delivery Fees</p>
-                                            <h3 className="text-2xl font-bold text-neutral-800">
-                                                GHC {totalDeliveryFees.toLocaleString()}
-                                            </h3>
-                                            <p className="text-xs text-green-600 font-semibold">
-                                                +{((totalDeliveryFees / (totalDeliveryFees + totalItemCollections)) * 100).toFixed(1)}% of total
-                                            </p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border border-[#d1d1d1] bg-white">
-                                    <CardContent className="p-6">
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-sm text-[#5d5d5d]">Item Collections</p>
-                                            <h3 className="text-2xl font-bold text-neutral-800">
-                                                GHC {totalItemCollections.toLocaleString()}
-                                            </h3>
-                                            <p className="text-xs text-green-600 font-semibold">
-                                                +{((totalItemCollections / (totalDeliveryFees + totalItemCollections)) * 100).toFixed(1)}% of total
-                                            </p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border border-[#d1d1d1] bg-white">
-                                    <CardContent className="p-6">
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-sm text-[#5d5d5d]">Driver Payments</p>
-                                            <h3 className="text-2xl font-bold text-neutral-800">
-                                                GHC {totalDriverPayments.toLocaleString()}
-                                            </h3>
-                                            <p className="text-xs text-red-600 font-semibold">
-                                                -{((totalDriverPayments / (totalDeliveryFees + totalItemCollections)) * 100).toFixed(1)}% of total
-                                            </p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border border-[#d1d1d1] bg-white">
-                                    <CardContent className="p-6">
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-sm text-[#5d5d5d]">Net Revenue</p>
-                                            <h3 className="text-2xl font-bold text-[#ea690c]">
-                                                GHC {netRevenue.toLocaleString()}
-                                            </h3>
-                                            <p className="text-xs text-neutral-600 font-semibold">
-                                                {((netRevenue / (totalDeliveryFees + totalItemCollections)) * 100).toFixed(1)}% margin
-                                            </p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </div>
-
-                            {/* Daily Breakdown Chart */}
-                            <Card className="border border-[#d1d1d1] bg-white">
-                                <CardContent className="p-6">
-                                    <h2 className="text-lg font-bold text-neutral-800 mb-6">Daily Revenue Breakdown</h2>
-                                    <div className="space-y-4">
-                                        {dailyData.map((day, idx) => (
-                                            <div key={idx} className="flex flex-col gap-2">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-sm font-semibold text-neutral-800">{day.date}</span>
-                                                    <span className="text-sm font-bold text-neutral-800">
-                                                        GHC {(day.deliveryFees + day.itemCollections - day.driverPayments).toLocaleString()}
-                                                    </span>
-                                                </div>
-                                                <div className="flex gap-1 h-8">
-                                                    {/* Delivery Fees Bar */}
-                                                    <div
-                                                        className="bg-[#ea690c] rounded-l"
-                                                        style={{
-                                                            width: `${(day.deliveryFees / (maxDeliveryFees + maxItemCollections)) * 100}%`,
-                                                        }}
-                                                        title={`Delivery Fees: GHC ${day.deliveryFees}`}
-                                                    />
-                                                    {/* Item Collections Bar */}
-                                                    <div
-                                                        className="bg-blue-500 rounded-r"
-                                                        style={{
-                                                            width: `${(day.itemCollections / (maxDeliveryFees + maxItemCollections)) * 100}%`,
-                                                        }}
-                                                        title={`Item Collections: GHC ${day.itemCollections}`}
-                                                    />
-                                                </div>
-                                            </div>
-                                        ))}
+                        <Card className="border border-[#d1d1d1] bg-white shadow-sm">
+                            <CardContent className="p-6">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-sm text-[#5d5d5d]">Total Item Collections</p>
+                                        <h3 className="text-2xl font-bold text-neutral-800">
+                                            {formatCurrency(systemSummary.totalItemCollections)}
+                                        </h3>
                                     </div>
-                                    <div className="mt-6 flex gap-6 text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-3 h-3 bg-[#ea690c] rounded" />
-                                            <span className="text-neutral-700">Delivery Fees</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-3 h-3 bg-blue-500 rounded" />
-                                            <span className="text-neutral-700">Item Collections</span>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                    <TrendingUp className="w-10 h-10 text-blue-500 opacity-20" />
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                            {/* Daily Table */}
-                            <Card className="border border-[#d1d1d1] bg-white">
-                                <CardContent className="p-6">
-                                    <h2 className="text-lg font-bold text-neutral-800 mb-4">Daily Details</h2>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
+                        <Card className="border border-[#d1d1d1] bg-white shadow-sm">
+                            <CardContent className="p-6">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-sm text-[#5d5d5d]">Driver Payments Owed</p>
+                                        <h3 className="text-2xl font-bold text-neutral-800">
+                                            {formatCurrency(systemSummary.totalDriverPayments)}
+                                        </h3>
+                                    </div>
+                                    <DollarSign className="w-10 h-10 text-orange-500 opacity-20" />
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border border-[#d1d1d1] bg-white shadow-sm">
+                            <CardContent className="p-6">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-sm text-[#5d5d5d]">Net Revenue</p>
+                                        <h3 className="text-2xl font-bold text-[#ea690c]">
+                                            {formatCurrency(systemSummary.netRevenue)}
+                                        </h3>
+                                    </div>
+                                    <TrendingUp className="w-10 h-10 text-[#ea690c] opacity-20" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Station Financial Breakdown */}
+                    <Card className="border border-[#d1d1d1] bg-white shadow-sm overflow-hidden">
+                        <CardContent className="p-4 sm:p-6">
+                            <h2 className="text-lg font-bold text-neutral-800 mb-4">Station Financial Breakdown</h2>
+                            <div className="overflow-x-auto -mx-6 sm:mx-0">
+                                <div className="inline-block min-w-full align-middle">
+                                    <div className="overflow-hidden">
+                                        <table className="min-w-full divide-y divide-[#d1d1d1]">
                                             <thead>
-                                                <tr className="border-b border-[#d1d1d1]">
-                                                    <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">Date</th>
-                                                    <th className="text-right py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                        Delivery Fees
+                                                <tr className="bg-gray-50 border-b border-[#d1d1d1]">
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Station
                                                     </th>
-                                                    <th className="text-right py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                        Item Collections
+                                                    <th className="text-right py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Delivery Earnings
                                                     </th>
-                                                    <th className="text-right py-3 px-4 font-semibold text-[#5d5d5d]">
+                                                    <th className="text-right py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
                                                         Driver Payments
                                                     </th>
-                                                    <th className="text-right py-3 px-4 font-semibold text-[#5d5d5d]">
+                                                    <th className="text-right py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
                                                         Net Revenue
+                                                    </th>
+                                                    <th className="text-right py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Success Rate
                                                     </th>
                                                 </tr>
                                             </thead>
-                                            <tbody>
-                                                {dailyData.map((day, idx) => {
-                                                    const netDay = day.deliveryFees + day.itemCollections - day.driverPayments;
-                                                    return (
-                                                        <tr key={idx} className="border-b border-[#d1d1d1] hover:bg-gray-50">
-                                                            <td className="py-3 px-4 font-medium text-neutral-800">{day.date}</td>
-                                                            <td className="py-3 px-4 text-right text-neutral-700">
-                                                                GHC {day.deliveryFees.toLocaleString()}
-                                                            </td>
-                                                            <td className="py-3 px-4 text-right text-neutral-700">
-                                                                GHC {day.itemCollections.toLocaleString()}
-                                                            </td>
-                                                            <td className="py-3 px-4 text-right text-neutral-700">
-                                                                GHC {day.driverPayments.toLocaleString()}
-                                                            </td>
-                                                            <td className="py-3 px-4 text-right font-semibold text-[#ea690c]">
-                                                                GHC {netDay.toLocaleString()}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
+                                            <tbody className="bg-white divide-y divide-[#d1d1d1]">
+                                                {stationPerformance.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={5} className="py-12 text-center">
+                                                            <p className="text-sm text-neutral-500">No financial data available</p>
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    stationPerformance.map((station, index) => {
+                                                        const netRevenue = station.deliveryEarnings - station.driverPaymentsOwed;
+                                                        return (
+                                                            <tr
+                                                                key={station.stationId}
+                                                                className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                                                            >
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                    <span className="text-xs sm:text-sm font-medium text-neutral-800">
+                                                                        {station.stationName}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 text-right whitespace-nowrap text-xs sm:text-sm font-semibold text-green-600">
+                                                                    {formatCurrency(station.deliveryEarnings)}
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 text-right whitespace-nowrap text-xs sm:text-sm font-semibold text-orange-600">
+                                                                    {formatCurrency(station.driverPaymentsOwed)}
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 text-right whitespace-nowrap text-xs sm:text-sm font-bold text-[#ea690c]">
+                                                                    {formatCurrency(netRevenue)}
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 text-right whitespace-nowrap">
+                                                                    <span className="text-xs sm:text-sm font-semibold text-green-600">
+                                                                        {station.successRate}%
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>
-                                </CardContent>
-                            </Card>
-                        </>
-                    ) : (
-                        <>
-                            {/* Station Summary Metrics */}
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                                <Card className="border border-[#d1d1d1] bg-white">
-                                    <CardContent className="p-6">
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-sm text-[#5d5d5d]">Total Delivery Fees</p>
-                                            <h3 className="text-2xl font-bold text-neutral-800">
-                                                GHC {stationTotalFees.toLocaleString()}
-                                            </h3>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border border-[#d1d1d1] bg-white">
-                                    <CardContent className="p-6">
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-sm text-[#5d5d5d]">Total Collections</p>
-                                            <h3 className="text-2xl font-bold text-neutral-800">
-                                                GHC {stationTotalCollections.toLocaleString()}
-                                            </h3>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border border-[#d1d1d1] bg-white">
-                                    <CardContent className="p-6">
-                                        <div className="flex flex-col gap-2">
-                                            <p className="text-sm text-[#5d5d5d]">Total Driver Payments</p>
-                                            <h3 className="text-2xl font-bold text-neutral-800">
-                                                GHC {stationTotalPayments.toLocaleString()}
-                                            </h3>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                </div>
                             </div>
-
-                            {/* Station Pie Chart */}
-                            <Card className="border border-[#d1d1d1] bg-white">
-                                <CardContent className="p-6">
-                                    <h2 className="text-lg font-bold text-neutral-800 mb-6">Revenue Distribution by Station</h2>
-                                    <div className="space-y-4">
-                                        {stationFinancials.map((station, idx) => {
-                                            const percentage = (station.netRevenue / stationFinancials.reduce((sum, s) => sum + s.netRevenue, 0)) * 100;
-                                            return (
-                                                <div key={idx} className="flex flex-col gap-2">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-sm font-semibold text-neutral-800">{station.station}</span>
-                                                        <span className="text-sm font-bold text-neutral-800">
-                                                            {percentage.toFixed(1)}%
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full h-6 bg-gray-100 rounded-full overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-[#ea690c] rounded-full transition-all"
-                                                            style={{ width: `${percentage}%` }}
-                                                        />
-                                                    </div>
-                                                    <div className="text-xs text-[#5d5d5d]">
-                                                        Net Revenue: GHC {station.netRevenue.toLocaleString()}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Station Detailed Table */}
-                            <Card className="border border-[#d1d1d1] bg-white">
-                                <CardContent className="p-6">
-                                    <h2 className="text-lg font-bold text-neutral-800 mb-4">Station Financial Breakdown</h2>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                            <thead>
-                                                <tr className="border-b border-[#d1d1d1]">
-                                                    <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">Station</th>
-                                                    <th className="text-right py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                        Delivery Fees
-                                                    </th>
-                                                    <th className="text-right py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                        Item Collections
-                                                    </th>
-                                                    <th className="text-right py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                        Driver Payments
-                                                    </th>
-                                                    <th className="text-right py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                        Net Revenue
-                                                    </th>
-                                                    <th className="text-right py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                        Margin %
-                                                    </th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {stationFinancials.map((station, idx) => {
-                                                    const total = station.deliveryFees + station.itemCollections;
-                                                    const margin = ((station.netRevenue / total) * 100).toFixed(1);
-                                                    return (
-                                                        <tr key={idx} className="border-b border-[#d1d1d1] hover:bg-gray-50">
-                                                            <td className="py-3 px-4 font-medium text-neutral-800">{station.station}</td>
-                                                            <td className="py-3 px-4 text-right text-neutral-700">
-                                                                GHC {station.deliveryFees.toLocaleString()}
-                                                            </td>
-                                                            <td className="py-3 px-4 text-right text-neutral-700">
-                                                                GHC {station.itemCollections.toLocaleString()}
-                                                            </td>
-                                                            <td className="py-3 px-4 text-right text-neutral-700">
-                                                                GHC {station.driverPayments.toLocaleString()}
-                                                            </td>
-                                                            <td className="py-3 px-4 text-right font-semibold text-[#ea690c]">
-                                                                GHC {station.netRevenue.toLocaleString()}
-                                                            </td>
-                                                            <td className="py-3 px-4 text-right">
-                                                                <Badge className="bg-green-100 text-green-800">{margin}%</Badge>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </>
-                    )}
+                        </CardContent>
+                    </Card>
                 </main>
             </div>
         </div>

@@ -1,88 +1,69 @@
-import React, { useState } from "react";
-import { Download, Eye } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Download } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Badge } from "../../../components/ui/badge";
-
-interface Parcel {
-    id: string;
-    station: string;
-    recipientName: string;
-    phoneNumber: string;
-    status: string;
-    shelfLocation: string;
-    riderName?: string;
-    deliveryType: string;
-    registeredDate: string;
-}
-
-const mockParcels: Parcel[] = [
-    {
-        id: "PAK-001",
-        station: "Accra Central",
-        recipientName: "John Smith",
-        phoneNumber: "+233 555 123 456",
-        status: "delivered",
-        shelfLocation: "A1",
-        riderName: "Kwame Asante",
-        deliveryType: "Home Delivery",
-        registeredDate: "2024-01-15",
-    },
-    {
-        id: "PAK-002",
-        station: "Kumasi Hub",
-        recipientName: "Jane Doe",
-        phoneNumber: "+233 555 234 567",
-        status: "out-for-delivery",
-        shelfLocation: "B2",
-        riderName: "Ama Mensah",
-        deliveryType: "Home Delivery",
-        registeredDate: "2024-01-16",
-    },
-    {
-        id: "PAK-003",
-        station: "Tema Port",
-        recipientName: "Bob Wilson",
-        phoneNumber: "+233 555 345 678",
-        status: "ready-for-delivery",
-        shelfLocation: "C1",
-        deliveryType: "Pickup",
-        registeredDate: "2024-01-17",
-    },
-];
-
-const statusColors: Record<string, string> = {
-    registered: "bg-gray-100 text-gray-800",
-    contacted: "bg-blue-100 text-blue-800",
-    "ready-for-delivery": "bg-yellow-100 text-yellow-800",
-    assigned: "bg-purple-100 text-purple-800",
-    "out-for-delivery": "bg-indigo-100 text-indigo-800",
-    delivered: "bg-green-100 text-green-800",
-    failed: "bg-red-100 text-red-800",
-};
+import { mockParcels, mockStations } from "../../../data/mockData";
+import { Parcel, STATUS_CONFIG } from "../../../types";
+import { getStationName, formatPhoneNumber, formatDate } from "../../../utils/dataHelpers";
 
 export const SystemParcelOverview = (): JSX.Element => {
-    const [parcels, setParcels] = useState<Parcel[]>(mockParcels);
+    const [parcels, setParcels] = useState<Parcel[]>([]);
     const [filters, setFilters] = useState({
         station: "",
         status: "",
         dateFrom: "",
         dateTo: "",
+        searchQuery: "",
     });
 
-    const filteredParcels = parcels.filter((parcel) => {
-        if (filters.station && parcel.station !== filters.station) return false;
-        if (filters.status && parcel.status !== filters.status) return false;
-        if (filters.dateFrom && new Date(parcel.registeredDate) < new Date(filters.dateFrom))
-            return false;
-        if (filters.dateTo && new Date(parcel.registeredDate) > new Date(filters.dateTo))
-            return false;
-        return true;
-    });
+    useEffect(() => {
+        // Load all parcels
+        setParcels(mockParcels);
+    }, []);
 
-    const stations = [...new Set(parcels.map((p) => p.station))];
-    const statuses = [...new Set(parcels.map((p) => p.status))];
+    const filteredParcels = useMemo(() => {
+        let filtered = [...parcels];
+
+        // Filter by station
+        if (filters.station) {
+            filtered = filtered.filter((p) => p.stationId === filters.station);
+        }
+
+        // Filter by status
+        if (filters.status) {
+            filtered = filtered.filter((p) => p.status === filters.status);
+        }
+
+        // Filter by date range
+        if (filters.dateFrom) {
+            filtered = filtered.filter(
+                (p) => new Date(p.registeredDate) >= new Date(filters.dateFrom)
+            );
+        }
+        if (filters.dateTo) {
+            filtered = filtered.filter(
+                (p) => new Date(p.registeredDate) <= new Date(filters.dateTo)
+            );
+        }
+
+        // Search query
+        if (filters.searchQuery) {
+            const searchTerm = filters.searchQuery.toLowerCase();
+            filtered = filtered.filter(
+                (p) =>
+                    p.id.toLowerCase().includes(searchTerm) ||
+                    p.recipientName.toLowerCase().includes(searchTerm) ||
+                    p.recipientPhone.includes(searchTerm)
+            );
+        }
+
+        return filtered;
+    }, [parcels, filters]);
+
+    const stations = mockStations;
+    const statuses = Object.keys(STATUS_CONFIG);
 
     const handleExport = () => {
         const headers = [
@@ -98,14 +79,14 @@ export const SystemParcelOverview = (): JSX.Element => {
         ];
         const rows = filteredParcels.map((p) => [
             p.id,
-            p.station,
+            getStationName(p.stationId, mockStations),
             p.recipientName,
-            p.phoneNumber,
-            p.status,
+            p.recipientPhone,
+            STATUS_CONFIG[p.status]?.label || p.status,
             p.shelfLocation,
-            p.riderName || "N/A",
-            p.deliveryType,
-            p.registeredDate,
+            p.assignedRiderName || "N/A",
+            p.deliveryPreference === "pickup" ? "Pickup" : "Home Delivery",
+            formatDate(p.registeredDate),
         ]);
 
         const csv = [
@@ -127,14 +108,7 @@ export const SystemParcelOverview = (): JSX.Element => {
                 <main className="flex-1 space-y-6">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-3xl font-bold text-neutral-800">
-                                System Parcel Overview
-                            </h1>
-                            <p className="text-sm text-[#5d5d5d] mt-1">
-                                Global visibility of all parcels across all stations
-                            </p>
-                        </div>
+                        <div className="flex-1"></div>
                         <Button
                             onClick={handleExport}
                             className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2"
@@ -145,9 +119,22 @@ export const SystemParcelOverview = (): JSX.Element => {
                     </div>
 
                     {/* Filters */}
-                    <Card className="border border-[#d1d1d1] bg-white">
+                    <Card className="border border-[#d1d1d1] bg-white shadow-sm">
                         <CardContent className="p-6">
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                                <div className="lg:col-span-2">
+                                    <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                        Search
+                                    </label>
+                                    <Input
+                                        type="text"
+                                        placeholder="Search by ID, name, phone..."
+                                        value={filters.searchQuery}
+                                        onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
+                                        className="border border-[#d1d1d1]"
+                                    />
+                                </div>
+
                                 <div>
                                     <label className="block text-sm font-semibold text-neutral-800 mb-2">
                                         Station
@@ -159,8 +146,8 @@ export const SystemParcelOverview = (): JSX.Element => {
                                     >
                                         <option value="">All Stations</option>
                                         {stations.map((station) => (
-                                            <option key={station} value={station}>
-                                                {station}
+                                            <option key={station.id} value={station.id}>
+                                                {station.name}
                                             </option>
                                         ))}
                                     </select>
@@ -178,7 +165,7 @@ export const SystemParcelOverview = (): JSX.Element => {
                                         <option value="">All Status</option>
                                         {statuses.map((status) => (
                                             <option key={status} value={status}>
-                                                {status}
+                                                {STATUS_CONFIG[status as keyof typeof STATUS_CONFIG]?.label || status}
                                             </option>
                                         ))}
                                     </select>
@@ -212,66 +199,90 @@ export const SystemParcelOverview = (): JSX.Element => {
                     </Card>
 
                     {/* Parcels Table */}
-                    <Card className="border border-[#d1d1d1] bg-white">
-                        <CardContent className="p-6">
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-[#d1d1d1]">
-                                            <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                Parcel ID
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                Station
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                Recipient
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                Phone
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                Status
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                Rider
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                Type
-                                            </th>
-                                            <th className="text-left py-3 px-4 font-semibold text-[#5d5d5d]">
-                                                Date
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredParcels.map((parcel) => (
-                                            <tr key={parcel.id} className="border-b border-[#d1d1d1] hover:bg-gray-50">
-                                                <td className="py-3 px-4 font-medium text-neutral-800">{parcel.id}</td>
-                                                <td className="py-3 px-4 text-neutral-700">{parcel.station}</td>
-                                                <td className="py-3 px-4 text-neutral-700">{parcel.recipientName}</td>
-                                                <td className="py-3 px-4 text-neutral-700">{parcel.phoneNumber}</td>
-                                                <td className="py-3 px-4">
-                                                    <Badge className={statusColors[parcel.status] || ""}>
-                                                        {parcel.status}
-                                                    </Badge>
-                                                </td>
-                                                <td className="py-3 px-4 text-neutral-700">
-                                                    {parcel.riderName || "—"}
-                                                </td>
-                                                <td className="py-3 px-4 text-neutral-700">{parcel.deliveryType}</td>
-                                                <td className="py-3 px-4 text-neutral-700">{parcel.registeredDate}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {filteredParcels.length === 0 && (
-                                <div className="text-center py-8">
-                                    <p className="text-neutral-700">No parcels found matching filters</p>
+                    <Card className="border border-[#d1d1d1] bg-white shadow-sm overflow-hidden">
+                        <CardContent className="p-0">
+                            <div className="overflow-x-auto -mx-6 sm:mx-0">
+                                <div className="inline-block min-w-full align-middle">
+                                    <div className="overflow-hidden">
+                                        <table className="min-w-full divide-y divide-[#d1d1d1] text-sm">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-[#d1d1d1]">
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Parcel ID
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Station
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Recipient
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Phone
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Status
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Rider
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Type
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Date
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-[#d1d1d1]">
+                                                {filteredParcels.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={8} className="py-12 text-center">
+                                                            <p className="text-sm text-neutral-500">No parcels found matching filters</p>
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    filteredParcels.map((parcel, index) => {
+                                                        const statusConfig = STATUS_CONFIG[parcel.status] || { label: parcel.status, color: "bg-gray-100 text-gray-800" };
+                                                        return (
+                                                            <tr 
+                                                                key={parcel.id} 
+                                                                className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                                                            >
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                    <span className="text-xs sm:text-sm font-medium text-neutral-800">{parcel.id}</span>
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap text-xs sm:text-sm text-neutral-700">
+                                                                    {getStationName(parcel.stationId, mockStations)}
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap text-xs sm:text-sm text-neutral-700">
+                                                                    {parcel.recipientName}
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap text-xs sm:text-sm text-neutral-700">
+                                                                    {formatPhoneNumber(parcel.recipientPhone)}
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                    <Badge className={statusConfig.color}>
+                                                                        <span className="text-xs">{statusConfig.label}</span>
+                                                                    </Badge>
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap text-xs sm:text-sm text-neutral-700">
+                                                                    {parcel.assignedRiderName || "—"}
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap text-xs sm:text-sm text-neutral-700">
+                                                                    {parcel.deliveryPreference === "pickup" ? "Pickup" : parcel.deliveryPreference === "delivery" ? "Home Delivery" : "—"}
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap text-xs sm:text-sm text-neutral-700">
+                                                                    {formatDate(parcel.registeredDate)}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            )}
+                            </div>
                         </CardContent>
                     </Card>
 

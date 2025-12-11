@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, ClockIcon, LayoutDashboard, Layers, PhoneIcon, SearchIcon, Package, Users, Building2, BarChart3 } from "lucide-react";
+import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, ClockIcon, LayoutDashboard, Layers, PhoneIcon, SearchIcon, Package, Users, Building2, BarChart3, LogOut } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 
 interface SidebarProps {
@@ -9,26 +9,29 @@ interface SidebarProps {
 }
 
 const navItems = [
-    { label: "Parcel Intake", path: "/parcel-intake", icon: InboxIcon, roles: ["front-desk", "station-manager", "admin"] },
-    { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["front-desk", "station-manager", "admin", "call-center"] },
-    { label: "Package Assignments", path: "/package-assignments", icon: ClipboardListIcon, roles: ["station-manager", "admin", "front-desk"] },
-    { label: "Call Center", path: "/call-center", icon: PhoneIcon, roles: ["call-center", "station-manager", "admin", "front-desk"] },
-    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["rider", "station-manager", "admin", "front-desk"] },
-    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["call-center", "station-manager", "admin", "front-desk"] },
-    { label: "Financial Dashboard", path: "/financial-dashboard", icon: LayoutDashboard, roles: ["station-manager", "admin", "front-desk"] },
-    { label: "Shelf Management", path: "/shelf-management", icon: Layers, roles: ["station-manager", "admin", "front-desk"] },
-    { label: "Admin Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, roles: ["admin", "front-desk"] },
-    // { label: "Station Management", path: "/admin/stations", icon: Building2, roles: ["admin", "front-desk"] },
-    // { label: "User Management", path: "/admin/users", icon: Users, roles: ["admin", "front-desk"] },
-    // { label: "System Parcels", path: "/admin/parcels", icon: Package, roles: ["admin"] },
-    // { label: "Financial Reports", path: "/admin/financial-reports", icon: BarChart3, roles: ["admin", "front-desk"] },
-    // { label: "Driver Payments", path: "/admin/driver-payments", icon: DollarSignIcon, roles: ["admin", "front-desk"] },
-    // { label: "History", path: "/history", icon: ClockIcon, roles: ["station-manager", "admin", "front-desk"] },
+    // Admin Only - System Management
+    { label: "Admin Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, roles: ["admin"] },
+    { label: "Station Management", path: "/admin/stations", icon: Building2, roles: ["admin"] },
+    { label: "User Management", path: "/admin/users", icon: Users, roles: ["admin"] },
+    { label: "System Parcels", path: "/admin/parcels", icon: Package, roles: ["admin"] },
+    { label: "Financial Reports", path: "/admin/financial-reports", icon: BarChart3, roles: ["admin"] },
+    
+    // Station Manager & Front Desk - Core Operations
+    { label: "Parcel Intake", path: "/parcel-intake", icon: InboxIcon, roles: ["front-desk", "station-manager"] },
+    { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["front-desk", "station-manager", "call-center"] },
+    { label: "Package Assignments", path: "/package-assignments", icon: ClipboardListIcon, roles: ["station-manager", "front-desk"] },
+    { label: "Call Center", path: "/call-center", icon: PhoneIcon, roles: ["call-center", "station-manager", "front-desk"] },
+    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["rider", "station-manager", "front-desk"] },
+    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["call-center", "station-manager", "front-desk"] },
+    
+    // Station Manager & Front Desk - Management
+    { label: "Financial Dashboard", path: "/financial-dashboard", icon: LayoutDashboard, roles: ["station-manager", "front-desk"] },
+    { label: "Shelf Management", path: "/shelf-management", icon: Layers, roles: ["station-manager", "front-desk"] },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
     const location = useLocation();
-    const { userRole } = useStation();
+    const { userRole, currentUser, logout } = useStation();
 
     // Filter nav items based on user role
     const filteredNavItems = navItems.filter(item =>
@@ -103,12 +106,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                     })}
                 </nav>
 
-                {/* Logout Button */}
+                {/* Logout Button Only - User info shown in navbar */}
                 <div className="border-t border-[#d1d1d1] p-4">
-                    {/* <button className="flex w-full items-center gap-3 rounded-xl bg-red-50 px-4 py-3 font-medium text-[#e22420] transition-colors hover:bg-red-100">
+                    <button
+                        onClick={() => {
+                            logout();
+                            window.location.href = "/login";
+                        }}
+                        className="flex w-full items-center gap-3 rounded-xl bg-red-50 px-4 py-3 font-medium text-[#e22420] transition-colors hover:bg-red-100"
+                    >
                         <LogOut size={20} />
                         <span>Logout</span>
-                    </button> */}
+                    </button>
                 </div>
             </aside>
         </>

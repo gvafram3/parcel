@@ -1,42 +1,75 @@
-import React, { useState } from "react";
-import { Plus, Trash2, Package } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, Trash2, Package, AlertCircleIcon } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Badge } from "../../components/ui/badge";
 import { useStation } from "../../contexts/StationContext";
-
-interface Shelf {
-    id: string;
-    name: string;
-    parcelCount: number;
-    createdBy: string;
-    createdAt: string;
-}
+import { getShelvesByStation, addShelf, deleteShelf, updateShelfParcelCount, getParcelsByStation } from "../../data/mockData";
+import { Shelf } from "../../types";
+import { canDeleteShelf } from "../../utils/dataHelpers";
 
 export const ShelfManagement = (): JSX.Element => {
-    const { currentStation, userRole } = useStation();
-    const [shelves, setShelves] = useState<Shelf[]>([
-        { id: "SHELF-001", name: "A1", parcelCount: 5, createdBy: "Station Manager", createdAt: "2024-01-15" },
-        { id: "SHELF-002", name: "A2", parcelCount: 3, createdBy: "Station Manager", createdAt: "2024-01-15" },
-        { id: "SHELF-003", name: "B1", parcelCount: 8, createdBy: "Station Manager", createdAt: "2024-01-16" },
-    ]);
-
+    const { currentStation, currentUser, userRole } = useStation();
+    const [shelves, setShelves] = useState<Shelf[]>([]);
+    const [parcels, setParcels] = useState<any[]>([]);
     const [newShelfName, setNewShelfName] = useState("");
     const [showAddForm, setShowAddForm] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (currentStation) {
+            const stationShelves = getShelvesByStation(currentStation.id);
+            // Update parcel counts for all shelves
+            stationShelves.forEach((shelf) => {
+                updateShelfParcelCount(shelf.name, currentStation.id);
+            });
+            setShelves(getShelvesByStation(currentStation.id));
+            
+            // Load parcels to check if shelves can be deleted
+            const stationParcels = getParcelsByStation(currentStation.id);
+            setParcels(stationParcels);
+        }
+    }, [currentStation]);
 
     const handleAddShelf = () => {
-        if (newShelfName.trim()) {
-            const newShelf: Shelf = {
-                id: `SHELF-${Date.now()}`,
-                name: newShelfName,
-                parcelCount: 0,
-                createdBy: "Current User",
-                createdAt: new Date().toISOString().split("T")[0],
-            };
-            setShelves([...shelves, newShelf]);
-            setNewShelfName("");
-            setShowAddForm(false);
+        if (!newShelfName.trim() || !currentStation || !currentUser) return;
+
+        // Check if shelf name already exists in this station
+        const existingShelf = shelves.find(
+            (s) => s.name.toLowerCase() === newShelfName.trim().toLowerCase()
+        );
+        if (existingShelf) {
+            alert("A shelf with this name already exists in this station.");
+            return;
         }
+
+        const newShelf = addShelf(newShelfName.trim(), currentStation.id, currentUser.id);
+        setShelves([...shelves, newShelf]);
+        setNewShelfName("");
+        setShowAddForm(false);
+        alert(`Shelf "${newShelf.name}" created successfully!`);
+    };
+
+    const handleDeleteShelf = (shelfId: string, shelfName: string) => {
+        if (!currentStation) return;
+
+        // Check if shelf can be deleted
+        if (!canDeleteShelf(shelfName, currentStation.id, parcels)) {
+            alert(`Cannot delete shelf "${shelfName}". It contains parcels. Please move or deliver all parcels first.`);
+            setDeleteConfirm(null);
+            return;
+        }
+
+        const success = deleteShelf(shelfId, currentStation.id);
+        if (success) {
+            setShelves(shelves.filter((s) => s.id !== shelfId));
+            alert(`Shelf "${shelfName}" deleted successfully!`);
+        } else {
+            alert("Failed to delete shelf. Please try again.");
+        }
+        setDeleteConfirm(null);
     };
 
     const canManageShelves = userRole === "station-manager" || userRole === "admin";
@@ -68,16 +101,21 @@ export const ShelfManagement = (): JSX.Element => {
                     {showAddForm && canManageShelves && (
                         <Card className="border border-blue-200 bg-blue-50">
                             <CardContent className="p-6">
-                                <div className="flex gap-3 items-end">
+                                <div className="flex flex-col sm:flex-row gap-3 items-end">
                                     <div className="flex-1">
-                                        <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                        <Label className="block text-sm font-semibold text-neutral-800 mb-2">
                                             Shelf Name/Code
-                                        </label>
+                                        </Label>
                                         <Input
                                             value={newShelfName}
                                             onChange={(e) => setNewShelfName(e.target.value)}
                                             placeholder="e.g., A1, B2, Ground-Left"
                                             className="border border-[#d1d1d1]"
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                    handleAddShelf();
+                                                }
+                                            }}
                                         />
                                     </div>
                                     <Button
@@ -88,7 +126,10 @@ export const ShelfManagement = (): JSX.Element => {
                                         Create
                                     </Button>
                                     <Button
-                                        onClick={() => setShowAddForm(false)}
+                                        onClick={() => {
+                                            setShowAddForm(false);
+                                            setNewShelfName("");
+                                        }}
                                         variant="outline"
                                         className="border border-[#d1d1d1]"
                                     >
@@ -100,41 +141,105 @@ export const ShelfManagement = (): JSX.Element => {
                     )}
 
                     {/* Shelves Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {shelves.map((shelf) => (
-                            <Card key={shelf.id} className="border border-[#d1d1d1] bg-white hover:shadow-md transition-shadow">
-                                <CardContent className="p-6">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-3 bg-orange-50 rounded-lg">
-                                                <Package className="w-6 h-6 text-[#ea690c]" />
-                                            </div>
-                                            <div>
-                                                <h3 className="font-bold text-lg text-neutral-800">{shelf.name}</h3>
-                                                <p className="text-xs text-[#5d5d5d]">Shelf ID: {shelf.id}</p>
-                                            </div>
-                                        </div>
-                                        {canManageShelves && shelf.parcelCount === 0 && (
-                                            <button className="text-[#e22420] hover:bg-red-50 p-2 rounded">
-                                                <Trash2 size={18} />
-                                            </button>
-                                        )}
-                                    </div>
+                    {shelves.length === 0 ? (
+                        <Card className="border border-[#d1d1d1] bg-white">
+                            <CardContent className="p-12 text-center">
+                                <Package className="w-16 h-16 text-[#9a9a9a] mx-auto mb-4 opacity-50" />
+                                <p className="text-neutral-700 font-medium">No shelves found</p>
+                                <p className="text-sm text-[#5d5d5d] mt-2">
+                                    {canManageShelves
+                                        ? "Create your first shelf to start organizing parcels"
+                                        : "No shelves available in this station"}
+                                </p>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {shelves.map((shelf) => {
+                                const canDelete = canDeleteShelf(shelf.name, currentStation?.id || "", parcels);
+                                const isDeleting = deleteConfirm === shelf.id;
 
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-sm text-[#5d5d5d]">Current Parcels</span>
-                                            <span className="font-semibold text-neutral-800">{shelf.parcelCount}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-sm text-[#5d5d5d]">Created</span>
-                                            <span className="text-xs text-neutral-700">{shelf.createdAt}</span>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
+                                return (
+                                    <Card
+                                        key={shelf.id}
+                                        className="border border-[#d1d1d1] bg-white hover:shadow-md transition-shadow"
+                                    >
+                                        <CardContent className="p-6">
+                                            <div className="flex items-start justify-between mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-3 bg-orange-50 rounded-lg">
+                                                        <Package className="w-6 h-6 text-[#ea690c]" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-bold text-lg text-neutral-800">{shelf.name}</h3>
+                                                        <p className="text-xs text-[#5d5d5d]">ID: {shelf.id}</p>
+                                                    </div>
+                                                </div>
+                                                {canManageShelves && (
+                                                    <div className="flex gap-1">
+                                                        {!isDeleting && canDelete && (
+                                                            <button
+                                                                onClick={() => setDeleteConfirm(shelf.id)}
+                                                                className="text-[#e22420] hover:bg-red-50 p-2 rounded transition-colors"
+                                                                title="Delete shelf"
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </button>
+                                                        )}
+                                                        {isDeleting && (
+                                                            <div className="flex gap-1">
+                                                                <button
+                                                                    onClick={() => handleDeleteShelf(shelf.id, shelf.name)}
+                                                                    className="text-[#e22420] hover:bg-red-50 p-1 rounded text-xs font-semibold"
+                                                                >
+                                                                    Confirm
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setDeleteConfirm(null)}
+                                                                    className="text-[#5d5d5d] hover:bg-gray-50 p-1 rounded text-xs"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-sm text-[#5d5d5d]">Current Parcels</span>
+                                                    <Badge
+                                                        className={
+                                                            shelf.parcelCount > 0
+                                                                ? "bg-blue-100 text-blue-800"
+                                                                : "bg-gray-100 text-gray-800"
+                                                        }
+                                                    >
+                                                        {shelf.parcelCount}
+                                                    </Badge>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-sm text-[#5d5d5d]">Created</span>
+                                                    <span className="text-xs text-neutral-700">
+                                                        {new Date(shelf.createdAt).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                {!canDelete && shelf.parcelCount > 0 && (
+                                                    <div className="mt-3 pt-3 border-t border-[#d1d1d1]">
+                                                        <div className="flex items-center gap-2 text-xs text-orange-600">
+                                                            <AlertCircleIcon className="w-4 h-4" />
+                                                            <span>Contains {shelf.parcelCount} parcel(s)</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+                    )}
                 </main>
             </div>
         </div>

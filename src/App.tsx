@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { StationProvider } from "./contexts/StationContext";
 import { MainLayout } from "./layouts/MainLayout";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Login } from "./screens/Login";
 import { ForgotPassword } from "./screens/ForgotPassword";
 import { PasswordRequestSent } from "./screens/PasswordRequestSent";
@@ -22,7 +23,8 @@ import { StationManagement } from "./screens/Admin/StationManagement/StationMana
 import { UserManagement } from "./screens/Admin/UserManagement/UserManagement";
 import { SystemParcelOverview } from "./screens/Admin/SystemParcelOverview/SystemParcelOverview";
 import { FinancialReports } from "./screens/Admin/FinancialReports/FinancialReports";
-import { DriverPaymentsOverview } from "./screens/Admin/DriverPaymentsOverview/DriverPaymentsOverview";
+import { Preferences } from "./screens/Preferences/Preferences";
+import { Help } from "./screens/Help/Help";
 
 export const App = (): JSX.Element => {
   return (
@@ -34,38 +36,37 @@ export const App = (): JSX.Element => {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/password-request-sent" element={<PasswordRequestSent />} />
 
-          {/* Main Routes */}
-          <Route
-            path="/"
-            element={
-              <MainLayout>
-                <Navigate to="/parcel-intake" replace />
-              </MainLayout>
-            }
-          />
+          {/* Root - Redirect to login */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
 
           <Route
             path="/parcel-intake"
             element={
-              <MainLayout>
-                <ParcelRegistration />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["front-desk", "station-manager", "admin"]}>
+                <MainLayout>
+                  <ParcelRegistration />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/parcel-search"
             element={
-              <MainLayout>
-                <ParcelSearch />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["front-desk", "station-manager", "admin", "call-center"]}>
+                <MainLayout>
+                  <ParcelSearch />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/call-center"
             element={
-              <MainLayout>
-                <CallCenter />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["call-center", "station-manager", "admin", "front-desk"]}>
+                <MainLayout>
+                  <CallCenter />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
           <Route
@@ -95,57 +96,71 @@ export const App = (): JSX.Element => {
           <Route
             path="/package-assignments"
             element={
-              <MainLayout>
-                <ParcelSelection />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["station-manager", "admin", "front-desk"]}>
+                <MainLayout>
+                  <ParcelSelection />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/rider-selection"
             element={
-              <MainLayout>
-                <ParcelRiderSelection />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["station-manager", "admin", "front-desk"]}>
+                <MainLayout>
+                  <ParcelRiderSelection />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/active-deliveries"
             element={
-              <MainLayout>
-                <ActiveDeliveries />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["rider", "station-manager", "admin", "front-desk"]}>
+                <MainLayout>
+                  <ActiveDeliveries />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/reconciliation"
             element={
-              <MainLayout>
-                <Reconciliation />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["call-center", "station-manager", "admin", "front-desk"]}>
+                <MainLayout>
+                  <Reconciliation />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/reconciliation-confirmation"
             element={
-              <MainLayout>
-                <ReconciliationConfirmation />
-              </MainLayout>
+              <ProtectedRoute>
+                <MainLayout>
+                  <ReconciliationConfirmation />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/financial-dashboard"
             element={
-              <MainLayout>
-                <FinancialDashboard />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["station-manager", "admin", "front-desk"]}>
+                <MainLayout>
+                  <FinancialDashboard />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
           <Route
             path="/shelf-management"
             element={
-              <MainLayout>
-                <ShelfManagement />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["station-manager", "admin", "front-desk"]}>
+                <MainLayout>
+                  <ShelfManagement />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
 
@@ -153,54 +168,77 @@ export const App = (): JSX.Element => {
           <Route
             path="/admin/dashboard"
             element={
-              <MainLayout>
-                <AdminDashboard />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <MainLayout>
+                  <AdminDashboard />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/admin/stations"
             element={
-              <MainLayout>
-                <StationManagement />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <MainLayout>
+                  <StationManagement />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/admin/users"
             element={
-              <MainLayout>
-                <UserManagement />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <MainLayout>
+                  <UserManagement />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/admin/parcels"
             element={
-              <MainLayout>
-                <SystemParcelOverview />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <MainLayout>
+                  <SystemParcelOverview />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/admin/financial-reports"
             element={
-              <MainLayout>
-                <FinancialReports />
-              </MainLayout>
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <MainLayout>
+                  <FinancialReports />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
 
           <Route
-            path="/admin/driver-payments"
+            path="/preferences"
             element={
-              <MainLayout>
-                <DriverPaymentsOverview />
-              </MainLayout>
+              <ProtectedRoute>
+                <MainLayout>
+                  <Preferences />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/help"
+            element={
+              <ProtectedRoute>
+                <MainLayout>
+                  <Help />
+                </MainLayout>
+              </ProtectedRoute>
             }
           />
         </Routes>

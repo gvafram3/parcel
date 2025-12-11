@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Menu, BellIcon, SettingsIcon, ChevronDownIcon, UserIcon, HelpCircleIcon, LogOut } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { useStation } from "../contexts/StationContext";
 
 interface NavbarProps {
     onMenuClick: () => void;
@@ -54,36 +55,61 @@ const routeTitles: Record<string, { title: string; description: string }> = {
         title: "Reconciliation Confirmation",
         description: "Confirm reconciliation details",
     },
+    "/financial-dashboard": {
+        title: "Financial Dashboard",
+        description: "View financial overview and reports",
+    },
+    "/shelf-management": {
+        title: "Shelf Management",
+        description: "Manage shelf locations and assignments",
+    },
+    "/admin/dashboard": {
+        title: "Admin Dashboard",
+        description: "System-wide overview and analytics",
+    },
+    "/admin/stations": {
+        title: "Station Management",
+        description: "Create and manage all delivery stations",
+    },
+    "/admin/users": {
+        title: "User Management",
+        description: "Manage all system users across stations",
+    },
+    "/admin/parcels": {
+        title: "System Parcel Overview",
+        description: "Global visibility of all parcels across all stations",
+    },
     "/admin/financial-reports": {
         title: "Financial Reports",
         description: "Comprehensive financial analytics and insights",
     },
-    "/admin/driver-payments": {
-        title: "Driver Payments Overview",
-        description: "Track rider earnings and payment status",
+    "/preferences": {
+        title: "Preferences",
+        description: "Manage your account preferences and settings",
+    },
+    "/help": {
+        title: "Help & Support",
+        description: "Get help and support for using the system",
     },
 };
 
 const accountMenuItems = [
     {
-        label: "Profile Settings",
-        icon: UserIcon,
-        active: true,
-    },
-    {
         label: "Preferences",
         icon: SettingsIcon,
-        active: false,
+        path: "/preferences",
     },
     {
         label: "Help & Support",
         icon: HelpCircleIcon,
-        active: false,
+        path: "/help",
     },
 ];
 
 export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     const location = useLocation();
+    const navigate = useNavigate();
+    const { currentUser, logout } = useStation();
     const [showAccountMenu, setShowAccountMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -162,29 +188,44 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                     <div className="hidden sm:block w-px h-6 bg-[#d1d1d1] mx-1 lg:mx-2" />
 
                     {/* Account Menu */}
-                    <div className="relative inline-flex items-center gap-2 sm:gap-3" ref={menuRef}>
-                        <div className="hidden sm:inline-flex items-center gap-2 sm:gap-3 cursor-pointer hover:opacity-80 transition-opacity">
-                            <Avatar className="h-9 w-9 border border-solid border-[#d1d1d1]">
-                                <AvatarImage src="/vector.svg" alt="Adams Godfred" />
-                                <AvatarFallback>AG</AvatarFallback>
-                            </Avatar>
+                    {currentUser && (
+                        <div className="relative inline-flex items-center gap-2 sm:gap-3" ref={menuRef}>
+                            <div className="hidden sm:inline-flex items-center gap-2 sm:gap-3 cursor-pointer hover:opacity-80 transition-opacity">
+                                <Avatar className="h-9 w-9 border border-solid border-[#d1d1d1]">
+                                    <AvatarImage src="/vector.svg" alt={currentUser.name} />
+                                    <AvatarFallback>
+                                        {currentUser.name
+                                            .split(" ")
+                                            .map((n) => n[0])
+                                            .join("")
+                                            .toUpperCase()
+                                            .slice(0, 2)}
+                                    </AvatarFallback>
+                                </Avatar>
 
-                            <div className="hidden md:flex flex-col items-start gap-0.5">
-                                <div className="font-medium text-sm text-neutral-800">
-                                    Adams Godfred
-                                </div>
-                                <div className="text-xs text-[#5d5d5d]">
-                                    Front Desk
+                                <div className="hidden md:flex flex-col items-start gap-0.5">
+                                    <div className="font-medium text-sm text-neutral-800">
+                                        {currentUser.name}
+                                    </div>
+                                    <div className="text-xs text-[#5d5d5d] capitalize">
+                                        {currentUser.role.replace("-", " ")}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="sm:hidden">
-                            <Avatar className="h-8 w-8 border border-solid border-[#d1d1d1]">
-                                <AvatarImage src="/vector.svg" alt="Adams Godfred" />
-                                <AvatarFallback>AG</AvatarFallback>
-                            </Avatar>
-                        </div>
+                            <div className="sm:hidden">
+                                <Avatar className="h-8 w-8 border border-solid border-[#d1d1d1]">
+                                    <AvatarImage src="/vector.svg" alt={currentUser.name} />
+                                    <AvatarFallback>
+                                        {currentUser.name
+                                            .split(" ")
+                                            .map((n) => n[0])
+                                            .join("")
+                                            .toUpperCase()
+                                            .slice(0, 2)}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </div>
 
                         <Button
                             variant="ghost"
@@ -195,66 +236,87 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                             <ChevronDownIcon className={`w-4 h-4 text-[#5d5d5d] transition-transform duration-200 ${showAccountMenu ? 'rotate-180' : ''}`} />
                         </Button>
 
-                        {/* Account Dropdown Menu */}
-                        {showAccountMenu && (
-                            <div className="absolute right-0 top-full mt-3 w-72 rounded-xl border border-[#d1d1d1] bg-white shadow-xl z-50">
-                                {/* Header */}
-                                <div className="p-4 border-b border-[#d1d1d1] bg-gray-50 rounded-t-xl">
-                                    <div className="flex items-center gap-3">
-                                        <Avatar className="h-11 w-11 border border-solid border-[#d1d1d1]">
-                                            <AvatarImage src="/vector.svg" alt="Adams Godfred" />
-                                            <AvatarFallback>AG</AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex flex-col">
-                                            <div className="font-semibold text-neutral-800 text-sm">
-                                                Adams Godfred
-                                            </div>
-                                            <div className="text-xs text-[#5d5d5d]">
-                                                Front Desk Officer
+                            {/* Account Dropdown Menu */}
+                            {showAccountMenu && (
+                                <div className="absolute right-0 top-full mt-3 w-72 rounded-xl border border-[#d1d1d1] bg-white shadow-xl z-50">
+                                    {/* Header */}
+                                    <div className="p-4 border-b border-[#d1d1d1] bg-gray-50 rounded-t-xl">
+                                        <div className="flex items-center gap-3">
+                                            <Avatar className="h-11 w-11 border border-solid border-[#d1d1d1]">
+                                                <AvatarImage src="/vector.svg" alt={currentUser.name} />
+                                                <AvatarFallback>
+                                                    {currentUser.name
+                                                        .split(" ")
+                                                        .map((n) => n[0])
+                                                        .join("")
+                                                        .toUpperCase()
+                                                        .slice(0, 2)}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex flex-col">
+                                                <div className="font-semibold text-neutral-800 text-sm">
+                                                    {currentUser.name}
+                                                </div>
+                                                <div className="text-xs text-[#5d5d5d] capitalize">
+                                                    {currentUser.role.replace("-", " ")}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* Menu Items */}
-                                <div className="p-2">
-                                    <div className="font-semibold text-neutral-800 text-xs px-3 py-2 mb-1 uppercase tracking-wide text-[#5d5d5d]">
-                                        My Account
-                                    </div>
-                                    {accountMenuItems.map((item, index) => {
-                                        const Icon = item.icon;
-                                        return (
-                                            <button
-                                                key={index}
-                                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${item.active
-                                                    ? "bg-[#ea690c] text-white shadow-sm"
-                                                    : "text-neutral-700 hover:bg-gray-50"
+                                    {/* Menu Items */}
+                                    <div className="p-2">
+                                        <div className="font-semibold text-neutral-800 text-xs px-3 py-2 mb-1 uppercase tracking-wide text-[#5d5d5d]">
+                                            My Account
+                                        </div>
+                                        {accountMenuItems.map((item, index) => {
+                                            const Icon = item.icon;
+                                            const isActive = location.pathname === item.path;
+                                            return (
+                                                <button
+                                                    key={index}
+                                                    onClick={() => {
+                                                        navigate(item.path);
+                                                        setShowAccountMenu(false);
+                                                    }}
+                                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
+                                                        isActive
+                                                            ? "bg-[#ea690c] text-white shadow-sm"
+                                                            : "text-neutral-700 hover:bg-gray-50"
                                                     }`}
-                                            >
-                                                <Icon className={`w-4 h-4 flex-shrink-0 ${item.active ? "text-white" : "text-[#5d5d5d]"}`} />
-                                                <span className="text-sm font-medium text-left flex-1">
-                                                    {item.label}
-                                                </span>
-                                                {item.active && (
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-white" />
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                                                >
+                                                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-white" : "text-[#5d5d5d]"}`} />
+                                                    <span className="text-sm font-medium text-left flex-1">
+                                                        {item.label}
+                                                    </span>
+                                                    {isActive && (
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
 
-                                {/* Logout */}
-                                <div className="border-t border-[#d1d1d1] p-2">
-                                    <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#e22420] hover:bg-red-50 transition-colors">
-                                        <LogOut className="w-4 h-4" />
-                                        <span className="text-sm font-medium text-left">
-                                            Logout
-                                        </span>
-                                    </button>
+                                    {/* Logout */}
+                                    <div className="border-t border-[#d1d1d1] p-2">
+                                        <button
+                                            onClick={() => {
+                                                logout();
+                                                navigate("/login");
+                                                setShowAccountMenu(false);
+                                            }}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#e22420] hover:bg-red-50 transition-colors"
+                                        >
+                                            <LogOut className="w-4 h-4" />
+                                            <span className="text-sm font-medium text-left">
+                                                Logout
+                                            </span>
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </nav>

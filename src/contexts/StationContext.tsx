@@ -21,26 +21,18 @@ interface StationContextType {
     currentUser: User | null;
     setStation: (station: Station) => void;
     setUser: (user: User) => void;
+    logout: () => void;
     canAccessStation: (stationId: string) => boolean;
     userRole: UserRole | null;
+    isAuthenticated: boolean;
 }
 
 const StationContext = createContext<StationContextType | undefined>(undefined);
 
 export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [currentStation, setCurrentStation] = useState<Station | null>({
-        id: "STATION-001",
-        name: "Accra Central Station",
-        location: "Accra",
-    });
-
-    const [currentUser, setCurrentUser] = useState<User | null>({
-        id: "USER-001",
-        name: "Adams Godfred",
-        email: "adams@example.com",
-        role: "front-desk",
-        stationId: "STATION-001",
-    });
+    // Initialize with null - user must login
+    const [currentStation, setCurrentStation] = useState<Station | null>(null);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
 
     const setStation = (station: Station) => {
         setCurrentStation(station);
@@ -48,6 +40,11 @@ export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const setUser = (user: User) => {
         setCurrentUser(user);
+    };
+
+    const logout = () => {
+        setCurrentUser(null);
+        setCurrentStation(null);
     };
 
     const canAccessStation = (stationId: string) => {
@@ -63,8 +60,10 @@ export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 currentUser,
                 setStation,
                 setUser,
+                logout,
                 canAccessStation,
                 userRole: currentUser?.role || null,
+                isAuthenticated: currentUser !== null,
             }}
         >
             {children}

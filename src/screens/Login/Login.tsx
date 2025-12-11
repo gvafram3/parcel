@@ -9,22 +9,88 @@ import {
   PackageIcon,
   GiftIcon,
   MailIcon,
+  AlertCircleIcon,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Card, CardContent } from "../../components/ui/card";
+import { useStation } from "../../contexts/StationContext";
+import { mockUsers, mockStations } from "../../data/mockData";
 
 export const Login = (): JSX.Element => {
   const [showPassword, setShowPassword] = useState(false);
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { setUser, setStation, isAuthenticated, userRole } = useStation();
+
+  // Redirect if already authenticated
+  if (isAuthenticated) {
+    if (userRole === "admin") {
+      navigate("/admin/dashboard", { replace: true });
+    } else if (userRole === "rider") {
+      navigate("/active-deliveries", { replace: true });
+    } else if (userRole === "call-center") {
+      navigate("/call-center", { replace: true });
+    } else {
+      navigate("/parcel-intake", { replace: true });
+    }
+    return <></>;
+  }
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Navigate to dashboard without authentication logic
-    navigate("/parcel-intake");
+    setError("");
+
+    // Find user by email (in production, this would be an API call)
+    const user = mockUsers.find((u) => u.email.toLowerCase() === email.toLowerCase().trim());
+
+    if (!user) {
+      setError("Invalid email or password. Please try again.");
+      return;
+    }
+
+    // For now, accept any password (in production, verify password)
+    if (!password.trim()) {
+      setError("Password is required.");
+      return;
+    }
+
+    // Find user's station
+    const station = mockStations.find((s) => s.id === user.stationId);
+
+    if (!station) {
+      setError("User station not found. Please contact administrator.");
+      return;
+    }
+
+    // Set user and station in context
+    setUser({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      stationId: user.stationId,
+    });
+
+    setStation({
+      id: station.id,
+      name: station.name,
+      location: station.location,
+    });
+
+    // Redirect based on role
+    if (user.role === "admin") {
+      navigate("/admin/dashboard", { replace: true });
+    } else if (user.role === "rider") {
+      navigate("/active-deliveries", { replace: true });
+    } else if (user.role === "call-center") {
+      navigate("/call-center", { replace: true });
+    } else {
+      navigate("/parcel-intake", { replace: true });
+    }
   };
 
   return (
@@ -77,56 +143,69 @@ export const Login = (): JSX.Element => {
                 Welcome Back!
               </h1>
               <p className="font-body-md font-[number:var(--body-md-font-weight)] text-[#5d5d5d] text-[length:var(--body-md-font-size)]">
-                Kindly enter your Client ID and Password to login
+                Enter your email and password to login
+              </p>
+              <p className="text-xs text-[#9a9a9a] mt-2">
+                Test users: admin@parcel.com, kwame@parcel.com, adams@parcel.com, grace@parcel.com, john.mensah@parcel.com
               </p>
             </div>
 
+            {/* Error Message */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                <AlertCircleIcon className="w-5 h-5 text-red-600 flex-shrink-0" />
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
+
             {/* Login Form */}
             <form onSubmit={handleLogin} className="flex flex-col gap-4">
-              {/* Username Field */}
+              {/* Email Field */}
               <div className="flex flex-col gap-2">
-                <Label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                  Username<span className="text-[#e22420]">*</span>
+                <Label htmlFor="email" className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                  Email<span className="text-[#e22420]">*</span>
                 </Label>
                 <div className="relative">
-                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#9a9a9a]" />
+                  <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#9a9a9a] pointer-events-none z-10" />
                   <Input
-                    type="text"
-                    placeholder="eg. Age7336"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    id="email"
+                    type="email"
+                    placeholder="eg. admin@parcel.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError("");
+                    }}
                     required
-                    className="pl-10 w-full rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0]"
+                    className="pl-10 pr-3 w-full rounded-lg border border-[#d1d1d1] bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c]"
                   />
                 </div>
               </div>
 
               {/* Password Field */}
               <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <Label className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                    Password<span className="text-[#e22420]">*</span>
-                  </Label>
-                  <Link
-                    to="/forgot-password"
-                    className="text-[#ea690c] hover:underline text-sm font-medium"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
+                <Label htmlFor="password" className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                  Password<span className="text-[#e22420]">*</span>
+                </Label>
                 <div className="relative">
-                  <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#9a9a9a]" />
+                  <LockIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#9a9a9a] pointer-events-none z-10" />
                   <Input
+                    id="password"
                     type={showPassword ? "text" : "password"}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError("");
+                    }}
+                    placeholder="Enter any password (for testing)"
                     required
-                    className="pl-10 pr-10 w-full rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700"
+                    className="pl-10 pr-10 w-full rounded-lg border border-[#d1d1d1] bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c]"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] hover:text-neutral-800"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9a9a9a] hover:text-neutral-800 z-10"
+                    tabIndex={-1}
                   >
                     {showPassword ? (
                       <EyeOffIcon className="w-5 h-5" />
@@ -135,6 +214,12 @@ export const Login = (): JSX.Element => {
                     )}
                   </button>
                 </div>
+                <Link
+                  to="/forgot-password"
+                  className="text-[#ea690c] hover:underline text-sm font-medium text-right mt-1"
+                >
+                  Forgot password?
+                </Link>
               </div>
 
               {/* Login Button */}
@@ -164,4 +249,3 @@ export const Login = (): JSX.Element => {
     </div>
   );
 };
-

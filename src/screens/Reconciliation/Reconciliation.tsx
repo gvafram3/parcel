@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ArrowRightIcon,
   DollarSignIcon,
@@ -13,78 +13,24 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Badge } from "../../components/ui/badge";
-
-interface RemittanceItem {
-  id: string;
-  riderName: string;
-  parcelCount: number;
-  amount: string;
-  parcelId: string;
-  recipientName: string;
-  totalAmount: number;
-}
-
-const remittanceQueue: RemittanceItem[] = [
-  {
-    id: "1",
-    riderName: "John Kofi Amekudzi",
-    parcelCount: 1,
-    amount: "GHC 100.00",
-    parcelId: "PAK - 21764912",
-    recipientName: "Visca Afram Gyebi",
-    totalAmount: 100.00,
-  },
-  {
-    id: "2",
-    riderName: "John Kofi Amekudzi",
-    parcelCount: 1,
-    amount: "GHC 100.00",
-    parcelId: "PAK - 21764913",
-    recipientName: "Jane Smith",
-    totalAmount: 100.00,
-  },
-  {
-    id: "3",
-    riderName: "John Kofi Amekudzi",
-    parcelCount: 1,
-    amount: "GHC 100.00",
-    parcelId: "PAK - 21764914",
-    recipientName: "Alice Johnson",
-    totalAmount: 100.00,
-  },
-  {
-    id: "4",
-    riderName: "John Kofi Amekudzi",
-    parcelCount: 1,
-    amount: "GHC 100.00",
-    parcelId: "PAK - 21764915",
-    recipientName: "Bob Williams",
-    totalAmount: 100.00,
-  },
-  {
-    id: "5",
-    riderName: "John Kofi Amekudzi",
-    parcelCount: 1,
-    amount: "GHC 100.00",
-    parcelId: "PAK - 21764916",
-    recipientName: "Charlie Brown",
-    totalAmount: 100.00,
-  },
-  {
-    id: "6",
-    riderName: "John Kofi Amekudzi",
-    parcelCount: 1,
-    amount: "GHC 100.00",
-    parcelId: "PAK - 21764917",
-    recipientName: "Diana Prince",
-    totalAmount: 100.00,
-  },
-];
+import { useStation } from "../../contexts/StationContext";
+import { getRemittanceItems, markParcelAsCollected, RemittanceItem as RemittanceItemType } from "../../data/mockData";
+import { formatPhoneNumber, formatCurrency } from "../../utils/dataHelpers";
 
 export const Reconciliation = (): JSX.Element => {
-  const [selectedItem, setSelectedItem] = useState<RemittanceItem | null>(null);
+  const { currentStation, currentUser, userRole } = useStation();
+  const [remittanceItems, setRemittanceItems] = useState<RemittanceItemType[]>([]);
+  const [selectedItem, setSelectedItem] = useState<RemittanceItemType | null>(null);
   const [amountReceived, setAmountReceived] = useState("");
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    // Always load remittance items - filter by station if not admin
+    const items = getRemittanceItems(
+      userRole === "admin" ? undefined : currentStation?.id
+    );
+    setRemittanceItems(items);
+  }, [currentStation, userRole]);
 
   const receivedAmount = parseFloat(amountReceived) || 0;
   const discrepancy = selectedItem ? selectedItem.totalAmount - receivedAmount : 0;
@@ -95,6 +41,34 @@ export const Reconciliation = (): JSX.Element => {
       setShowModal(true);
     }
   };
+
+  const handleCompleteReconciliation = () => {
+    if (!selectedItem || !currentUser || !amountReceived) return;
+
+    const success = markParcelAsCollected(
+      selectedItem.parcelId,
+      receivedAmount,
+      currentUser.id
+    );
+
+    if (success) {
+      // Remove from remittance queue
+      setRemittanceItems((prev) => prev.filter((item) => item.id !== selectedItem.id));
+      setShowModal(false);
+      setSelectedItem(null);
+      setAmountReceived("");
+      alert("Reconciliation completed successfully!");
+      
+      // Refresh items
+      const items = getRemittanceItems(
+        userRole === "admin" ? undefined : currentStation?.id
+      );
+      setRemittanceItems(items);
+    } else {
+      alert("Failed to complete reconciliation. Please try again.");
+    }
+  };
+
 
   return (
     <div className={`w-full ${showModal ? "overflow-hidden" : ""}`}>
@@ -152,15 +126,25 @@ export const Reconciliation = (): JSX.Element => {
                             <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100 w-fit">
                               {selectedItem.parcelId}
                             </Badge>
+                            {selectedItem.recipientPhone && (
+                              <span className="text-xs text-neutral-600 mt-1">
+                                {formatPhoneNumber(selectedItem.recipientPhone)}
+                              </span>
+                            )}
+                            {selectedItem.deliveryAddress && (
+                              <span className="text-xs text-neutral-600 mt-1">
+                                {selectedItem.deliveryAddress}
+                              </span>
+                            )}
                           </div>
                           <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100 flex items-center gap-1">
                             <CheckCircleIcon className="w-3 h-3" />
-                            Delivery
+                            Delivered
                           </Badge>
                         </div>
                         <div className="mt-3 pt-3 border-t border-blue-200">
                           <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                            Total Amount: GHC {selectedItem.totalAmount.toFixed(2)}
+                            Total Amount: {formatCurrency(selectedItem.totalAmount)}
                           </span>
                         </div>
                       </div>
@@ -172,7 +156,7 @@ export const Reconciliation = (): JSX.Element => {
                         </Label>
                         <Input
                           type="number"
-                          placeholder="eg. 20"
+                          placeholder="eg. 100.00"
                           value={amountReceived}
                           onChange={(e) => setAmountReceived(e.target.value)}
                           className="w-full rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700"
@@ -184,7 +168,7 @@ export const Reconciliation = (): JSX.Element => {
                         <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 flex items-start gap-2">
                           <AlertCircleIcon className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
                           <span className="[font-family:'Lato',Helvetica] font-normal text-orange-800 text-sm">
-                            Discrepancy detected: GHC {discrepancy.toFixed(2)} short
+                            Discrepancy detected: {formatCurrency(discrepancy)} short
                           </span>
                         </div>
                       )}
@@ -229,39 +213,52 @@ export const Reconciliation = (): JSX.Element => {
                       </h2>
                     </div>
                     <Badge className="bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-100">
-                      28 waiting
+                      {remittanceItems.length} waiting
                     </Badge>
                   </header>
 
-                  <div className="flex flex-col gap-3 max-h-[600px] overflow-y-auto">
-                    {remittanceQueue.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setSelectedItem(item);
-                          setAmountReceived("");
-                        }}
-                        className={`rounded-lg border p-3 text-left hover:bg-gray-50 transition-colors ${selectedItem?.id === item.id
-                          ? "border-[#ea690c] bg-orange-50"
-                          : "border-[#d1d1d1] bg-white"
+                  {remittanceItems.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-[#5d5d5d]">No items in remittance queue</p>
+                      <p className="text-xs text-[#9a9a9a] mt-2">
+                        Delivered parcels will appear here for reconciliation
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3 max-h-[600px] overflow-y-auto">
+                      {remittanceItems.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setSelectedItem(item);
+                            setAmountReceived(item.amountCollected?.toString() || "");
+                          }}
+                          className={`rounded-lg border p-3 text-left hover:bg-gray-50 transition-colors ${
+                            selectedItem?.id === item.id
+                              ? "border-[#ea690c] bg-orange-50"
+                              : "border-[#d1d1d1] bg-white"
                           }`}
-                      >
-                        <div className="flex flex-col gap-2">
-                          <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                            {item.riderName}
-                          </span>
-                          <div className="flex items-center justify-between">
-                            <Badge className="bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100">
-                              {item.parcelCount} Parcel
-                            </Badge>
-                            <span className="[font-family:'Lato',Helvetica] font-bold text-neutral-800 text-base">
-                              {item.amount}
+                        >
+                          <div className="flex flex-col gap-2">
+                            <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                              {item.riderName}
+                            </span>
+                            <div className="flex items-center justify-between">
+                              <Badge className="bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100">
+                                {item.parcelId}
+                              </Badge>
+                              <span className="[font-family:'Lato',Helvetica] font-bold text-neutral-800 text-base">
+                                {formatCurrency(item.totalAmount)}
+                              </span>
+                            </div>
+                            <span className="text-xs text-[#5d5d5d]">
+                              {item.recipientName}
                             </span>
                           </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -299,48 +296,23 @@ export const Reconciliation = (): JSX.Element => {
                     <div>
                       <span className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-sm">Name: </span>
                       <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                        John Kofitse Amekudzi
+                        {selectedItem.recipientName}
                       </span>
                     </div>
                     <div>
                       <span className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-sm">Phone Number: </span>
                       <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                        +233 24 245 8248
+                        {formatPhoneNumber(selectedItem.recipientPhone)}
                       </span>
                     </div>
-                    <div>
-                      <span className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-sm">Address: </span>
-                      <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                        UCC Campus
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sender's Details */}
-                <div className="flex flex-col gap-3">
-                  <h3 className="font-body-md-semibold font-[number:var(--body-md-semibold-font-weight)] text-[#5d5d5d] text-[length:var(--body-md-semibold-font-size)]">
-                    Sender&apos;s Details
-                  </h3>
-                  <div className="flex flex-col gap-2">
-                    <div>
-                      <span className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-sm">Name: </span>
-                      <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                        John Doe
-                      </span>
-                    </div>
-                    <div>
-                      <span className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-sm">Phone Number: </span>
-                      <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                        +233 24 245 8248
-                      </span>
-                    </div>
-                    <div>
-                      <span className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-sm">Address: </span>
-                      <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                        Accra
-                      </span>
-                    </div>
+                    {selectedItem.deliveryAddress && (
+                      <div>
+                        <span className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-sm">Address: </span>
+                        <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                          {selectedItem.deliveryAddress}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -352,18 +324,18 @@ export const Reconciliation = (): JSX.Element => {
                   <div className="flex flex-col gap-2 bg-gray-50 rounded-lg p-4">
                     <div className="flex justify-between items-center">
                       <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
-                        Package fee
+                        Item Value
                       </span>
                       <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                        100.00
+                        {formatCurrency(selectedItem.itemValue)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
-                        Transportation Fee
+                        Delivery Fee
                       </span>
                       <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
-                        30.00
+                        {formatCurrency(selectedItem.deliveryFee)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-[#d1d1d1]">
@@ -371,7 +343,15 @@ export const Reconciliation = (): JSX.Element => {
                         Total Amount
                       </span>
                       <span className="[font-family:'Lato',Helvetica] font-bold text-[#ea690c] text-lg">
-                        GHC 130.00
+                        {formatCurrency(selectedItem.totalAmount)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-[#d1d1d1]">
+                      <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                        Amount Received
+                      </span>
+                      <span className="[font-family:'Lato',Helvetica] font-bold text-green-600 text-lg">
+                        {formatCurrency(receivedAmount)}
                       </span>
                     </div>
                   </div>
@@ -387,13 +367,10 @@ export const Reconciliation = (): JSX.Element => {
                     Cancel
                   </Button>
                   <Button
-                    onClick={() => {
-                      setShowModal(false);
-                      // Handle complete reconciliation
-                    }}
+                    onClick={handleCompleteReconciliation}
                     className="flex-1 bg-green-600 text-white hover:bg-green-700"
                   >
-                    Complete
+                    Complete Reconciliation
                   </Button>
                 </div>
               </div>

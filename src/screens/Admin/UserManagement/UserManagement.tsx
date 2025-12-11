@@ -1,22 +1,15 @@
-import React, { useState } from "react";
-import { Plus, Edit, Lock, Unlock, Phone, Mail, Building2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Edit, Phone, Mail, Building2, X } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Badge } from "../../../components/ui/badge";
+import { Label } from "../../../components/ui/label";
+import { mockUsers, mockStations, addUser } from "../../../data/mockData";
+import { User, UserRole } from "../../../types";
+import { getStationName, formatPhoneNumber } from "../../../utils/dataHelpers";
 
-interface User {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    role: "admin" | "station-manager" | "front-desk" | "call-center" | "rider";
-    station: string;
-    status: "active" | "disabled";
-    lastLogin: string;
-}
-
-const roleColors = {
+const roleColors: Record<UserRole, string> = {
     admin: "bg-red-100 text-red-800",
     "station-manager": "bg-blue-100 text-blue-800",
     "front-desk": "bg-green-100 text-green-800",
@@ -25,62 +18,60 @@ const roleColors = {
 };
 
 export const UserManagement = (): JSX.Element => {
-    const [users, setUsers] = useState<User[]>([
-        {
-            id: "USER-001",
-            name: "Adams Godfred",
-            email: "adams@example.com",
-            phone: "+233 555 555 555",
-            role: "front-desk",
-            station: "Accra Central",
-            status: "active",
-            lastLogin: "2024-01-20 14:30",
-        },
-        {
-            id: "USER-002",
-            name: "Kwame Asante",
-            email: "kwame@example.com",
-            phone: "+233 555 123 456",
-            role: "station-manager",
-            station: "Kumasi Hub",
-            status: "active",
-            lastLogin: "2024-01-20 10:15",
-        },
-        {
-            id: "USER-003",
-            name: "Ama Mensah",
-            email: "ama@example.com",
-            phone: "+233 555 234 567",
-            role: "call-center",
-            station: "Accra Central",
-            status: "active",
-            lastLogin: "2024-01-19 16:45",
-        },
-    ]);
-
+    const [users, setUsers] = useState<User[]>([]);
     const [showAddForm, setShowAddForm] = useState(false);
     const [filterRole, setFilterRole] = useState("");
     const [filterStation, setFilterStation] = useState("");
-    const [filterStatus, setFilterStatus] = useState("");
+    const [formData, setFormData] = useState({
+        name: "",
+        email: "",
+        phone: "",
+        role: "front-desk" as UserRole,
+        stationId: "",
+    });
+
+    useEffect(() => {
+        setUsers(mockUsers);
+    }, []);
 
     const filteredUsers = users.filter((user) => {
         if (filterRole && user.role !== filterRole) return false;
-        if (filterStation && user.station !== filterStation) return false;
-        if (filterStatus && user.status !== filterStatus) return false;
+        if (filterStation && user.stationId !== filterStation) return false;
         return true;
     });
 
-    const toggleUserStatus = (id: string) => {
-        setUsers(
-            users.map((user) =>
-                user.id === id
-                    ? { ...user, status: user.status === "active" ? "disabled" : "active" }
-                    : user
-            )
-        );
+    const toggleUserStatus = () => {
+        // For now, just show a message since User type doesn't have status
+        // In a real app, you'd update the user status
+        alert("User status toggle functionality - to be implemented with backend");
     };
 
-    const stations = [...new Set(users.map((u) => u.station))];
+    const handleAddUser = () => {
+        if (
+            formData.name.trim() &&
+            formData.email.trim() &&
+            formData.phone.trim() &&
+            formData.stationId
+        ) {
+            const newUser = addUser({
+                name: formData.name,
+                email: formData.email,
+                phone: formData.phone,
+                role: formData.role,
+                stationId: formData.stationId,
+            });
+            setUsers([...users, newUser]);
+            setFormData({
+                name: "",
+                email: "",
+                phone: "",
+                role: "front-desk",
+                stationId: "",
+            });
+            setShowAddForm(false);
+            alert(`User "${newUser.name}" created successfully!`);
+        }
+    };
 
     return (
         <div className="w-full">
@@ -88,12 +79,7 @@ export const UserManagement = (): JSX.Element => {
                 <main className="flex-1 space-y-6">
                     {/* Header */}
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-3xl font-bold text-neutral-800">User Management</h1>
-                            <p className="text-sm text-[#5d5d5d] mt-1">
-                                Manage all system users across stations
-                            </p>
-                        </div>
+                        <div className="flex-1"></div>
                         <Button
                             onClick={() => setShowAddForm(true)}
                             className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2"
@@ -103,14 +89,147 @@ export const UserManagement = (): JSX.Element => {
                         </Button>
                     </div>
 
+                    {/* Add User Dialog */}
+                    {showAddForm && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <Card className="w-full max-w-2xl rounded-lg border border-[#d1d1d1] bg-white shadow-lg max-h-[90vh] overflow-y-auto">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-lg font-bold text-neutral-800">Create New User</h3>
+                                        <button
+                                            onClick={() => {
+                                                setShowAddForm(false);
+                                                setFormData({
+                                                    name: "",
+                                                    email: "",
+                                                    phone: "",
+                                                    role: "front-desk",
+                                                    stationId: "",
+                                                });
+                                            }}
+                                            className="text-[#9a9a9a] hover:text-neutral-800"
+                                        >
+                                            <X className="w-5 h-5" />
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                                Name <span className="text-[#e22420]">*</span>
+                                            </Label>
+                                            <Input
+                                                value={formData.name}
+                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                                placeholder="Full name"
+                                                className="border border-[#d1d1d1]"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                                Email <span className="text-[#e22420]">*</span>
+                                            </Label>
+                                            <Input
+                                                type="email"
+                                                value={formData.email}
+                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                placeholder="email@example.com"
+                                                className="border border-[#d1d1d1]"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                                Phone <span className="text-[#e22420]">*</span>
+                                            </Label>
+                                            <Input
+                                                type="tel"
+                                                value={formData.phone}
+                                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                                placeholder="+233XXXXXXXXX"
+                                                className="border border-[#d1d1d1]"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                                Role <span className="text-[#e22420]">*</span>
+                                            </Label>
+                                            <select
+                                                value={formData.role}
+                                                onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
+                                                className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                                            >
+                                                <option value="front-desk">Front Desk</option>
+                                                <option value="call-center">Call Center</option>
+                                                <option value="station-manager">Station Manager</option>
+                                                <option value="rider">Rider</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="md:col-span-2">
+                                            <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                                Station <span className="text-[#e22420]">*</span>
+                                            </Label>
+                                            <select
+                                                value={formData.stationId}
+                                                onChange={(e) => setFormData({ ...formData, stationId: e.target.value })}
+                                                className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                                            >
+                                                <option value="">Select a station</option>
+                                                {mockStations.map((station) => (
+                                                    <option key={station.id} value={station.id}>
+                                                        {station.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-4">
+                                        <Button
+                                            onClick={handleAddUser}
+                                            disabled={
+                                                !formData.name.trim() ||
+                                                !formData.email.trim() ||
+                                                !formData.phone.trim() ||
+                                                !formData.stationId
+                                            }
+                                            className="flex-1 bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50"
+                                        >
+                                            Create User
+                                        </Button>
+                                        <Button
+                                            onClick={() => {
+                                                setShowAddForm(false);
+                                                setFormData({
+                                                    name: "",
+                                                    email: "",
+                                                    phone: "",
+                                                    role: "front-desk",
+                                                    stationId: "",
+                                                });
+                                            }}
+                                            variant="outline"
+                                            className="flex-1 border border-[#d1d1d1]"
+                                        >
+                                            Cancel
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
+
                     {/* Filters */}
-                    <Card className="border border-[#d1d1d1] bg-white">
+                    <Card className="border border-[#d1d1d1] bg-white shadow-sm">
                         <CardContent className="p-6">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                    <Label className="block text-sm font-semibold text-neutral-800 mb-2">
                                         Filter by Role
-                                    </label>
+                                    </Label>
                                     <select
                                         value={filterRole}
                                         onChange={(e) => setFilterRole(e.target.value)}
@@ -126,35 +245,20 @@ export const UserManagement = (): JSX.Element => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                    <Label className="block text-sm font-semibold text-neutral-800 mb-2">
                                         Filter by Station
-                                    </label>
+                                    </Label>
                                     <select
                                         value={filterStation}
                                         onChange={(e) => setFilterStation(e.target.value)}
                                         className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                                     >
                                         <option value="">All Stations</option>
-                                        {stations.map((station) => (
-                                            <option key={station} value={station}>
-                                                {station}
+                                        {mockStations.map((station) => (
+                                            <option key={station.id} value={station.id}>
+                                                {station.name}
                                             </option>
                                         ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-semibold text-neutral-800 mb-2">
-                                        Filter by Status
-                                    </label>
-                                    <select
-                                        value={filterStatus}
-                                        onChange={(e) => setFilterStatus(e.target.value)}
-                                        className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
-                                    >
-                                        <option value="">All Status</option>
-                                        <option value="active">Active</option>
-                                        <option value="disabled">Disabled</option>
                                     </select>
                                 </div>
                             </div>
@@ -162,109 +266,88 @@ export const UserManagement = (): JSX.Element => {
                     </Card>
 
                     {/* Users Table */}
-                    <Card className="border border-[#d1d1d1] bg-white">
-                        <CardContent className="p-6">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead>
-                                        <tr className="border-b border-[#d1d1d1]">
-                                            <th className="text-left py-3 px-4 text-sm font-semibold text-[#5d5d5d]">
-                                                Name
-                                            </th>
-                                            <th className="text-left py-3 px-4 text-sm font-semibold text-[#5d5d5d]">
-                                                Contact
-                                            </th>
-                                            <th className="text-left py-3 px-4 text-sm font-semibold text-[#5d5d5d]">
-                                                Role
-                                            </th>
-                                            <th className="text-left py-3 px-4 text-sm font-semibold text-[#5d5d5d]">
-                                                Station
-                                            </th>
-                                            <th className="text-left py-3 px-4 text-sm font-semibold text-[#5d5d5d]">
-                                                Status
-                                            </th>
-                                            <th className="text-left py-3 px-4 text-sm font-semibold text-[#5d5d5d]">
-                                                Actions
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredUsers.map((user) => (
-                                            <tr key={user.id} className="border-b border-[#d1d1d1] hover:bg-gray-50">
-                                                <td className="py-4 px-4">
-                                                    <span className="font-medium text-neutral-800">{user.name}</span>
-                                                </td>
-                                                <td className="py-4 px-4 text-sm text-neutral-700">
-                                                    <div className="flex flex-col gap-1">
-                                                        <div className="flex items-center gap-1">
-                                                            <Mail size={14} className="text-[#5d5d5d]" />
-                                                            {user.email}
-                                                        </div>
-                                                        <div className="flex items-center gap-1">
-                                                            <Phone size={14} className="text-[#5d5d5d]" />
-                                                            {user.phone}
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="py-4 px-4">
-                                                    <Badge
-                                                        className={`${roleColors[user.role as keyof typeof roleColors]
-                                                            }`}
-                                                    >
-                                                        {user.role.replace("-", " ")}
-                                                    </Badge>
-                                                </td>
-                                                <td className="py-4 px-4 text-sm text-neutral-700">
-                                                    <div className="flex items-center gap-1">
-                                                        <Building2 size={14} className="text-[#5d5d5d]" />
-                                                        {user.station}
-                                                    </div>
-                                                </td>
-                                                <td className="py-4 px-4">
-                                                    <Badge
-                                                        className={
-                                                            user.status === "active"
-                                                                ? "bg-green-100 text-green-800"
-                                                                : "bg-red-100 text-red-800"
-                                                        }
-                                                    >
-                                                        {user.status}
-                                                    </Badge>
-                                                </td>
-                                                <td className="py-4 px-4">
-                                                    <div className="flex gap-2">
-                                                        <Button
-                                                            onClick={() => toggleUserStatus(user.id)}
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="border border-[#d1d1d1]"
+                    <Card className="border border-[#d1d1d1] bg-white shadow-sm overflow-hidden">
+                        <CardContent className="p-0">
+                            <div className="overflow-x-auto -mx-6 sm:mx-0">
+                                <div className="inline-block min-w-full align-middle">
+                                    <div className="overflow-hidden">
+                                        <table className="min-w-full divide-y divide-[#d1d1d1]">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-[#d1d1d1]">
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Name
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Contact
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Role
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Station
+                                                    </th>
+                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                        Actions
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-[#d1d1d1]">
+                                                {filteredUsers.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={5} className="py-12 text-center">
+                                                            <p className="text-sm text-neutral-500">No users found matching filters</p>
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    filteredUsers.map((user, index) => (
+                                                        <tr 
+                                                            key={user.id} 
+                                                            className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                                                         >
-                                                            {user.status === "active" ? (
-                                                                <Lock size={16} />
-                                                            ) : (
-                                                                <Unlock size={16} />
-                                                            )}
-                                                        </Button>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="border border-[#d1d1d1]"
-                                                        >
-                                                            <Edit size={16} />
-                                                        </Button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {filteredUsers.length === 0 && (
-                                <div className="text-center py-8">
-                                    <p className="text-neutral-700">No users found matching filters</p>
+                                                            <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                <span className="text-xs sm:text-sm font-medium text-neutral-800">{user.name}</span>
+                                                            </td>
+                                                            <td className="py-3 px-3 sm:py-4 sm:px-6">
+                                                                <div className="flex flex-col gap-1.5">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <Mail size={12} className="sm:w-[14px] sm:h-[14px] text-[#9a9a9a] flex-shrink-0" />
+                                                                        <span className="text-xs sm:text-sm text-neutral-700 truncate">{user.email}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <Phone size={12} className="sm:w-[14px] sm:h-[14px] text-[#9a9a9a] flex-shrink-0" />
+                                                                        <span className="text-xs sm:text-sm text-neutral-700">{formatPhoneNumber(user.phone)}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                <Badge className={roleColors[user.role]}>
+                                                                    <span className="text-xs">{user.role.replace("-", " ")}</span>
+                                                                </Badge>
+                                                            </td>
+                                                            <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Building2 size={12} className="sm:w-[14px] sm:h-[14px] text-[#9a9a9a] flex-shrink-0" />
+                                                                    <span className="text-xs sm:text-sm text-neutral-700 truncate">{getStationName(user.stationId, mockStations)}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                <Button
+                                                                    onClick={() => toggleUserStatus()}
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="border border-[#d1d1d1] hover:bg-gray-100"
+                                                                >
+                                                                    <Edit size={14} className="sm:w-4 sm:h-4" />
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
-                            )}
+                            </div>
                         </CardContent>
                     </Card>
                 </main>
