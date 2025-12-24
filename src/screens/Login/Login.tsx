@@ -41,7 +41,7 @@ export const Login = (): JSX.Element => {
       const timer = setTimeout(() => {
         if (userRole === "ADMIN") {
           console.log("Redirecting to admin dashboard");
-          navigate("/admin/dashboard", { replace: true });
+          navigate("/admin/stations", { replace: true });
           return;
         } else if (userRole === "RIDER") {
           navigate("/rider/dashboard", { replace: true });
@@ -136,7 +136,7 @@ export const Login = (): JSX.Element => {
           console.log("Navigating based on role:", normalizedRole);
           if (normalizedRole === "ADMIN") {
             console.log("Navigate to admin dashboard");
-            navigate("/admin/dashboard", { replace: true });
+            navigate("/admin/stations", { replace: true });
           } else if (normalizedRole === "RIDER") {
             navigate("/rider/dashboard", { replace: true });
           } else if (normalizedRole === "CALLER") {
@@ -209,7 +209,7 @@ export const Login = (): JSX.Element => {
                 <div className="w-12 h-12 bg-[#ea690c] rounded-lg flex items-center justify-center">
                   <PackageIcon className="w-8 h-8 text-white" />
                 </div>
-                <span className="text-[#ea690c] font-bold text-xl">DELIVERY</span>
+                {/* <span className="text-[#ea690c] font-bold text-xl">DELIVERY</span> */}
               </div>
               <div className="text-center">
                 <div className="flex items-center justify-center gap-2 mb-1">
@@ -366,7 +366,8 @@ export const Login = (): JSX.Element => {
 
             {/* Version */}
             <p className="text-center text-[#9a9a9a] text-xs mt-4">
-              Version 1.0.0 | Secure API Integration
+              Version 1.0.0 
+              {/* | Secure API Integration */}
             </p>
           </CardContent>
         </Card>
