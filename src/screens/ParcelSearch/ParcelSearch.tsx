@@ -239,7 +239,7 @@ export const ParcelSearch = (): JSX.Element => {
             <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <main className="flex-1 space-y-6">
                     {/* Header */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    {/* <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                         <div>
                             <h1 className="text-xl font-bold text-neutral-800">Parcel Search</h1>
                             <p className="text-xs text-[#5d5d5d] mt-0.5">
@@ -254,7 +254,7 @@ export const ParcelSearch = (): JSX.Element => {
                             <Download size={14} />
                             Export
                         </Button>
-                    </div>
+                    </div> */}
 
                     {/* Quick Search Bar */}
                     <Card className="border border-[#d1d1d1] bg-white">
@@ -281,6 +281,14 @@ export const ParcelSearch = (): JSX.Element => {
                                     <FilterIcon size={18} />
                                     <span className="hidden sm:inline">{showFilters ? "Hide" : "Show"} Filters</span>
                                 </Button>
+                                <Button
+                            onClick={handleExport}
+                            size="sm"
+                            className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2 h-8 text-xs"
+                        >
+                            <Download size={14} />
+                            Export
+                        </Button>
                             </div>
 
                             {/* Advanced Filters */}
@@ -413,8 +421,10 @@ export const ParcelSearch = (): JSX.Element => {
                                         </Button>
                                     </div>
                                 </div>
+                                
                             )}
                         </CardContent>
+                        
                     </Card>
 
                     {/* Results Summary */}
@@ -448,7 +458,7 @@ export const ParcelSearch = (): JSX.Element => {
                             {/* Parcels Table */}
                             <Card className="border border-[#d1d1d1] bg-white overflow-hidden">
                                 <CardContent className="p-0">
-                                    <div className="overflow-x-auto max-h-[calc(100vh-350px)] overflow-y-auto">
+                                    <div className="overflow-x-auto max-h-[calc(100vh-200px)] overflow-y-auto">
                                         <table className="w-full divide-y divide-[#d1d1d1] text-xs">
                                             <thead className="bg-gray-50 sticky top-0 z-10">
                                                 <tr>
