@@ -16,7 +16,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
     if (allowedRoles && userRole && !allowedRoles.includes(userRole)) {
         // Redirect to appropriate dashboard based on role
         if (userRole === "ADMIN") {
-            return <Navigate to="/admin/dashboard" replace />;
+            return <Navigate to="/admin/stations" replace />;
         } else if (userRole === "RIDER") {
             return <Navigate to="/rider/dashboard" replace />;
         } else if (userRole === "CALLER") {

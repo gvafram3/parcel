@@ -14,7 +14,7 @@ const navItems = [
     { label: "Station Management", path: "/admin/stations", icon: Building2, roles: ["ADMIN"] },
     { label: "User Management", path: "/admin/users", icon: Users, roles: ["ADMIN"] },
     { label: "System Parcels", path: "/admin/parcels", icon: Package, roles: ["ADMIN"] },
-    { label: "Financial Reports", path: "/admin/financial-reports", icon: BarChart3, roles: ["ADMIN"] },
+    // { label: "Financial Reports", path: "/admin/financial-reports", icon: BarChart3, roles: ["ADMIN"] },
 
     // Station Manager & Front Desk - Core Operations
     { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["FRONTDESK", "MANAGER", "CALLER"] },
