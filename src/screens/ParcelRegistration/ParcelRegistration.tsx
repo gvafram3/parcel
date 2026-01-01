@@ -22,6 +22,9 @@ interface ParcelFormData {
   shelfName?: string; // Stores shelf name for display
   itemValue: number;
   pickUpCost?: number;
+  homeDelivery?: boolean;
+  deliveryCost?: number;
+  hasCalled?: boolean;
 }
 
 const STORAGE_KEY_PARCELS = "parcel_registration_parcels";
@@ -175,7 +178,8 @@ export const ParcelRegistration = (): JSX.Element => {
       !p.driverName || 
       !p.driverPhone || 
       !p.vehicleNumber ||
-      p.pickUpCost === undefined
+      p.pickUpCost === undefined ||
+      (p.homeDelivery && (!p.deliveryCost || p.deliveryCost === undefined))
     );
 
     if (invalidParcels.length > 0) {
@@ -199,10 +203,11 @@ export const ParcelRegistration = (): JSX.Element => {
           driverPhoneNumber: parcelData.driverPhone!,
           inboundCost: parcelData.itemValue > 0 ? parcelData.itemValue : undefined,
           pickUpCost: parcelData.pickUpCost || 0,
-          deliveryCost: undefined,
+          deliveryCost: parcelData.deliveryCost || undefined,
           storageCost: undefined,
           shelfNumber: parcelData.shelfLocation, // shelfLocation now contains shelf ID
-          hasCalled: false,
+          hasCalled: parcelData.hasCalled || false,
+          homeDelivery: parcelData.homeDelivery || false,
           vehicleNumber: parcelData.vehicleNumber!,
           officeId: officeId,
           pod: false,
@@ -276,19 +281,11 @@ export const ParcelRegistration = (): JSX.Element => {
   };
 
   return (
-    <div className="w-full bg-gray-50 min-h-screen">
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        {/* Header */}
-        {/* <div className="mb-8">
-          <h1 className="text-3xl font-bold text-neutral-800">Parcel Registration</h1>
-          <p className="text-sm text-[#5d5d5d] mt-2">
-            {currentStation?.name} - Register new parcels for processing
-          </p>
-        </div> */}
-
-        {/* Session Banner - Only show if there's an active session */}
+    <div className="w-full bg-gray-50">
+      <div className="mx-auto max-w-6xl w-full px-4 py-6 sm:px-6 lg:px-8">
+        {/* Session Banner - Only show if there's an active session - Sticky at top */}
         {sessionDriver && parcels.length > 0 && (
-          <Card className="mb-6 border-blue-200 bg-gradient-to-r from-blue-50 to-blue-100">
+          <Card className="mb-4 border-blue-200 bg-gradient-to-r from-blue-50 to-blue-100 sticky top-0 z-10">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -314,7 +311,7 @@ export const ParcelRegistration = (): JSX.Element => {
 
         {/* Navigation Blocker Modal */}
         {showLeaveModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className=" inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <Card className="w-full max-w-md rounded-lg border border-[#d1d1d1] bg-white shadow-lg">
               <CardContent className="p-6">
                 <div className="mb-4">
@@ -353,6 +350,7 @@ export const ParcelRegistration = (): JSX.Element => {
           </div>
         )}
 
+        {/* Content Area */}
         <InfoSection
           parcels={parcels}
           sessionDriver={sessionDriver}

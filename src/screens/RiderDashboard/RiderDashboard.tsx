@@ -505,10 +505,11 @@ export const RiderDashboard = (): JSX.Element => {
 
             {/* Delivery Confirmation Modal */}
             {showDeliveryModal && selectedAssignment && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-lg">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between mb-6">
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+                    <Card className="w-full sm:max-w-md border border-[#d1d1d1] bg-white shadow-lg rounded-t-2xl sm:rounded-lg max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+                        <CardContent className="p-4 sm:p-6 flex flex-col flex-1 min-h-0 overflow-hidden">
+                            {/* Fixed Header */}
+                            <div className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
                                 <h3 className="text-lg font-bold text-neutral-800">Confirm Delivery</h3>
                                 <button
                                     onClick={() => {
@@ -523,8 +524,9 @@ export const RiderDashboard = (): JSX.Element => {
                                 </button>
                             </div>
 
-                            <div className="space-y-4">
-                                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                            {/* Scrollable Content */}
+                            <div className="space-y-4 flex-1 overflow-y-auto overflow-x-hidden pr-1 -mr-1">
+                                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4 mb-4">
                                     <div className="flex items-start gap-2">
                                         <AlertCircleIcon className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
                                         <div>
@@ -548,10 +550,10 @@ export const RiderDashboard = (): JSX.Element => {
 
                                 <div className="bg-gray-50 rounded-lg p-3">
                                     <p className="text-xs font-semibold text-[#5d5d5d] mb-2">Expected Amount</p>
-                                    <p className="text-2xl font-bold text-[#ea690c]">
+                                    <p className="text-xl sm:text-2xl font-bold text-[#ea690c]">
                                         {formatCurrency(
                                             (selectedAssignment.parcel.deliveryCost || 0) + (selectedAssignment.parcel.pickUpCost || 0) +
-                                            (selectedAssignment.parcel.inboundCost || 0) + (selectedAssignment.parcel.storageCost || 0)
+                                                (selectedAssignment.parcel.inboundCost || 0) + (selectedAssignment.parcel.storageCost || 0)
                                         )}
                                     </p>
                                 </div>
@@ -573,7 +575,7 @@ export const RiderDashboard = (): JSX.Element => {
                                     <Label className="text-sm font-semibold text-neutral-800 mb-2">
                                         Confirmation Code <span className="text-[#e22420]">*</span>
                                     </Label>
-                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-2">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 mb-2">
                                         <p className="text-xs text-blue-800">
                                             <strong>Note:</strong> Ask the recipient for the confirmation code sent to their phone via SMS during parcel registration.
                                         </p>
@@ -587,38 +589,39 @@ export const RiderDashboard = (): JSX.Element => {
                                         maxLength={10}
                                     />
                                 </div>
+                            </div>
 
-                                <div className="flex gap-3 pt-4">
-                                    <Button
-                                        onClick={() => {
-                                            setShowDeliveryModal(false);
-                                            setSelectedAssignment(null);
-                                            setAmountCollected("");
-                                            setConfirmationCode("");
-                                        }}
-                                        variant="outline"
-                                        className="flex-1 border border-[#d1d1d1]"
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        onClick={handleDeliveryComplete}
-                                        disabled={!amountCollected || !confirmationCode.trim() || updatingAssignment === selectedAssignment.assignmentId}
-                                        className="flex-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                                    >
-                                        {updatingAssignment === selectedAssignment.assignmentId ? (
-                                            <>
-                                                <Loader className="w-4 h-4 animate-spin mr-2" />
-                                                Processing...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <CheckCircleIcon className="w-4 h-4 mr-2" />
-                                                Confirm Delivery
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
+                            {/* Fixed Footer with Buttons */}
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 mt-4 border-t border-gray-200 flex-shrink-0">
+                                <Button
+                                    onClick={() => {
+                                        setShowDeliveryModal(false);
+                                        setSelectedAssignment(null);
+                                        setAmountCollected("");
+                                        setConfirmationCode("");
+                                    }}
+                                    variant="outline"
+                                    className="flex-1 border border-[#d1d1d1] py-2.5 sm:py-2"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleDeliveryComplete}
+                                    disabled={!amountCollected || !confirmationCode.trim() || updatingAssignment === selectedAssignment.assignmentId}
+                                    className="flex-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 py-2.5 sm:py-2"
+                                >
+                                    {updatingAssignment === selectedAssignment.assignmentId ? (
+                                        <>
+                                            <Loader className="w-4 h-4 animate-spin mr-2" />
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircleIcon className="w-4 h-4 mr-2" />
+                                            Confirm Delivery
+                                        </>
+                                    )}
+                                </Button>
                             </div>
                         </CardContent>
                     </Card>
@@ -847,10 +850,11 @@ export const RiderDashboard = (): JSX.Element => {
 
             {/* Delivery Failed Modal */}
             {showFailedModal && selectedAssignment && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-lg">
-                        <CardContent className="p-6">
-                            <div className="flex items-center justify-between mb-6">
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+                    <Card className="w-full sm:max-w-md border border-[#d1d1d1] bg-white shadow-lg rounded-t-2xl sm:rounded-lg max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+                        <CardContent className="p-4 sm:p-6 flex flex-col flex-1 min-h-0 overflow-hidden">
+                            {/* Fixed Header */}
+                            <div className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
                                 <h3 className="text-lg font-bold text-neutral-800">Mark Delivery as Failed</h3>
                                 <button
                                     onClick={() => {
@@ -865,8 +869,9 @@ export const RiderDashboard = (): JSX.Element => {
                                 </button>
                             </div>
 
-                            <div className="space-y-4">
-                                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                            {/* Scrollable Content */}
+                            <div className="space-y-4 flex-1 overflow-y-auto overflow-x-hidden pr-1 -mr-1">
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4 mb-4">
                                     <div className="flex items-start gap-2">
                                         <AlertCircleIcon className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
                                         <div>
@@ -924,38 +929,39 @@ export const RiderDashboard = (): JSX.Element => {
                                         </div>
                                     )}
                                 </div>
+                            </div>
 
-                                <div className="flex gap-3 pt-4">
-                                    <Button
-                                        onClick={() => {
-                                            setShowFailedModal(false);
-                                            setSelectedAssignment(null);
-                                            setFailureReason("");
-                                            setSelectedFailureReason("");
-                                        }}
-                                        variant="outline"
-                                        className="flex-1 border border-[#d1d1d1]"
-                                    >
-                                        Cancel
-                                    </Button>
-                                    <Button
-                                        onClick={handleDeliveryFailed}
-                                        disabled={(!selectedFailureReason || (selectedFailureReason === "Other" && !failureReason.trim())) || updatingAssignment === selectedAssignment.assignmentId}
-                                        className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-                                    >
-                                        {updatingAssignment === selectedAssignment.assignmentId ? (
-                                            <>
-                                                <Loader className="w-4 h-4 animate-spin mr-2" />
-                                                Processing...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <XCircleIcon className="w-4 h-4 mr-2" />
-                                                Confirm Failure
-                                            </>
-                                        )}
-                                    </Button>
-                                </div>
+                            {/* Fixed Footer with Buttons */}
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-4 mt-4 border-t border-gray-200 flex-shrink-0">
+                                <Button
+                                    onClick={() => {
+                                        setShowFailedModal(false);
+                                        setSelectedAssignment(null);
+                                        setFailureReason("");
+                                        setSelectedFailureReason("");
+                                    }}
+                                    variant="outline"
+                                    className="flex-1 border border-[#d1d1d1] py-2.5 sm:py-2"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleDeliveryFailed}
+                                    disabled={(!selectedFailureReason || (selectedFailureReason === "Other" && !failureReason.trim())) || updatingAssignment === selectedAssignment.assignmentId}
+                                    className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 py-2.5 sm:py-2"
+                                >
+                                    {updatingAssignment === selectedAssignment.assignmentId ? (
+                                        <>
+                                            <Loader className="w-4 h-4 animate-spin mr-2" />
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <XCircleIcon className="w-4 h-4 mr-2" />
+                                            Confirm Failure
+                                        </>
+                                    )}
+                                </Button>
                             </div>
                         </CardContent>
                     </Card>

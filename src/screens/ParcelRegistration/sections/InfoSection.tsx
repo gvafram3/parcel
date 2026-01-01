@@ -8,6 +8,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Textarea } from "../../../components/ui/textarea";
 import { Badge } from "../../../components/ui/badge";
+import { Switch } from "../../../components/ui/switch";
 import { PlusIcon, Package, User, Truck, FileText, Save, X } from "lucide-react";
 
 interface ParcelFormData {
@@ -24,6 +25,9 @@ interface ParcelFormData {
     shelfName?: string; // Stores shelf name for display
     itemValue: number;
     pickUpCost?: number;
+    homeDelivery?: boolean;
+    deliveryCost?: number;
+    hasCalled?: boolean;
 }
 
 interface InfoSectionProps {
@@ -70,6 +74,8 @@ export const InfoSection = ({
     const [shelf, setShelf] = useState("");
     const [itemValue, setItemValue] = useState("");
     const [pickUpCost, setPickUpCost] = useState("");
+    const [homeDelivery, setHomeDelivery] = useState(false);
+    const [deliveryCost, setDeliveryCost] = useState("");
     const [specialNotes, setSpecialNotes] = useState("");
     const [phoneError, setPhoneError] = useState("");
     const [isDriverLocked, setIsDriverLocked] = useState(false);
@@ -125,6 +131,11 @@ export const InfoSection = ({
             setPhoneError("Invalid sender phone number format. Use 0XXXXXXXXX or XXXXXXXXX");
             return false;
         }
+        // Validate delivery cost if home delivery is enabled
+        if (homeDelivery && (!deliveryCost || deliveryCost.trim() === "" || parseFloat(deliveryCost) <= 0)) {
+            setPhoneError("Delivery cost is required when home delivery is enabled");
+            return false;
+        }
         return true;
     };
 
@@ -156,6 +167,9 @@ export const InfoSection = ({
             shelfName: selectedShelf?.name, // Store shelf name for display
             itemValue: itemValue ? parseFloat(itemValue) : 0,
             pickUpCost: pickUpCost ? parseFloat(pickUpCost) : 0,
+            homeDelivery: homeDelivery,
+            deliveryCost: homeDelivery && deliveryCost ? parseFloat(deliveryCost) : undefined,
+            hasCalled: homeDelivery ? true : undefined,
         };
 
         onAddParcel(parcelData);
@@ -175,6 +189,8 @@ export const InfoSection = ({
         setShelf("");
         setItemValue("");
         setPickUpCost("");
+        setHomeDelivery(false);
+        setDeliveryCost("");
         setSpecialNotes("");
         setPhoneError("");
     };
@@ -207,6 +223,9 @@ export const InfoSection = ({
             shelfName: selectedShelf?.name, // Store shelf name for display
             itemValue: itemValue ? parseFloat(itemValue) : 0,
             pickUpCost: pickUpCost ? parseFloat(pickUpCost) : 0,
+            homeDelivery: homeDelivery,
+            deliveryCost: homeDelivery && deliveryCost ? parseFloat(deliveryCost) : undefined,
+            hasCalled: homeDelivery ? true : undefined,
         };
 
         // Save all parcels (including current form data)
@@ -222,6 +241,8 @@ export const InfoSection = ({
         setShelf("");
         setItemValue("");
         setPickUpCost("");
+        setHomeDelivery(false);
+        setDeliveryCost("");
         setSpecialNotes("");
         setPhoneError("");
         
@@ -231,7 +252,7 @@ export const InfoSection = ({
         }
     };
 
-    const isFormValid = recipientName.trim() && phoneNumber.trim() && shelf.trim() && !phoneError;
+    const isFormValid = recipientName.trim() && phoneNumber.trim() && shelf.trim() && !phoneError && (!homeDelivery || (deliveryCost && parseFloat(deliveryCost) > 0));
 
     return (
         <div className="space-y-6">
@@ -271,6 +292,11 @@ export const InfoSection = ({
                                                 Driver: {parcel.driverName} ({parcel.vehicleNumber})
                                             </p>
                                         )}
+                                        {parcel.homeDelivery && (
+                                            <p className="text-xs text-green-600 mt-1 font-semibold">
+                                                🏠 Home Delivery - GHC {parcel.deliveryCost?.toFixed(2) || "0.00"}
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <Badge className="bg-blue-100 text-blue-800">
@@ -280,6 +306,11 @@ export const InfoSection = ({
                                             <span className="text-xs font-semibold text-[#ea690c]">
                                                 GHC {parcel.itemValue.toFixed(2)}
                                             </span>
+                                        )}
+                                        {parcel.homeDelivery && (
+                                            <Badge className="bg-green-100 text-green-800">
+                                                Home Delivery
+                                            </Badge>
                                         )}
                                         <button
                                             onClick={() => onRemoveParcel(index)}
@@ -574,6 +605,49 @@ export const InfoSection = ({
                                         required
                                     />
                                 </div>
+
+                                <div className="flex flex-col gap-2 md:col-span-2">
+                                    <div className="flex items-center justify-between p-4 border border-[#d1d1d1] rounded-lg bg-gray-50">
+                                        <div className="flex flex-col gap-1">
+                                            <Label className="text-sm font-semibold text-neutral-800">
+                                                Home Delivery Requested
+                                            </Label>
+                                            <p className="text-xs text-[#5d5d5d]">
+                                                Enable if the recipient has requested home delivery
+                                            </p>
+                                        </div>
+                                        <Switch
+                                            checked={homeDelivery}
+                                            onCheckedChange={(checked) => {
+                                                setHomeDelivery(checked);
+                                                if (!checked) {
+                                                    setDeliveryCost("");
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {homeDelivery && (
+                                    <div className="flex flex-col gap-2">
+                                        <Label className="text-sm font-semibold text-neutral-800">
+                                            Delivery Cost (GHC) <span className="text-[#e22420]">*</span>
+                                        </Label>
+                                        <Input
+                                            type="number"
+                                            value={deliveryCost}
+                                            onChange={(e) => setDeliveryCost(e.target.value)}
+                                            placeholder="0.00"
+                                            min="0"
+                                            step="0.01"
+                                            className="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
+                                            required
+                                        />
+                                        <p className="text-xs text-blue-600">
+                                            Has Called will be automatically set to true
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div className="flex flex-col gap-2 md:col-span-2">
                                     <Label className="text-sm font-semibold text-neutral-800">

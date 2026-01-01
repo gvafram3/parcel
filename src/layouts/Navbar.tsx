@@ -133,7 +133,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     }, []);
 
     return (
-        <nav className="border-b border-[#d1d1d1] bg-white">
+        <nav className="sticky top-0 z-10 border-b border-[#d1d1d1] bg-white">
             <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
                 {/* Left Section - Menu and Title */}
                 <div className="flex items-center gap-4 flex-1">
