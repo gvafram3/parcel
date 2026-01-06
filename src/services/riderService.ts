@@ -146,11 +146,11 @@ class RiderService {
     }
 
     /**
-     * Update assignment status
+     * Update assignment status (for rider)
      */
     async updateAssignmentStatus(
-        assignmentId: string, 
-        status: AssignmentStatus, 
+        assignmentId: string,
+        status: AssignmentStatus,
         confirmationCode?: string,
         reason?: string
     ): Promise<ApiResponse> {
@@ -158,24 +158,68 @@ class RiderService {
             const requestBody: UpdateAssignmentStatusRequest = {
                 status,
             };
-            
+
             // Include confirmation code only for DELIVERED status
             if (status === "DELIVERED" && confirmationCode) {
                 requestBody.confirmationCode = confirmationCode;
             }
-            
+
             // Include cancelationReason only for CANCELLED status
             if (status === "CANCELLED" && reason) {
                 requestBody.cancelationReason = reason;
             }
-            
-            const response = await this.apiClient.put<{ message: string }>(`/assignments/${assignmentId}/status`, requestBody);
+
+            const response = await this.apiClient.put<{ message: string }>(
+                `/assignments/${assignmentId}/status`,
+                requestBody
+            );
             return {
                 success: true,
                 message: response.data.message || 'Assignment status updated successfully',
             };
         } catch (error: any) {
             console.error('Update assignment status error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to update assignment status. Please try again.',
+            };
+        }
+    }
+
+    /**
+     * Update assignment status as MANAGER
+     * Uses manager endpoint: PUT /api-rider/manager/assignments/{assignmentId}/status
+     */
+    async updateManagerAssignmentStatus(
+        assignmentId: string,
+        status: AssignmentStatus,
+        confirmationCode?: string,
+        reason?: string
+    ): Promise<ApiResponse> {
+        try {
+            const requestBody: UpdateAssignmentStatusRequest = {
+                status,
+            };
+
+            if (status === "DELIVERED" && confirmationCode) {
+                requestBody.confirmationCode = confirmationCode;
+            }
+
+            if (status === "CANCELLED" && reason) {
+                requestBody.cancelationReason = reason;
+            }
+
+            const response = await this.apiClient.put<{ message: string }>(
+                `/manager/assignments/${assignmentId}/status`,
+                requestBody
+            );
+
+            return {
+                success: true,
+                message: response.data.message || 'Assignment status updated successfully',
+            };
+        } catch (error: any) {
+            console.error('Update manager assignment status error:', error);
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to update assignment status. Please try again.',

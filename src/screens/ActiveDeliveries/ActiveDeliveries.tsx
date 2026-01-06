@@ -21,6 +21,7 @@ import { Label } from "../../components/ui/label";
 import { useStation } from "../../contexts/StationContext";
 import { formatPhoneNumber, formatDateTime, formatCurrency } from "../../utils/dataHelpers";
 import frontdeskService, { DeliveryAssignmentResponse, ParcelResponse, RiderResponse } from "../../services/frontdeskService";
+import riderService from "../../services/riderService";
 import { useToast } from "../../components/ui/toast";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 
@@ -91,7 +92,7 @@ export const ActiveDeliveries = (): JSX.Element => {
         if (userRole === "RIDER" && riderId) {
           // For riders: fetch only their assignments
           const response = await frontdeskService.getRiderAssignments(riderId, false);
-          
+
           if (response.success && response.data) {
             const assignments = response.data as DeliveryAssignmentResponse[];
             const deliveryItems: DeliveryItem[] = assignments
@@ -140,7 +141,7 @@ export const ActiveDeliveries = (): JSX.Element => {
         } else if (userRole === "MANAGER" || userRole === "ADMIN" || userRole === "FRONTDESK") {
           // For managers/admins: fetch all riders and their assignments
           const ridersResponse = await frontdeskService.getRiders();
-          
+
           if (!ridersResponse.success || !ridersResponse.data) {
             showToast(ridersResponse.message || "Failed to load riders", "error");
             setLoading(false);
@@ -154,7 +155,7 @@ export const ActiveDeliveries = (): JSX.Element => {
           for (const rider of riders) {
             try {
               const assignmentsResponse = await frontdeskService.getRiderAssignments(rider.userId, false);
-              
+
               if (assignmentsResponse.success && assignmentsResponse.data) {
                 const assignments = assignmentsResponse.data as DeliveryAssignmentResponse[];
                 const deliveryItems: DeliveryItem[] = assignments
@@ -219,8 +220,8 @@ export const ActiveDeliveries = (): JSX.Element => {
   const filteredRidersWithAssignments = useMemo(() => {
     return ridersWithAssignments.map(riderData => {
       const filteredAssignments = riderData.assignments.filter((delivery) => {
-    const matchesSearch =
-      !searchQuery ||
+        const matchesSearch =
+          !searchQuery ||
           delivery.parcelId.toLowerCase().includes(searchQuery.toLowerCase()) ||
           delivery.parcel.receiverName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           delivery.parcel.recieverPhoneNumber?.includes(searchQuery) ||
@@ -229,8 +230,8 @@ export const ActiveDeliveries = (): JSX.Element => {
         const uiStatus = mapAssignmentStatusToUI(delivery.status);
         const matchesStatus = statusFilter === "all" || uiStatus === statusFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+        return matchesSearch && matchesStatus;
+      });
 
       return {
         ...riderData,
@@ -254,7 +255,7 @@ export const ActiveDeliveries = (): JSX.Element => {
     try {
       if (userRole === "RIDER" && riderId) {
         const response = await frontdeskService.getRiderAssignments(riderId, false);
-        
+
         if (response.success && response.data) {
           const assignments = response.data as DeliveryAssignmentResponse[];
           const deliveryItems: DeliveryItem[] = assignments
@@ -298,7 +299,7 @@ export const ActiveDeliveries = (): JSX.Element => {
         }
       } else if (userRole === "MANAGER" || userRole === "ADMIN" || userRole === "FRONTDESK") {
         const ridersResponse = await frontdeskService.getRiders();
-        
+
         if (!ridersResponse.success || !ridersResponse.data) {
           return;
         }
@@ -309,7 +310,7 @@ export const ActiveDeliveries = (): JSX.Element => {
         for (const rider of riders) {
           try {
             const assignmentsResponse = await frontdeskService.getRiderAssignments(rider.userId, false);
-            
+
             if (assignmentsResponse.success && assignmentsResponse.data) {
               const assignments = assignmentsResponse.data as DeliveryAssignmentResponse[];
               const deliveryItems: DeliveryItem[] = assignments
@@ -394,7 +395,7 @@ export const ActiveDeliveries = (): JSX.Element => {
         showToast("Status updated successfully", "success");
         // Refresh all riders and assignments
         await fetchRidersAndAssignments();
-    } else {
+      } else {
         showToast(response.message || "Failed to update status", "error");
       }
     } catch (error) {
@@ -410,17 +411,20 @@ export const ActiveDeliveries = (): JSX.Element => {
 
     setUpdatingStatus(selectedDelivery.assignmentId);
     try {
-    const collected = parseFloat(amountCollected);
+      const collected = parseFloat(amountCollected);
       const parcel = selectedDelivery.parcel;
-      
-      const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) + 
-                         (parcel.inboundCost || 0) + (parcel.storageCost || 0);
 
-      // Update parcel as delivered
-      const response = await frontdeskService.updateParcel(selectedDelivery.parcelId, {
-        delivered: true,
-        pod: true, // Proof of delivery
-      });
+      const totalAmount =
+        (parcel.deliveryCost || 0) +
+        (parcel.pickUpCost || 0) +
+        (parcel.inboundCost || 0) +
+        (parcel.storageCost || 0);
+
+      // Manager marks assignment as delivered via rider API
+      const response = await riderService.updateManagerAssignmentStatus(
+        selectedDelivery.assignmentId,
+        "DELIVERED"
+      );
 
       if (response.success) {
         showToast(
@@ -428,13 +432,13 @@ export const ActiveDeliveries = (): JSX.Element => {
           "success"
         );
 
-    setShowDeliveryModal(false);
+        setShowDeliveryModal(false);
         setSelectedDelivery(null);
-    setAmountCollected("");
+        setAmountCollected("");
 
         // Refresh all riders and assignments
         await fetchRidersAndAssignments();
-    } else {
+      } else {
         showToast(response.message || "Failed to complete delivery", "error");
       }
     } catch (error) {
@@ -459,9 +463,9 @@ export const ActiveDeliveries = (): JSX.Element => {
       if (response.success) {
         showToast("Delivery failure recorded", "success");
 
-    setShowFailedModal(false);
+        setShowFailedModal(false);
         setSelectedDelivery(null);
-    setFailureReason("");
+        setFailureReason("");
 
         // Refresh all riders and assignments
         await fetchRidersAndAssignments();
@@ -504,8 +508,8 @@ export const ActiveDeliveries = (): JSX.Element => {
     })
     .reduce((sum, d) => {
       const parcel = d.parcel;
-      return sum + (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) + 
-             (parcel.inboundCost || 0) + (parcel.storageCost || 0);
+      return sum + (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
+        (parcel.inboundCost || 0) + (parcel.storageCost || 0);
     }, 0);
 
   const getStatusBadge = (status: AssignmentStatus) => {
@@ -749,87 +753,87 @@ export const ActiveDeliveries = (): JSX.Element => {
                             </p>
                           ) : (
                             riderData.assignments.map((delivery) => {
-                const nextAction = getNextStatusAction(delivery);
+                              const nextAction = getNextStatusAction(delivery);
                               const parcel = delivery.parcel;
-                              const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) + 
-                                                 (parcel.inboundCost || 0) + (parcel.storageCost || 0);
+                              const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
+                                (parcel.inboundCost || 0) + (parcel.storageCost || 0);
                               const uiStatus = mapAssignmentStatusToUI(delivery.status);
 
-                return (
-                  <Card
+                              return (
+                                <Card
                                   key={delivery.assignmentId}
                                   className="rounded-lg border border-[#e5e5e5] bg-gray-50 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex flex-col lg:flex-row gap-4">
-                        {/* Left Column - Receiver and Address */}
-                        <div className="flex-1 flex flex-col gap-3">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50">
+                                >
+                                  <CardContent className="p-4">
+                                    <div className="flex flex-col lg:flex-row gap-4">
+                                      {/* Left Column - Receiver and Address */}
+                                      <div className="flex-1 flex flex-col gap-3">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50">
                                             {parcel.parcelId}
-                            </Badge>
-                            {getStatusBadge(delivery.status)}
-                          </div>
+                                          </Badge>
+                                          {getStatusBadge(delivery.status)}
+                                        </div>
 
-                          <div className="flex items-center gap-2">
-                            <UserIcon className="w-4 h-4 text-[#5d5d5d]" />
-                            <div className="flex flex-col">
-                              <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                                        <div className="flex items-center gap-2">
+                                          <UserIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                          <div className="flex flex-col">
+                                            <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
                                               {parcel.receiverName || "N/A"}
-                              </span>
+                                            </span>
                                             {parcel.recieverPhoneNumber && (
-                              <a
+                                              <a
                                                 href={`tel:${parcel.recieverPhoneNumber}`}
-                                className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-xs hover:text-[#ea690c]"
-                              >
+                                                className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-xs hover:text-[#ea690c]"
+                                              >
                                                 {formatPhoneNumber(parcel.recieverPhoneNumber)}
-                              </a>
+                                              </a>
                                             )}
-                            </div>
-                          </div>
+                                          </div>
+                                        </div>
 
                                         {parcel.homeDelivery && parcel.receiverAddress && (
-                            <div className="flex items-center gap-2">
-                              <MapPinIcon className="w-4 h-4 text-[#5d5d5d]" />
-                              <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
+                                          <div className="flex items-center gap-2">
+                                            <MapPinIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                            <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
                                               {parcel.receiverAddress}
-                              </span>
-                            </div>
-                          )}
+                                            </span>
+                                          </div>
+                                        )}
 
                                         {!parcel.homeDelivery && (
-                            <div className="flex items-center gap-2">
-                              <MapPinIcon className="w-4 h-4 text-[#5d5d5d]" />
-                              <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
+                                          <div className="flex items-center gap-2">
+                                            <MapPinIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                            <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
                                               Shelf: <strong>{parcel.shelfName || parcel.shelfNumber || "N/A"}</strong> (Customer Pickup)
-                              </span>
-                            </div>
-                          )}
+                                            </span>
+                                          </div>
+                                        )}
 
                                         {delivery.assignedAt && (
-                            <div className="flex items-center gap-2">
-                              <ClockIcon className="w-4 h-4 text-[#5d5d5d]" />
-                              <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
+                                          <div className="flex items-center gap-2">
+                                            <ClockIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                            <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
                                               Assigned: {formatDateTime(new Date(delivery.assignedAt).toISOString())}
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
 
-                        {/* Middle Column - Amount Breakdown */}
-                        <div className="flex-1 flex flex-col gap-3">
+                                      {/* Middle Column - Amount Breakdown */}
+                                      <div className="flex-1 flex flex-col gap-3">
                                         <div className="bg-white rounded-lg p-3 border border-[#e5e5e5]">
-                            <p className="text-xs font-semibold text-[#5d5d5d] mb-2">Amount to Collect</p>
-                            <div className="space-y-1">
+                                          <p className="text-xs font-semibold text-[#5d5d5d] mb-2">Amount to Collect</p>
+                                          <div className="space-y-1">
                                             {(parcel.inboundCost || 0) > 0 && (
-                                <div className="flex justify-between text-xs">
-                                  <span className="text-neutral-700">Item Value:</span>
+                                              <div className="flex justify-between text-xs">
+                                                <span className="text-neutral-700">Item Value:</span>
                                                 <span className="font-semibold">GHC {(parcel.inboundCost || 0).toFixed(2)}</span>
-                                </div>
-                              )}
+                                              </div>
+                                            )}
                                             {(parcel.deliveryCost || 0) > 0 && (
-                                <div className="flex justify-between text-xs">
-                                  <span className="text-neutral-700">Delivery Fee:</span>
+                                              <div className="flex justify-between text-xs">
+                                                <span className="text-neutral-700">Delivery Fee:</span>
                                                 <span className="font-semibold">GHC {(parcel.deliveryCost || 0).toFixed(2)}</span>
                                               </div>
                                             )}
@@ -843,28 +847,28 @@ export const ActiveDeliveries = (): JSX.Element => {
                                               <div className="flex justify-between text-xs">
                                                 <span className="text-neutral-700">Storage Cost:</span>
                                                 <span className="font-semibold">GHC {(parcel.storageCost || 0).toFixed(2)}</span>
-                                </div>
-                              )}
-                              <div className="flex justify-between pt-1 border-t border-[#d1d1d1]">
-                                <span className="text-sm font-bold text-neutral-800">Total:</span>
-                                <span className="text-lg font-bold text-[#ea690c]">
-                                  {formatCurrency(totalAmount)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
+                                              </div>
+                                            )}
+                                            <div className="flex justify-between pt-1 border-t border-[#d1d1d1]">
+                                              <span className="text-sm font-bold text-neutral-800">Total:</span>
+                                              <span className="text-lg font-bold text-[#ea690c]">
+                                                {formatCurrency(totalAmount)}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
 
                                         {parcel.parcelDescription && (
-                            <p className="text-xs text-neutral-700">
+                                          <p className="text-xs text-neutral-700">
                                             <strong>Item:</strong> {parcel.parcelDescription}
-                            </p>
-                          )}
-                        </div>
+                                          </p>
+                                        )}
+                                      </div>
 
-                        {/* Right Column - Actions */}
-                        <div className="flex flex-col items-end gap-3">
-                          {nextAction && (
-                            <Button
+                                      {/* Right Column - Actions */}
+                                      <div className="flex flex-col items-end gap-3">
+                                        {nextAction && (
+                                          <Button
                                             onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, nextAction.status, riderData.rider.userId)}
                                             disabled={updatingStatus === delivery.assignmentId}
                                             className={`${nextAction.color} text-white hover:opacity-90 disabled:opacity-50`}
@@ -876,53 +880,53 @@ export const ActiveDeliveries = (): JSX.Element => {
                                               </>
                                             ) : (
                                               <>
-                              {nextAction.label}
-                              <ArrowRightIcon className="w-4 h-4 ml-2" />
+                                                {nextAction.label}
+                                                <ArrowRightIcon className="w-4 h-4 ml-2" />
                                               </>
                                             )}
-                            </Button>
-                          )}
+                                          </Button>
+                                        )}
 
-                          {/* Show Mark Delivered and Mark Failed for assigned, picked-up, and out-for-delivery statuses */}
-                          {(uiStatus === "assigned" || uiStatus === "picked-up" || uiStatus === "out-for-delivery") && (
-                            <div className="flex flex-col gap-2 w-full">
-                              <Button
-                                onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivered", riderData.rider.userId)}
-                                disabled={updatingStatus === delivery.assignmentId}
-                                className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 w-full"
-                              >
-                                {updatingStatus === delivery.assignmentId ? (
-                                  <>
-                                    <Loader className="w-4 h-4 animate-spin mr-2" />
-                                    Processing...
-                                  </>
-                                ) : (
-                                  <>
-                                    <CheckCircleIcon className="w-4 h-4 mr-2" />
-                                    Mark Delivered
-                                  </>
-                                )}
-                              </Button>
-                              <Button
-                                onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivery-failed", riderData.rider.userId)}
-                                disabled={updatingStatus === delivery.assignmentId}
-                                variant="outline"
-                                className="border-red-300 text-red-600 hover:bg-red-50 w-full"
-                              >
-                                <XCircleIcon className="w-4 h-4 mr-2" />
-                                Mark Failed
-                              </Button>
-                            </div>
-                          )}
+                                        {/* Show Mark Delivered and Mark Failed for assigned, picked-up, and out-for-delivery statuses */}
+                                        {(uiStatus === "assigned" || uiStatus === "picked-up" || uiStatus === "out-for-delivery") && (
+                                          <div className="flex flex-col gap-2 w-full">
+                                            <Button
+                                              onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivered", riderData.rider.userId)}
+                                              disabled={updatingStatus === delivery.assignmentId}
+                                              className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 w-full"
+                                            >
+                                              {updatingStatus === delivery.assignmentId ? (
+                                                <>
+                                                  <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                  Processing...
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <CheckCircleIcon className="w-4 h-4 mr-2" />
+                                                  Mark Delivered
+                                                </>
+                                              )}
+                                            </Button>
+                                            <Button
+                                              onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivery-failed", riderData.rider.userId)}
+                                              disabled={updatingStatus === delivery.assignmentId}
+                                              variant="outline"
+                                              className="border-red-300 text-red-600 hover:bg-red-50 w-full"
+                                            >
+                                              <XCircleIcon className="w-4 h-4 mr-2" />
+                                              Mark Failed
+                                            </Button>
+                                          </div>
+                                        )}
 
                                         {uiStatus === "delivered" && (
-                            <Badge className="bg-green-100 text-green-800">
-                              <CheckCircleIcon className="w-3 h-3 mr-1" />
-                              Delivered
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
+                                          <Badge className="bg-green-100 text-green-800">
+                                            <CheckCircleIcon className="w-3 h-3 mr-1" />
+                                            Delivered
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
                                   </CardContent>
                                 </Card>
                               );
@@ -973,7 +977,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                   <p className="text-xs font-semibold text-[#5d5d5d] mb-2">Expected Amount</p>
                   <p className="text-2xl font-bold text-[#ea690c]">
                     {formatCurrency(
-                      (selectedDelivery.parcel.deliveryCost || 0) + (selectedDelivery.parcel.pickUpCost || 0) + 
+                      (selectedDelivery.parcel.deliveryCost || 0) + (selectedDelivery.parcel.pickUpCost || 0) +
                       (selectedDelivery.parcel.inboundCost || 0) + (selectedDelivery.parcel.storageCost || 0)
                     )}
                   </p>
@@ -1016,8 +1020,8 @@ export const ActiveDeliveries = (): JSX.Element => {
                       </>
                     ) : (
                       <>
-                    <CheckCircleIcon className="w-4 h-4 mr-2" />
-                    Confirm Delivery
+                        <CheckCircleIcon className="w-4 h-4 mr-2" />
+                        Confirm Delivery
                       </>
                     )}
                   </Button>
@@ -1095,8 +1099,8 @@ export const ActiveDeliveries = (): JSX.Element => {
                       </>
                     ) : (
                       <>
-                    <XCircleIcon className="w-4 h-4 mr-2" />
-                    Mark as Failed
+                        <XCircleIcon className="w-4 h-4 mr-2" />
+                        Mark as Failed
                       </>
                     )}
                   </Button>
