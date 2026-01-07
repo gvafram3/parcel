@@ -21,12 +21,12 @@ const navItems = [
     { label: "Parcel Intake", path: "/parcel-intake", icon: InboxIcon, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Package Assignments", path: "/package-assignments", icon: ClipboardListIcon, roles: ["MANAGER", "FRONTDESK"] },
     { label: "Call Center", path: "/call-center", icon: PhoneIcon, roles: ["CALLER", "MANAGER", "FRONTDESK"] },
-    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER", "FRONTDESK"] },
-    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["CALLER", "MANAGER", "FRONTDESK"] },
+    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER",] },
+    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["CALLER", "MANAGER",] },
 
     // Station Manager & Front Desk - Management
     // { label: "Financial Dashboard", path: "/financial-dashboard", icon: LayoutDashboard, roles: ["MANAGER", "FRONTDESK"] },
-    { label: "Shelf Management", path: "/shelf-management", icon: Layers, roles: ["MANAGER", "FRONTDESK"] },
+    { label: "Shelf Management", path: "/shelf-management", icon: Layers, roles: ["MANAGER",] },
 
     // Manager Only - Parcel Editing
     { label: "Edit Parcels", path: "/parcel-edit", icon: Edit, roles: ["MANAGER"] },
