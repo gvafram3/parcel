@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Phone, Mail, Building2, X, Loader, Trash2, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
@@ -46,6 +46,12 @@ export const UserManagement = (): JSX.Element => {
         officeId: "",
     });
 
+    // Load users when component mounts
+    useEffect(() => {
+        refreshUsers(pagination.page, pagination.size);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const filteredUsers = users.filter((user) => {
         if (filterRole && user.role !== filterRole) return false;
         if (filterStation && user.office?.id !== filterStation) return false;
@@ -65,7 +71,7 @@ export const UserManagement = (): JSX.Element => {
         setIsDeleting(true);
         try {
             const response = await userService.deleteUser(userToDelete.userId);
-            
+
             if (response.success) {
                 showToast(`User "${userToDelete.name}" deleted successfully!`, "success");
                 setShowDeleteConfirmModal(false);
@@ -93,7 +99,7 @@ export const UserManagement = (): JSX.Element => {
     const formatPhoneInput = (phone: string): string => {
         // Remove all non-digit characters except +
         let cleaned = phone.replace(/[^\d+]/g, '');
-        
+
         // If it already starts with +233, validate and return
         if (cleaned.startsWith('+233')) {
             const digits = cleaned.substring(4); // Get digits after +233
@@ -102,7 +108,7 @@ export const UserManagement = (): JSX.Element => {
                 return cleaned;
             }
         }
-        
+
         // If it starts with 0, replace with +233
         if (cleaned.startsWith('0')) {
             const digits = cleaned.substring(1); // Get digits after 0
@@ -111,7 +117,7 @@ export const UserManagement = (): JSX.Element => {
                 return '+233' + digits;
             }
         }
-        
+
         // If it starts with 233 (without +), add +
         if (cleaned.startsWith('233') && !cleaned.startsWith('+')) {
             const digits = cleaned.substring(3); // Get digits after 233
@@ -119,12 +125,12 @@ export const UserManagement = (): JSX.Element => {
                 return '+' + cleaned;
             }
         }
-        
+
         // If it's just 9 digits starting with 2-9, add +233
         if (/^[2-9]\d{8}$/.test(cleaned)) {
             return '+233' + cleaned;
         }
-        
+
         // Return as is if it doesn't match pattern (validation will catch it)
         return cleaned.startsWith('+') ? cleaned : (cleaned.startsWith('0') ? cleaned : '+233' + cleaned);
     };
@@ -180,25 +186,25 @@ export const UserManagement = (): JSX.Element => {
                 role: formData.role as "ADMIN" | "RIDER" | "FRONTDESK" | "MANAGER" | "CALLER",
                 officeId: formData.officeId,
             };
-            
+
             // Only include password if provided
             if (formData.password && formData.password.trim().length > 0) {
                 requestPayload.password = formData.password;
             }
-            
+
             const response = await userService.createUser(requestPayload);
 
             if (response.success) {
                 showToast(`User "${formData.name}" created successfully!`, "success");
-            setFormData({
-                name: "",
-                email: "",
+                setFormData({
+                    name: "",
+                    email: "",
                     password: "",
                     phoneNumber: "",
                     role: "FRONTDESK",
                     officeId: "",
-            });
-            setShowAddForm(false);
+                });
+                setShowAddForm(false);
                 // Refresh users list
                 await refreshUsers(pagination.page, pagination.size);
             } else {
@@ -501,60 +507,60 @@ export const UserManagement = (): JSX.Element => {
                                     <p className="text-neutral-700">Loading users...</p>
                                 </div>
                             ) : (
-                            <div className="overflow-x-auto -mx-6 sm:mx-0">
-                                <div className="inline-block min-w-full align-middle">
-                                    <div className="overflow-hidden">
-                                        <table className="min-w-full divide-y divide-[#d1d1d1]">
-                                            <thead>
-                                                <tr className="bg-gray-50 border-b border-[#d1d1d1]">
-                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
-                                                        Name
-                                                    </th>
-                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
-                                                        Contact
-                                                    </th>
-                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
-                                                        Role
-                                                    </th>
+                                <div className="overflow-x-auto -mx-6 sm:mx-0">
+                                    <div className="inline-block min-w-full align-middle">
+                                        <div className="overflow-hidden">
+                                            <table className="min-w-full divide-y divide-[#d1d1d1]">
+                                                <thead>
+                                                    <tr className="bg-gray-50 border-b border-[#d1d1d1]">
+                                                        <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                            Name
+                                                        </th>
+                                                        <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                            Contact
+                                                        </th>
+                                                        <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                            Role
+                                                        </th>
                                                         <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
                                                             Status
-                                                    </th>
-                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
-                                                        Station
-                                                    </th>
-                                                    <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
-                                                        Actions
-                                                    </th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="bg-white divide-y divide-[#d1d1d1]">
-                                                {filteredUsers.length === 0 ? (
-                                                    <tr>
+                                                        </th>
+                                                        <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                            Station
+                                                        </th>
+                                                        <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
+                                                            Actions
+                                                        </th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white divide-y divide-[#d1d1d1]">
+                                                    {filteredUsers.length === 0 ? (
+                                                        <tr>
                                                             <td colSpan={6} className="py-12 text-center">
                                                                 <p className="text-sm text-neutral-500">
                                                                     {users.length === 0 ? "No users found" : "No users found matching filters"}
                                                                 </p>
-                                                        </td>
-                                                    </tr>
-                                                ) : (
-                                                    filteredUsers.map((user, index) => (
-                                                        <tr 
-                                                                key={user.userId} 
-                                                            className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
-                                                        >
-                                                            <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
-                                                                <span className="text-xs sm:text-sm font-medium text-neutral-800">{user.name}</span>
                                                             </td>
-                                                            <td className="py-3 px-3 sm:py-4 sm:px-6">
-                                                                <div className="flex flex-col gap-1.5">
+                                                        </tr>
+                                                    ) : (
+                                                        filteredUsers.map((user, index) => (
+                                                            <tr
+                                                                key={user.userId}
+                                                                className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                                                            >
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                    <span className="text-xs sm:text-sm font-medium text-neutral-800">{user.name}</span>
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6">
+                                                                    <div className="flex flex-col gap-1.5">
                                                                         {user.email && (
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        <Mail size={12} className="sm:w-[14px] sm:h-[14px] text-[#9a9a9a] flex-shrink-0" />
-                                                                        <span className="text-xs sm:text-sm text-neutral-700 truncate">{user.email}</span>
-                                                                    </div>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <Mail size={12} className="sm:w-[14px] sm:h-[14px] text-[#9a9a9a] flex-shrink-0" />
+                                                                                <span className="text-xs sm:text-sm text-neutral-700 truncate">{user.email}</span>
+                                                                            </div>
                                                                         )}
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        <Phone size={12} className="sm:w-[14px] sm:h-[14px] text-[#9a9a9a] flex-shrink-0" />
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <Phone size={12} className="sm:w-[14px] sm:h-[14px] text-[#9a9a9a] flex-shrink-0" />
                                                                             <span className="text-xs sm:text-sm text-neutral-700">{formatPhoneNumber(user.phoneNumber)}</span>
                                                                         </div>
                                                                     </div>
@@ -563,37 +569,37 @@ export const UserManagement = (): JSX.Element => {
                                                                     <Badge className={roleColors[user.role] || "bg-gray-100 text-gray-800"}>
                                                                         <span className="text-xs">{user.role.replace(/([A-Z])/g, ' $1').trim()}</span>
                                                                     </Badge>
-                                                            </td>
-                                                            <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
                                                                     <Badge className={statusColors[user.status] || "bg-gray-100 text-gray-800"}>
                                                                         <span className="text-xs">{user.status}</span>
-                                                                </Badge>
-                                                            </td>
-                                                            <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <Building2 size={12} className="sm:w-[14px] sm:h-[14px] text-[#9a9a9a] flex-shrink-0" />
+                                                                    </Badge>
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <Building2 size={12} className="sm:w-[14px] sm:h-[14px] text-[#9a9a9a] flex-shrink-0" />
                                                                         <span className="text-xs sm:text-sm text-neutral-700 truncate">
                                                                             {user.office?.name || "N/A"}
                                                                         </span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
-                                                                <button
-                                                                    onClick={() => handleInitiateDelete({ userId: user.userId, name: user.name })}
-                                                                    className="text-[#e22420] hover:bg-red-50 p-2 rounded transition-colors"
-                                                                    title="Delete user"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    ))
-                                                )}
-                                            </tbody>
-                                        </table>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
+                                                                    <button
+                                                                        onClick={() => handleInitiateDelete({ userId: user.userId, name: user.name })}
+                                                                        className="text-[#e22420] hover:bg-red-50 p-2 rounded transition-colors"
+                                                                        title="Delete user"
+                                                                    >
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
                             )}
                             {/* Pagination */}
                             {!loadingUsers && pagination.totalPages > 1 && (

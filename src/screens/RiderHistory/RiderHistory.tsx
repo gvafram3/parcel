@@ -60,15 +60,42 @@ export const RiderHistory = (): JSX.Element => {
     const fetchAssignments = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await riderService.getAssignments();
+            // Fetch with a large page size to get all history (or implement pagination)
+            const response = await riderService.getAssignments(0, 100);
+            console.log('RiderHistory fetch response:', response);
+
             if (response.success && response.data) {
-                setAssignments(response.data as RiderAssignmentResponse[]);
+                const data = response.data as any;
+                // Handle both paginated response (with content) and direct array
+                let assignmentsList: RiderAssignmentResponse[] = [];
+
+                if (data.content && Array.isArray(data.content)) {
+                    // Paginated response structure
+                    assignmentsList = data.content;
+                    console.log('Using paginated content, found', assignmentsList.length, 'assignments');
+                } else if (Array.isArray(data)) {
+                    // Direct array response
+                    assignmentsList = data;
+                    console.log('Using direct array, found', assignmentsList.length, 'assignments');
+                } else if (Array.isArray(response.data)) {
+                    assignmentsList = response.data;
+                    console.log('Using response.data as array, found', assignmentsList.length, 'assignments');
+                } else {
+                    console.warn('Unexpected data structure in RiderHistory:', data);
+                    assignmentsList = [];
+                }
+
+                console.log('Setting assignments:', assignmentsList.length);
+                setAssignments(assignmentsList);
             } else {
+                console.error('Failed response:', response);
                 showToast(response.message || "Failed to load history", "error");
+                setAssignments([]);
             }
         } catch (error) {
             console.error("Failed to fetch assignments:", error);
             showToast("Failed to load history. Please try again.", "error");
+            setAssignments([]);
         } finally {
             setLoading(false);
         }
@@ -80,6 +107,10 @@ export const RiderHistory = (): JSX.Element => {
 
     // Filter only completed/delivered assignments
     const completedAssignments = useMemo(() => {
+        if (!Array.isArray(assignments)) {
+            console.warn('Assignments is not an array:', assignments);
+            return [];
+        }
         return assignments.filter(a => {
             const uiStatus = mapAssignmentStatusToUI(a.status);
             return uiStatus === "delivered" || uiStatus === "delivery-failed";
@@ -152,8 +183,8 @@ export const RiderHistory = (): JSX.Element => {
                                             (parcel.inboundCost || 0) + (parcel.storageCost || 0);
 
                                         return (
-                                            <tr 
-                                                key={assignment.assignmentId} 
+                                            <tr
+                                                key={assignment.assignmentId}
                                                 className={`hover:bg-gray-50 transition-colors ${index !== completedAssignments.length - 1 ? 'border-b border-gray-200' : ''}`}
                                             >
                                                 <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">

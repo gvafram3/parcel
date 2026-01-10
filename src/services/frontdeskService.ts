@@ -110,6 +110,7 @@ interface DeliveryAssignmentResponse {
     assignedAt?: number;
     acceptedAt?: number;
     completedAt?: number;
+    payed?: boolean;
 }
 
 interface ReconcilationRiderRequest {
@@ -450,21 +451,70 @@ class FrontdeskService {
     }
 
     /**
-     * Get all parcel assignments
+     * Get all parcel assignments (paginated)
+     * Endpoint: GET /parcel-assignment
      */
-    async getParcelAssignments(): Promise<ApiResponse> {
+    async getParcelAssignments(page: number = 0, size: number = 20): Promise<ApiResponse> {
         try {
-            const response = await this.apiClient.get<DeliveryAssignmentResponse[]>('/parcel-assignment');
+            const params = new URLSearchParams();
+            params.append('page', page.toString());
+            params.append('size', size.toString());
+
+            const response = await this.apiClient.get<any>(`/parcel-assignment?${params.toString()}`);
+
+            // Map the API response to the expected format
+            const mappedContent = (response.data?.content || []).map((item: any) => ({
+                assignmentId: item.assignmentId,
+                riderName: item.riderId?.name || "Unknown Rider",
+                parcel: {
+                    ...item.orderId,
+                    parcelId: item.orderId?.parcelId,
+                    receiverName: item.orderId?.receiverName,
+                    recieverPhoneNumber: item.orderId?.recieverPhoneNumber,
+                    receiverAddress: item.orderId?.receiverAddress,
+                    parcelDescription: item.orderId?.parcelDescription,
+                    deliveryCost: item.orderId?.deliveryCost,
+                    pickUpCost: item.orderId?.pickUpCost,
+                    inboundCost: item.orderId?.inboundCost,
+                    storageCost: item.orderId?.storageCost,
+                    shelfName: item.orderId?.shelfName,
+                    shelfNumber: item.orderId?.shelfNumber,
+                    homeDelivery: item.orderId?.homeDelivery,
+                } as ParcelResponse,
+                status: item.status,
+                assignedAt: item.assignedAt,
+                acceptedAt: item.acceptedAt,
+                completedAt: item.completedAt,
+                payed: item.payed || false,
+            }));
+
             return {
                 success: true,
                 message: 'Assignments retrieved successfully',
-                data: response.data,
+                data: {
+                    content: mappedContent,
+                    totalElements: response.data?.totalElements || 0,
+                    totalPages: response.data?.totalPages || 0,
+                    number: response.data?.number || 0,
+                    size: response.data?.size || size,
+                    first: response.data?.first || false,
+                    last: response.data?.last || false,
+                },
             };
         } catch (error: any) {
             console.error('Get parcel assignments error:', error);
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to retrieve assignments. Please try again.',
+                data: {
+                    content: [],
+                    totalElements: 0,
+                    totalPages: 0,
+                    number: 0,
+                    size: size,
+                    first: true,
+                    last: true,
+                },
             };
         }
     }

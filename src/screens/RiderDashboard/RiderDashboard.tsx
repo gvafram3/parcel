@@ -77,6 +77,12 @@ export const RiderDashboard = (): JSX.Element => {
     const [failureReason, setFailureReason] = useState("");
     const [selectedFailureReason, setSelectedFailureReason] = useState("");
     const [updatingAssignment, setUpdatingAssignment] = useState<string | null>(null);
+    const [pagination, setPagination] = useState({
+        page: 0,
+        size: 50,
+        totalElements: 0,
+        totalPages: 0,
+    });
 
     // Predefined failure reasons
     const failureReasons = [
@@ -90,32 +96,63 @@ export const RiderDashboard = (): JSX.Element => {
         "Other"
     ];
 
-    const fetchAssignments = useCallback(async () => {
+    const fetchAssignments = useCallback(async (page: number = 0, size: number = 50) => {
         setLoading(true);
         try {
-            const response = await riderService.getAssignments();
+            const response = await riderService.getAssignments(page, size);
+            console.log('Fetch assignments response:', response);
+
             if (response.success && response.data) {
-                setAssignments(response.data as RiderAssignmentResponse[]);
+                const data = response.data as any;
+                console.log('Response data structure:', data);
+
+                // Handle both paginated response (with content) and direct array
+                let assignmentsList: RiderAssignmentResponse[] = [];
+                if (data.content && Array.isArray(data.content)) {
+                    assignmentsList = data.content;
+                    console.log('Using data.content, found', assignmentsList.length, 'assignments');
+                } else if (Array.isArray(data)) {
+                    assignmentsList = data;
+                    console.log('Using data as array, found', assignmentsList.length, 'assignments');
+                } else if (Array.isArray(response.data)) {
+                    assignmentsList = response.data;
+                    console.log('Using response.data as array, found', assignmentsList.length, 'assignments');
+                } else {
+                    console.warn('Unexpected data structure:', data);
+                }
+
+                console.log('Setting assignments:', assignmentsList.length);
+                setAssignments(assignmentsList);
+                setPagination({
+                    page: data.number !== undefined ? data.number : page,
+                    size: data.size !== undefined ? data.size : size,
+                    totalElements: data.totalElements !== undefined ? data.totalElements : assignmentsList.length,
+                    totalPages: data.totalPages !== undefined ? data.totalPages : 1,
+                });
             } else {
+                console.error('Failed response:', response);
                 showToast(response.message || "Failed to load assignments", "error");
+                setAssignments([]);
             }
         } catch (error) {
             console.error("Failed to fetch assignments:", error);
             showToast("Failed to load assignments. Please try again.", "error");
+            setAssignments([]);
         } finally {
             setLoading(false);
         }
     }, [showToast]);
 
-    // Fetch assignments on mount
+    // Fetch assignments on mount and when pagination changes
     useEffect(() => {
-        fetchAssignments();
-    }, [fetchAssignments]);
+        fetchAssignments(pagination.page, pagination.size);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pagination.page, pagination.size]);
 
 
     const handleAssignmentStatusUpdate = async (assignmentId: string, newUIStatus: UIStatus) => {
         const assignment = assignments.find((a) => a.assignmentId === assignmentId);
-        
+
         if (newUIStatus === "delivered") {
             // Show confirmation modal for delivery
             if (assignment) {
@@ -143,7 +180,7 @@ export const RiderDashboard = (): JSX.Element => {
 
             if (response.success) {
                 showToast("Status updated successfully", "success");
-                await fetchAssignments();
+                await fetchAssignments(pagination.page, pagination.size);
             } else {
                 showToast(response.message || "Failed to update status", "error");
             }
@@ -186,7 +223,7 @@ export const RiderDashboard = (): JSX.Element => {
                 setSelectedAssignment(null);
                 setAmountCollected("");
                 setConfirmationCode("");
-                await fetchAssignments();
+                await fetchAssignments(pagination.page, pagination.size);
             } else {
                 showToast(response.message || "Failed to complete delivery", "error");
             }
@@ -200,12 +237,12 @@ export const RiderDashboard = (): JSX.Element => {
 
     const handleDeliveryFailed = async () => {
         if (!selectedAssignment) return;
-        
+
         // Validate that either a reason is selected or custom reason is provided
-        const finalReason = selectedFailureReason === "Other" 
-            ? failureReason.trim() 
+        const finalReason = selectedFailureReason === "Other"
+            ? failureReason.trim()
             : selectedFailureReason;
-        
+
         if (!finalReason) {
             showToast("Please select a failure reason", "error");
             return;
@@ -226,7 +263,7 @@ export const RiderDashboard = (): JSX.Element => {
                 setSelectedAssignment(null);
                 setFailureReason("");
                 setSelectedFailureReason("");
-                await fetchAssignments();
+                await fetchAssignments(pagination.page, pagination.size);
             } else {
                 showToast(response.message || "Failed to record failure", "error");
             }
@@ -240,10 +277,17 @@ export const RiderDashboard = (): JSX.Element => {
 
     // Filter assignments by status
     const activeAssignments = useMemo(() => {
-        return assignments.filter(a => {
+        console.log('Filtering assignments. Total:', assignments.length);
+        const filtered = assignments.filter(a => {
             const uiStatus = mapAssignmentStatusToUI(a.status);
-            return uiStatus !== "delivered" && uiStatus !== "delivery-failed";
+            const isActive = uiStatus !== "delivered" && uiStatus !== "delivery-failed";
+            if (!isActive) {
+                console.log('Filtered out assignment:', a.assignmentId, 'status:', a.status, 'uiStatus:', uiStatus);
+            }
+            return isActive;
         });
+        console.log('Active assignments after filtering:', filtered.length);
+        return filtered;
     }, [assignments]);
 
 
@@ -253,14 +297,14 @@ export const RiderDashboard = (): JSX.Element => {
                 const parcel = assignment.parcel;
                 const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
                     (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-                
+
                 let location = 'N/A';
                 if (parcel.homeDelivery && parcel.receiverAddress) {
                     location = parcel.receiverAddress;
                 } else if (!parcel.homeDelivery && parcel.shelfName) {
                     location = `Shelf: ${parcel.shelfName} (Pickup)`;
                 }
-                
+
                 return {
                     parcelId: parcel.parcelId, // Keep for reference but not displayed in PDF
                     recipientName: parcel.receiverName || 'N/A',
@@ -271,7 +315,7 @@ export const RiderDashboard = (): JSX.Element => {
                     assignedAt: '' // Not displayed in PDF
                 };
             });
-            
+
             generateAssignmentsPDF(pdfData, currentUser?.name || 'Rider');
             showToast("PDF downloaded successfully", "success");
         } catch (error) {
@@ -338,7 +382,7 @@ export const RiderDashboard = (): JSX.Element => {
                                     className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50 flex items-center gap-2"
                                 >
                                     <Download className="w-4 h-4" />
-                                    Download 
+                                    Download
                                 </Button>
                             )}
                             {/* <Badge className="bg-[#ea690c] text-white px-3 py-1 font-semibold">
@@ -373,7 +417,6 @@ export const RiderDashboard = (): JSX.Element => {
                                 <table className="w-full border-collapse">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Parcel ID</th>
                                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Recipient</th>
                                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Phone</th>
                                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Location</th>
@@ -390,15 +433,10 @@ export const RiderDashboard = (): JSX.Element => {
                                                 (parcel.inboundCost || 0) + (parcel.storageCost || 0);
 
                                             return (
-                                                <tr 
-                                                    key={assignment.assignmentId} 
+                                                <tr
+                                                    key={assignment.assignmentId}
                                                     className={`hover:bg-gray-50 transition-colors ${index !== activeAssignments.length - 1 ? 'border-b border-gray-200' : ''}`}
                                                 >
-                                                    <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                                        <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs font-semibold">
-                                                            {parcel.parcelId}
-                                                        </Badge>
-                                                    </td>
                                                     <td className="px-4 py-4 border-r border-gray-100">
                                                         <div className="text-sm font-semibold text-neutral-800">
                                                             {parcel.receiverName || "N/A"}
@@ -498,6 +536,39 @@ export const RiderDashboard = (): JSX.Element => {
                                     </tbody>
                                 </table>
                             </div>
+
+                            {/* Pagination */}
+                            {!loading && pagination.totalPages > 1 && (
+                                <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+                                    <div className="text-sm text-neutral-700">
+                                        Showing {pagination.page * pagination.size + 1} to {Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)} of {pagination.totalElements} assignments
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button
+                                            onClick={() => {
+                                                setPagination(prev => ({ ...prev, page: prev.page - 1 }));
+                                            }}
+                                            disabled={pagination.page === 0 || loading}
+                                            variant="outline"
+                                            size="sm"
+                                            className="border border-gray-300"
+                                        >
+                                            Previous
+                                        </Button>
+                                        <Button
+                                            onClick={() => {
+                                                setPagination(prev => ({ ...prev, page: prev.page + 1 }));
+                                            }}
+                                            disabled={pagination.page >= pagination.totalPages - 1 || loading}
+                                            variant="outline"
+                                            size="sm"
+                                            className="border border-gray-300"
+                                        >
+                                            Next
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
                         </Card>
                     )}
                 </div>
@@ -548,7 +619,7 @@ export const RiderDashboard = (): JSX.Element => {
                                     <p className="text-xl sm:text-2xl font-bold text-[#ea690c]">
                                         {formatCurrency(
                                             (selectedAssignment.parcel.deliveryCost || 0) + (selectedAssignment.parcel.pickUpCost || 0) +
-                                                (selectedAssignment.parcel.inboundCost || 0) + (selectedAssignment.parcel.storageCost || 0)
+                                            (selectedAssignment.parcel.inboundCost || 0) + (selectedAssignment.parcel.storageCost || 0)
                                         )}
                                     </p>
                                 </div>

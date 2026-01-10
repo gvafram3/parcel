@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
-import userService, { ApiUser, PageUser } from "../services/userService";
+import React, { createContext, useContext, useState, useCallback } from "react";
+import userService, { ApiUser } from "../services/userService";
 
 interface UserContextType {
     users: ApiUser[];
@@ -67,14 +67,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLastFetchTime(null);
     }, []);
 
-    // Load data on mount if cache is expired or doesn't exist
-    useEffect(() => {
-        const now = Date.now();
-        if (!lastFetchTime || (now - lastFetchTime) >= CACHE_DURATION) {
-            loadUsers(0, 50, false);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    // Removed automatic loading on mount to prevent unnecessary API calls
+    // Components that need user data (like UserManagement) should call refreshUsers() on mount
 
     return (
         <UserContext.Provider

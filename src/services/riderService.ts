@@ -125,22 +125,143 @@ class RiderService {
     }
 
     /**
-     * Get all assignments for the authenticated rider
+     * Get all assignments for the authenticated rider (paginated)
+     * The API now returns parcels directly, which we map to assignment structure
      */
-    async getAssignments(): Promise<ApiResponse> {
+    async getAssignments(page: number = 0, size: number = 50): Promise<ApiResponse> {
         try {
-            const response = await this.apiClient.get<RiderAssignmentResponse[]>('/assignments');
+            const params = new URLSearchParams();
+            params.append('page', page.toString());
+            params.append('size', size.toString());
+
+            const response = await this.apiClient.get<any>(`/assignments?${params.toString()}`);
+
+            // Debug: Log the response structure
+            console.log('Rider assignments API response:', response.data);
+
+            // Check if response is paginated (has content array) or direct array
+            const rawData = response.data?.content || response.data || [];
+            const items = Array.isArray(rawData) ? rawData : [];
+            console.log('Items to process:', items.length);
+
+            // Check if items are already assignments (have assignmentId and parcel) or parcels (need mapping)
+            const isAssignmentFormat = items.length > 0 && items[0]?.assignmentId && items[0]?.parcel;
+
+            const mappedContent = items.map((item: any) => {
+                // If already in assignment format, use it directly (with minor adjustments)
+                if (isAssignmentFormat) {
+                    return {
+                        assignmentId: item.assignmentId,
+                        riderName: item.riderName || "Rider",
+                        parcel: {
+                            parcelId: item.parcel?.parcelId,
+                            parcelDescription: item.parcel?.parcelDescription,
+                            inboundCost: item.parcel?.inboundCost,
+                            pickUpCost: item.parcel?.pickUpCost,
+                            deliveryCost: item.parcel?.deliveryCost,
+                            storageCost: item.parcel?.storageCost,
+                            hasCalled: item.parcel?.hasCalled,
+                            driverId: item.parcel?.driverId,
+                            officeId: item.parcel?.officeId,
+                            driverName: item.parcel?.driverName,
+                            driverPhoneNumber: item.parcel?.driverPhoneNumber,
+                            vehicleNumber: item.parcel?.vehicleNumber,
+                            senderName: item.parcel?.senderName,
+                            senderPhoneNumber: item.parcel?.senderPhoneNumber,
+                            receiverName: item.parcel?.receiverName,
+                            receiverAddress: item.parcel?.receiverAddress,
+                            recieverPhoneNumber: item.parcel?.recieverPhoneNumber,
+                            shelfName: item.parcel?.shelfName,
+                            shelfId: item.parcel?.shelfId,
+                            homeDelivery: item.parcel?.homeDelivery,
+                            pod: item.parcel?.POD || item.parcel?.pod,
+                            delivered: item.parcel?.delivered,
+                            parcelAssigned: item.parcel?.parcelAssigned,
+                            fragile: item.parcel?.fragile,
+                            inboudPayed: item.parcel?.inboudPayed,
+                        } as RiderParcelResponse,
+                        status: item.status as AssignmentStatus,
+                        assignedAt: item.assignedAt,
+                        acceptedAt: item.acceptedAt,
+                        completedAt: item.completedAt,
+                    } as RiderAssignmentResponse;
+                }
+
+                // Otherwise, map from parcel format (old format)
+                // Determine status based on parcel properties
+                let status: AssignmentStatus = "ASSIGNED";
+                if (item.delivered) {
+                    status = "DELIVERED";
+                } else if (item.parcelAssigned) {
+                    status = "ACCEPTED";
+                }
+
+                return {
+                    assignmentId: item.parcelId || item.assignmentId,
+                    riderName: item.driverName || item.riderName || "Rider",
+                    parcel: {
+                        parcelId: item.parcelId,
+                        parcelDescription: item.parcelDescription,
+                        inboundCost: item.inboundCost,
+                        pickUpCost: item.pickUpCost,
+                        deliveryCost: item.deliveryCost,
+                        storageCost: item.storageCost,
+                        hasCalled: item.hasCalled,
+                        driverId: item.driverId,
+                        officeId: item.officeId,
+                        driverName: item.driverName,
+                        driverPhoneNumber: item.driverPhoneNumber,
+                        vehicleNumber: item.vehicleNumber,
+                        senderName: item.senderName,
+                        senderPhoneNumber: item.senderPhoneNumber,
+                        receiverName: item.receiverName,
+                        receiverAddress: item.receiverAddress,
+                        recieverPhoneNumber: item.recieverPhoneNumber,
+                        shelfName: item.shelfName,
+                        shelfId: item.shelfId,
+                        homeDelivery: item.homeDelivery,
+                        pod: item.POD || item.pod,
+                        delivered: item.delivered,
+                        parcelAssigned: item.parcelAssigned,
+                        fragile: item.fragile,
+                        inboudPayed: item.inboudPayed,
+                    } as RiderParcelResponse,
+                    status: status,
+                    assignedAt: item.createdAt || item.assignedAt,
+                    acceptedAt: item.parcelAssigned ? (item.updatedAt || item.acceptedAt) : item.acceptedAt,
+                    completedAt: item.delivered ? (item.updatedAt || item.completedAt) : item.completedAt,
+                } as RiderAssignmentResponse;
+            });
+
+            console.log('Mapped assignments:', mappedContent.length);
+
             return {
                 success: true,
                 message: 'Assignments retrieved successfully',
-                data: response.data,
+                data: {
+                    content: mappedContent,
+                    totalElements: response.data?.totalElements || 0,
+                    totalPages: response.data?.totalPages || 0,
+                    number: response.data?.number || 0,
+                    size: response.data?.size || size,
+                    first: response.data?.first || false,
+                    last: response.data?.last || false,
+                },
             };
         } catch (error: any) {
             console.error('Get assignments error:', error);
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to retrieve assignments. Please try again.',
-                data: [],
+                data: {
+                    content: [],
+                    totalElements: 0,
+                    totalPages: 0,
+                    number: 0,
+                    size: size,
+                    first: true,
+                    last: true,
+                },
             };
         }
     }

@@ -1,12 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import {
-  ArrowRightIcon,
-  DollarSignIcon,
-  UserIcon,
   CheckCircleIcon,
-  AlertCircleIcon,
   XIcon,
-  CameraIcon,
   Loader,
   PackageIcon,
   MapPinIcon,
@@ -14,8 +9,6 @@ import {
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
 import { Badge } from "../../components/ui/badge";
 import { formatPhoneNumber, formatCurrency, formatDateTime } from "../../utils/dataHelpers";
 import frontdeskService, { DeliveryAssignmentResponse } from "../../services/frontdeskService";
@@ -28,34 +21,50 @@ export const Reconciliation = (): JSX.Element => {
   const [loading, setLoading] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pagination, setPagination] = useState({
+    page: 0,
+    size: 20,
+    totalElements: 0,
+    totalPages: 0,
+  });
 
-  // Fetch all parcel assignments
-  const fetchAssignments = async () => {
+  // Fetch all parcel assignments with pagination
+  const fetchAssignments = async (page: number = 0, size: number = 20) => {
     setLoading(true);
     try {
-      const response = await frontdeskService.getParcelAssignments();
-      
+      const response = await frontdeskService.getParcelAssignments(page, size);
+
       if (response.success && response.data) {
-        const allAssignments = response.data as DeliveryAssignmentResponse[];
-        // Filter only delivered assignments
+        const data = response.data as any;
+        const allAssignments = data.content as DeliveryAssignmentResponse[];
+        // Filter only delivered assignments that haven't been paid
         const deliveredAssignments = allAssignments.filter(
-          assignment => assignment.status === "DELIVERED"
+          assignment => assignment.status === "DELIVERED" && !assignment.payed
         );
         setAssignments(deliveredAssignments);
+        setPagination({
+          page: data.number || 0,
+          size: data.size || size,
+          totalElements: data.totalElements || 0,
+          totalPages: data.totalPages || 0,
+        });
       } else {
         showToast(response.message || "Failed to load assignments", "error");
+        setAssignments([]);
       }
     } catch (error) {
       console.error("Failed to fetch assignments:", error);
       showToast("Failed to load assignments. Please try again.", "error");
+      setAssignments([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAssignments();
-  }, []);
+    fetchAssignments(pagination.page, pagination.size);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination.page, pagination.size]);
 
   // Calculate totals for selected assignments
   const selectedAssignmentsData = useMemo(() => {
@@ -104,7 +113,7 @@ export const Reconciliation = (): JSX.Element => {
       if (response.success) {
         showToast(`Successfully reconciled ${assignmentIds.length} assignment(s)`, "success");
         setSelectedAssignments(new Set());
-        await fetchAssignments();
+        await fetchAssignments(pagination.page, pagination.size);
         setShowConfirmModal(false);
       } else {
         showToast(response.message || "Failed to reconcile assignments", "error");
@@ -310,6 +319,44 @@ export const Reconciliation = (): JSX.Element => {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Pagination */}
+              {!loading && pagination.totalPages > 1 && (
+                <div className="px-6 py-4 border-t border-[#d1d1d1] flex items-center justify-between">
+                  <div className="text-sm text-neutral-700">
+                    Showing {pagination.page * pagination.size + 1} to {Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)} of {pagination.totalElements} total assignments
+                    {assignments.length > 0 && (
+                      <span className="ml-2 text-gray-500">
+                        ({assignments.length} unpaid delivered)
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        setPagination(prev => ({ ...prev, page: prev.page - 1 }));
+                      }}
+                      disabled={pagination.page === 0 || loading}
+                      variant="outline"
+                      size="sm"
+                      className="border border-[#d1d1d1]"
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setPagination(prev => ({ ...prev, page: prev.page + 1 }));
+                      }}
+                      disabled={pagination.page >= pagination.totalPages - 1 || loading}
+                      variant="outline"
+                      size="sm"
+                      className="border border-[#d1d1d1]"
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
