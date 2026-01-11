@@ -12,6 +12,7 @@ import {
     AlertCircleIcon,
     XIcon,
     Phone,
+    DollarSignIcon,
 } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -74,6 +75,7 @@ export const RiderDashboard = (): JSX.Element => {
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [amountCollected, setAmountCollected] = useState("");
     const [confirmationCode, setConfirmationCode] = useState("");
+    const [paymentMethod, setPaymentMethod] = useState<string>("");
     const [failureReason, setFailureReason] = useState("");
     const [selectedFailureReason, setSelectedFailureReason] = useState("");
     const [updatingAssignment, setUpdatingAssignment] = useState<string | null>(null);
@@ -163,6 +165,8 @@ export const RiderDashboard = (): JSX.Element => {
                 setAmountCollected(totalAmount.toFixed(2));
             }
             setSelectedAssignment(assignment || null);
+            setPaymentMethod(""); // Reset payment method
+            setConfirmationCode(""); // Reset confirmation code
             setShowDeliveryModal(true);
             return;
         } else if (newUIStatus === "delivery-failed") {
@@ -193,9 +197,9 @@ export const RiderDashboard = (): JSX.Element => {
     };
 
     const handleDeliveryComplete = async () => {
-        if (!selectedAssignment || !amountCollected || !confirmationCode.trim()) {
-            if (!confirmationCode.trim()) {
-                showToast("Please enter the confirmation code", "error");
+        if (!selectedAssignment || !amountCollected || !paymentMethod) {
+            if (!paymentMethod) {
+                showToast("Please select a payment method", "error");
             }
             return;
         }
@@ -205,7 +209,10 @@ export const RiderDashboard = (): JSX.Element => {
             const response = await riderService.updateAssignmentStatus(
                 selectedAssignment.assignmentId,
                 "DELIVERED",
-                confirmationCode.trim()
+                confirmationCode.trim() || undefined, // Optional confirmation code
+                undefined, // reason not needed for DELIVERED
+                paymentMethod, // paymentMethod: "cash" or "momo"
+                selectedAssignment.parcel.parcelId // parcelId
             );
 
             if (response.success) {
@@ -223,6 +230,7 @@ export const RiderDashboard = (): JSX.Element => {
                 setSelectedAssignment(null);
                 setAmountCollected("");
                 setConfirmationCode("");
+                setPaymentMethod("");
                 await fetchAssignments(pagination.page, pagination.size);
             } else {
                 showToast(response.message || "Failed to complete delivery", "error");
@@ -290,6 +298,16 @@ export const RiderDashboard = (): JSX.Element => {
         return filtered;
     }, [assignments]);
 
+    // Calculate total amount to collect from active assignments
+    const totalAmountToCollect = useMemo(() => {
+        return activeAssignments.reduce((total, assignment) => {
+            const parcel = assignment.parcel;
+            const parcelAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
+                (parcel.inboundCost || 0) + (parcel.storageCost || 0);
+            return total + parcelAmount;
+        }, 0);
+    }, [activeAssignments]);
+
 
     const handleDownloadPDF = () => {
         try {
@@ -298,12 +316,7 @@ export const RiderDashboard = (): JSX.Element => {
                 const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
                     (parcel.inboundCost || 0) + (parcel.storageCost || 0);
 
-                let location = 'N/A';
-                if (parcel.homeDelivery && parcel.receiverAddress) {
-                    location = parcel.receiverAddress;
-                } else if (!parcel.homeDelivery && parcel.shelfName) {
-                    location = `Shelf: ${parcel.shelfName} (Pickup)`;
-                }
+                const location = parcel.receiverAddress || 'N/A';
 
                 return {
                     parcelId: parcel.parcelId, // Keep for reference but not displayed in PDF
@@ -357,18 +370,32 @@ export const RiderDashboard = (): JSX.Element => {
                     <p className="text-sm text-gray-600">Manage your assigned parcels</p>
                 </div>
 
-                {/* Statistics Card - Compact */}
-                <Card className="rounded-lg border border-gray-200 bg-white shadow-sm max-w-xs">
-                    <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-xs text-gray-600 mb-1">Active Deliveries</p>
-                                <p className="text-2xl font-bold text-blue-600">{activeAssignments.length}</p>
+                {/* Statistics Cards */}
+                <div className="flex flex-wrap gap-4">
+                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm">
+                        <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-gray-600 mb-1">Active Deliveries</p>
+                                    <p className="text-2xl font-bold text-blue-600">{activeAssignments.length}</p>
+                                </div>
+                                <TruckIcon className="w-8 h-8 text-blue-500 opacity-50" />
                             </div>
-                            <TruckIcon className="w-8 h-8 text-blue-500 opacity-50" />
-                        </div>
-                    </CardContent>
-                </Card>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm">
+                        <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-gray-600 mb-1">Total Amount to Collect</p>
+                                    <p className="text-2xl font-bold text-[#ea690c]">{formatCurrency(totalAmountToCollect)}</p>
+                                </div>
+                                <DollarSignIcon className="w-8 h-8 text-[#ea690c] opacity-50" />
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
 
                 {/* Active Assignments */}
                 <div>
@@ -461,7 +488,7 @@ export const RiderDashboard = (): JSX.Element => {
                                                     </td>
                                                     <td className="px-4 py-4 border-r border-gray-100">
                                                         <div className="text-sm text-neutral-700">
-                                                            {parcel.homeDelivery && parcel.receiverAddress ? (
+                                                            {parcel.receiverAddress ? (
                                                                 <div className="flex items-start gap-1">
                                                                     <MapPinIcon className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                                                                     <span className="truncate max-w-[200px]" title={parcel.receiverAddress}>
@@ -469,12 +496,7 @@ export const RiderDashboard = (): JSX.Element => {
                                                                     </span>
                                                                 </div>
                                                             ) : (
-                                                                <div className="flex items-center gap-1">
-                                                                    <PackageIcon className="w-4 h-4 text-purple-500 flex-shrink-0" />
-                                                                    <span className="text-sm">
-                                                                        Shelf: <strong>{parcel.shelfName || "N/A"}</strong>
-                                                                    </span>
-                                                                </div>
+                                                                <span className="text-gray-400">N/A</span>
                                                             )}
                                                         </div>
                                                     </td>
@@ -588,6 +610,7 @@ export const RiderDashboard = (): JSX.Element => {
                                         setSelectedAssignment(null);
                                         setAmountCollected("");
                                         setConfirmationCode("");
+                                        setPaymentMethod("");
                                     }}
                                     className="text-[#9a9a9a] hover:text-neutral-800"
                                 >
@@ -639,13 +662,28 @@ export const RiderDashboard = (): JSX.Element => {
 
                                 <div>
                                     <Label className="text-sm font-semibold text-neutral-800 mb-2">
-                                        Confirmation Code <span className="text-[#e22420]">*</span>
+                                        Payment Method <span className="text-[#e22420]">*</span>
+                                    </Label>
+                                    <select
+                                        value={paymentMethod}
+                                        onChange={(e) => setPaymentMethod(e.target.value)}
+                                        className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c] bg-white"
+                                    >
+                                        <option value="">Select payment method</option>
+                                        <option value="cash">Cash</option>
+                                        <option value="momo">Mobile Money (MoMo)</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <Label className="text-sm font-semibold text-neutral-800 mb-2">
+                                        Confirmation Code (Optional)
                                     </Label>
                                     <Input
                                         type="text"
                                         value={confirmationCode}
                                         onChange={(e) => setConfirmationCode(e.target.value.toUpperCase())}
-                                        placeholder="Enter confirmation code"
+                                        placeholder="Enter confirmation code (optional)"
                                         className="w-full uppercase"
                                         maxLength={10}
                                     />
@@ -660,6 +698,7 @@ export const RiderDashboard = (): JSX.Element => {
                                         setSelectedAssignment(null);
                                         setAmountCollected("");
                                         setConfirmationCode("");
+                                        setPaymentMethod("");
                                     }}
                                     variant="outline"
                                     className="flex-1 border border-[#d1d1d1] py-2.5 sm:py-2"
@@ -668,7 +707,7 @@ export const RiderDashboard = (): JSX.Element => {
                                 </Button>
                                 <Button
                                     onClick={handleDeliveryComplete}
-                                    disabled={!amountCollected || !confirmationCode.trim() || updatingAssignment === selectedAssignment.assignmentId}
+                                    disabled={!amountCollected || !paymentMethod || updatingAssignment === selectedAssignment.assignmentId}
                                     className="flex-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 py-2.5 sm:py-2"
                                 >
                                     {updatingAssignment === selectedAssignment.assignmentId ? (

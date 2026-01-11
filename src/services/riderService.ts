@@ -47,17 +47,29 @@ interface RiderParcelResponse {
 export interface RiderAssignmentResponse {
     assignmentId: string;
     riderName: string;
-    parcel: RiderParcelResponse;
+    parcel: RiderParcelResponse; // For backward compatibility - will be populated from first parcel in parcels array
+    parcels?: RiderParcelResponse[]; // New: multiple parcels per assignment
     status: AssignmentStatus;
     assignedAt?: number;
     acceptedAt?: number;
     completedAt?: number;
+    amount?: number; // Total amount for the assignment
+    riderInfo?: {
+        riderId: string;
+        riderName: string;
+        riderPhoneNumber: string;
+    };
+    officeId?: string;
+    payed?: boolean;
+    paymentMethod?: string | null;
 }
 
 interface UpdateAssignmentStatusRequest {
     status: AssignmentStatus;
     confirmationCode?: string;
     cancelationReason?: string;
+    payementMethod?: string; // For DELIVERED status: "cash" or "momo"
+    parcelId?: string; // For DELIVERED status: the parcel ID
 }
 
 interface ApiResponse {
@@ -144,94 +156,121 @@ class RiderService {
             const items = Array.isArray(rawData) ? rawData : [];
             console.log('Items to process:', items.length);
 
-            // Check if items are already assignments (have assignmentId and parcel) or parcels (need mapping)
-            const isAssignmentFormat = items.length > 0 && items[0]?.assignmentId && items[0]?.parcel;
+            // Helper function to map a parcel object from the new API format
+            const mapParcelFromNewFormat = (parcelItem: any): RiderParcelResponse => {
+                // Handle both new format (receiverPhoneNumber, parcelAmount) and old format
+                const parcelAmount = parcelItem.parcelAmount;
+                const receiverPhone = parcelItem.receiverPhoneNumber || parcelItem.recieverPhoneNumber;
+                
+                // If parcelAmount is provided and individual cost fields are not, use parcelAmount as deliveryCost
+                // Otherwise, use individual cost fields if available
+                const hasIndividualCosts = parcelItem.deliveryCost !== undefined || 
+                                          parcelItem.pickUpCost !== undefined || 
+                                          parcelItem.inboundCost !== undefined || 
+                                          parcelItem.storageCost !== undefined;
+                
+                return {
+                    parcelId: parcelItem.parcelId,
+                    parcelDescription: parcelItem.parcelDescription,
+                    // If individual costs are not provided but parcelAmount is, use it as deliveryCost (total)
+                    // The component sums all cost fields, so this works correctly
+                    deliveryCost: parcelItem.deliveryCost ?? (parcelAmount !== undefined && !hasIndividualCosts ? parcelAmount : undefined),
+                    inboundCost: parcelItem.inboundCost,
+                    pickUpCost: parcelItem.pickUpCost,
+                    storageCost: parcelItem.storageCost,
+                    hasCalled: parcelItem.hasCalled,
+                    driverId: parcelItem.driverId,
+                    officeId: parcelItem.officeId,
+                    driverName: parcelItem.driverName,
+                    driverPhoneNumber: parcelItem.driverPhoneNumber,
+                    vehicleNumber: parcelItem.vehicleNumber,
+                    senderName: parcelItem.senderName,
+                    senderPhoneNumber: parcelItem.senderPhoneNumber,
+                    receiverName: parcelItem.receiverName,
+                    receiverAddress: parcelItem.receiverAddress,
+                    recieverPhoneNumber: receiverPhone, // Map receiverPhoneNumber to recieverPhoneNumber (typo in interface)
+                    shelfName: parcelItem.shelfName,
+                    shelfId: parcelItem.shelfId,
+                    homeDelivery: parcelItem.homeDelivery,
+                    pod: parcelItem.POD || parcelItem.pod,
+                    delivered: parcelItem.delivered || parcelItem.payed || false,
+                    parcelAssigned: parcelItem.parcelAssigned,
+                    fragile: parcelItem.fragile,
+                    inboudPayed: parcelItem.inboudPayed || parcelItem.payed,
+                } as RiderParcelResponse;
+            };
 
-            const mappedContent = items.map((item: any) => {
-                // If already in assignment format, use it directly (with minor adjustments)
-                if (isAssignmentFormat) {
-                    return {
+            // Flatten assignments: if an assignment has multiple parcels, create one assignment per parcel
+            const flattenedAssignments: RiderAssignmentResponse[] = [];
+
+            items.forEach((item: any) => {
+                // Check if this is the new format with parcels array
+                if (item.parcels && Array.isArray(item.parcels)) {
+                    // New format: assignment with multiple parcels
+                    const riderName = item.riderInfo?.riderName || item.riderName || "Rider";
+                    const riderInfo = item.riderInfo || { riderId: item.riderId, riderName, riderPhoneNumber: item.riderPhoneNumber };
+                    
+                    // Create one assignment per parcel (flattened)
+                    item.parcels.forEach((parcelItem: any) => {
+                        const mappedParcel = mapParcelFromNewFormat(parcelItem);
+                        flattenedAssignments.push({
+                            assignmentId: item.assignmentId,
+                            riderName,
+                            parcel: mappedParcel, // First parcel for backward compatibility
+                            parcels: [mappedParcel], // Keep parcels array
+                            status: item.status as AssignmentStatus,
+                            assignedAt: item.assignedAt,
+                            acceptedAt: item.acceptedAt || 0,
+                            completedAt: item.completedAt || 0,
+                            amount: item.amount,
+                            riderInfo,
+                            officeId: item.officeId,
+                            payed: item.payed,
+                            paymentMethod: item.payementMethod || item.paymentMethod,
+                        } as RiderAssignmentResponse);
+                    });
+                } else if (item.assignmentId && item.parcel) {
+                    // Old format: assignment with single parcel
+                    const mappedParcel = mapParcelFromNewFormat(item.parcel);
+                    flattenedAssignments.push({
                         assignmentId: item.assignmentId,
                         riderName: item.riderName || "Rider",
-                        parcel: {
-                            parcelId: item.parcel?.parcelId,
-                            parcelDescription: item.parcel?.parcelDescription,
-                            inboundCost: item.parcel?.inboundCost,
-                            pickUpCost: item.parcel?.pickUpCost,
-                            deliveryCost: item.parcel?.deliveryCost,
-                            storageCost: item.parcel?.storageCost,
-                            hasCalled: item.parcel?.hasCalled,
-                            driverId: item.parcel?.driverId,
-                            officeId: item.parcel?.officeId,
-                            driverName: item.parcel?.driverName,
-                            driverPhoneNumber: item.parcel?.driverPhoneNumber,
-                            vehicleNumber: item.parcel?.vehicleNumber,
-                            senderName: item.parcel?.senderName,
-                            senderPhoneNumber: item.parcel?.senderPhoneNumber,
-                            receiverName: item.parcel?.receiverName,
-                            receiverAddress: item.parcel?.receiverAddress,
-                            recieverPhoneNumber: item.parcel?.recieverPhoneNumber,
-                            shelfName: item.parcel?.shelfName,
-                            shelfId: item.parcel?.shelfId,
-                            homeDelivery: item.parcel?.homeDelivery,
-                            pod: item.parcel?.POD || item.parcel?.pod,
-                            delivered: item.parcel?.delivered,
-                            parcelAssigned: item.parcel?.parcelAssigned,
-                            fragile: item.parcel?.fragile,
-                            inboudPayed: item.parcel?.inboudPayed,
-                        } as RiderParcelResponse,
+                        parcel: mappedParcel,
+                        parcels: [mappedParcel],
                         status: item.status as AssignmentStatus,
                         assignedAt: item.assignedAt,
                         acceptedAt: item.acceptedAt,
                         completedAt: item.completedAt,
-                    } as RiderAssignmentResponse;
-                }
-
-                // Otherwise, map from parcel format (old format)
-                // Determine status based on parcel properties
-                let status: AssignmentStatus = "ASSIGNED";
-                if (item.delivered) {
-                    status = "DELIVERED";
-                } else if (item.parcelAssigned) {
-                    status = "ACCEPTED";
-                }
-
-                return {
-                    assignmentId: item.parcelId || item.assignmentId,
-                    riderName: item.driverName || item.riderName || "Rider",
-                    parcel: {
-                        parcelId: item.parcelId,
-                        parcelDescription: item.parcelDescription,
-                        inboundCost: item.inboundCost,
-                        pickUpCost: item.pickUpCost,
-                        deliveryCost: item.deliveryCost,
-                        storageCost: item.storageCost,
-                        hasCalled: item.hasCalled,
-                        driverId: item.driverId,
+                        amount: item.amount,
+                        riderInfo: item.riderInfo,
                         officeId: item.officeId,
-                        driverName: item.driverName,
-                        driverPhoneNumber: item.driverPhoneNumber,
-                        vehicleNumber: item.vehicleNumber,
-                        senderName: item.senderName,
-                        senderPhoneNumber: item.senderPhoneNumber,
-                        receiverName: item.receiverName,
-                        receiverAddress: item.receiverAddress,
-                        recieverPhoneNumber: item.recieverPhoneNumber,
-                        shelfName: item.shelfName,
-                        shelfId: item.shelfId,
-                        homeDelivery: item.homeDelivery,
-                        pod: item.POD || item.pod,
-                        delivered: item.delivered,
-                        parcelAssigned: item.parcelAssigned,
-                        fragile: item.fragile,
-                        inboudPayed: item.inboudPayed,
-                    } as RiderParcelResponse,
-                    status: status,
-                    assignedAt: item.createdAt || item.assignedAt,
-                    acceptedAt: item.parcelAssigned ? (item.updatedAt || item.acceptedAt) : item.acceptedAt,
-                    completedAt: item.delivered ? (item.updatedAt || item.completedAt) : item.completedAt,
-                } as RiderAssignmentResponse;
+                        payed: item.payed,
+                        paymentMethod: item.paymentMethod,
+                    } as RiderAssignmentResponse);
+                } else {
+                    // Very old format: just a parcel, need to map it
+                    let status: AssignmentStatus = "ASSIGNED";
+                    if (item.delivered) {
+                        status = "DELIVERED";
+                    } else if (item.parcelAssigned) {
+                        status = "ACCEPTED";
+                    }
+
+                    const mappedParcel = mapParcelFromNewFormat(item);
+                    flattenedAssignments.push({
+                        assignmentId: item.parcelId || item.assignmentId,
+                        riderName: item.driverName || item.riderName || "Rider",
+                        parcel: mappedParcel,
+                        parcels: [mappedParcel],
+                        status: status,
+                        assignedAt: item.createdAt || item.assignedAt,
+                        acceptedAt: item.parcelAssigned ? (item.updatedAt || item.acceptedAt) : item.acceptedAt,
+                        completedAt: item.delivered ? (item.updatedAt || item.completedAt) : item.completedAt,
+                    } as RiderAssignmentResponse);
+                }
             });
+
+            const mappedContent = flattenedAssignments;
 
             console.log('Mapped assignments:', mappedContent.length);
 
@@ -273,16 +312,26 @@ class RiderService {
         assignmentId: string,
         status: AssignmentStatus,
         confirmationCode?: string,
-        reason?: string
+        reason?: string,
+        paymentMethod?: string,
+        parcelId?: string
     ): Promise<ApiResponse> {
         try {
             const requestBody: UpdateAssignmentStatusRequest = {
                 status,
             };
 
-            // Include confirmation code only for DELIVERED status
-            if (status === "DELIVERED" && confirmationCode) {
-                requestBody.confirmationCode = confirmationCode;
+            // Include fields for DELIVERED status
+            if (status === "DELIVERED") {
+                if (confirmationCode) {
+                    requestBody.confirmationCode = confirmationCode;
+                }
+                if (paymentMethod) {
+                    requestBody.payementMethod = paymentMethod;
+                }
+                if (parcelId) {
+                    requestBody.parcelId = parcelId;
+                }
             }
 
             // Include cancelationReason only for CANCELLED status
