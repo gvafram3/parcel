@@ -6,6 +6,9 @@ import {
   PackageIcon,
   MapPinIcon,
   Phone,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  UserIcon,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -14,34 +17,55 @@ import { formatPhoneNumber, formatCurrency, formatDateTime } from "../../utils/d
 import frontdeskService, { DeliveryAssignmentResponse } from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
 
+interface ReconciliationParcel {
+  parcelId: string;
+  parcelDescription?: string;
+  receiverName?: string;
+  receiverPhoneNumber?: string;
+  receiverAddress?: string;
+  parcelAmount: number;
+  delivered: boolean;
+  cancelled: boolean;
+  paymentMethod?: string | null;
+}
+
+interface RiderGroup {
+  riderId: string;
+  riderName: string;
+  riderPhoneNumber?: string;
+  deliveredParcels: ReconciliationParcel[];
+  totalDeliveredAmount: number;
+  totalDeliveredCount: number;
+  totalParcelsCount: number; // Total parcels (delivered + not delivered)
+  assignmentIds: string[]; // All assignment IDs for this rider
+}
+
 export const Reconciliation = (): JSX.Element => {
   const { showToast } = useToast();
-  const [assignments, setAssignments] = useState<DeliveryAssignmentResponse[]>([]);
-  const [selectedAssignments, setSelectedAssignments] = useState<Set<string>>(new Set());
+  const [rawAssignments, setRawAssignments] = useState<any[]>([]);
+  const [selectedRiders, setSelectedRiders] = useState<Set<string>>(new Set());
+  const [expandedRiders, setExpandedRiders] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pagination, setPagination] = useState({
     page: 0,
-    size: 20,
+    size: 200, // Fetch at least 200 items
     totalElements: 0,
     totalPages: 0,
   });
 
-  // Fetch all parcel assignments with pagination
-  const fetchAssignments = async (page: number = 0, size: number = 20) => {
+  // Fetch all parcel assignments with pagination (fetch at least 200)
+  const fetchAssignments = async (page: number = 0, size: number = 200) => {
     setLoading(true);
     try {
       const response = await frontdeskService.getParcelAssignments(page, size);
 
       if (response.success && response.data) {
         const data = response.data as any;
-        const allAssignments = data.content as DeliveryAssignmentResponse[];
-        // Filter only delivered assignments that haven't been paid
-        const deliveredAssignments = allAssignments.filter(
-          assignment => assignment.status === "DELIVERED" && !assignment.payed
-        );
-        setAssignments(deliveredAssignments);
+        const allAssignments = data.content || [];
+        console.log('Fetched assignments:', allAssignments.length);
+        setRawAssignments(allAssignments);
         setPagination({
           page: data.number || 0,
           size: data.size || size,
@@ -50,12 +74,12 @@ export const Reconciliation = (): JSX.Element => {
         });
       } else {
         showToast(response.message || "Failed to load assignments", "error");
-        setAssignments([]);
+        setRawAssignments([]);
       }
     } catch (error) {
       console.error("Failed to fetch assignments:", error);
       showToast("Failed to load assignments. Please try again.", "error");
-      setAssignments([]);
+      setRawAssignments([]);
     } finally {
       setLoading(false);
     }
@@ -66,53 +90,132 @@ export const Reconciliation = (): JSX.Element => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.size]);
 
-  // Calculate totals for selected assignments
-  const selectedAssignmentsData = useMemo(() => {
-    return assignments.filter(a => selectedAssignments.has(a.assignmentId));
-  }, [assignments, selectedAssignments]);
+  // Group assignments by rider and filter only delivered parcels
+  const riderGroups = useMemo(() => {
+    const groupsMap = new Map<string, RiderGroup>();
+
+    rawAssignments.forEach((assignment: any) => {
+      const riderId = assignment.riderInfo?.riderId || assignment.riderId || 'unknown';
+      const riderName = assignment.riderInfo?.riderName || assignment.riderName || 'Unknown Rider';
+      const riderPhoneNumber = assignment.riderInfo?.riderPhoneNumber || assignment.riderPhoneNumber;
+
+      if (!groupsMap.has(riderId)) {
+        groupsMap.set(riderId, {
+          riderId,
+          riderName,
+          riderPhoneNumber,
+          deliveredParcels: [],
+          totalDeliveredAmount: 0,
+          totalDeliveredCount: 0,
+          totalParcelsCount: 0,
+          assignmentIds: [],
+        });
+      }
+
+      const group = groupsMap.get(riderId)!;
+      
+      // Add assignment ID
+      if (!group.assignmentIds.includes(assignment.assignmentId)) {
+        group.assignmentIds.push(assignment.assignmentId);
+      }
+
+      // Process parcels array
+      if (assignment.parcels && Array.isArray(assignment.parcels)) {
+        assignment.parcels.forEach((parcel: any) => {
+          group.totalParcelsCount++;
+          
+          // Only include delivered parcels (not cancelled)
+          if (parcel.delivered && !parcel.cancelled) {
+            const parcelAmount = parcel.parcelAmount || 0;
+            group.deliveredParcels.push({
+              parcelId: parcel.parcelId,
+              parcelDescription: parcel.parcelDescription,
+              receiverName: parcel.receiverName,
+              receiverPhoneNumber: parcel.receiverPhoneNumber,
+              receiverAddress: parcel.receiverAddress,
+              parcelAmount,
+              delivered: true,
+              cancelled: false,
+              paymentMethod: parcel.paymentMethod,
+            });
+            group.totalDeliveredAmount += parcelAmount;
+            group.totalDeliveredCount++;
+          }
+        });
+      }
+    });
+
+    // Filter out riders with no delivered parcels and sort by rider name
+    return Array.from(groupsMap.values())
+      .filter(group => group.deliveredParcels.length > 0)
+      .sort((a, b) => a.riderName.localeCompare(b.riderName));
+  }, [rawAssignments]);
+
+  // Calculate totals for selected riders
+  const selectedRidersData = useMemo(() => {
+    return riderGroups.filter(group => selectedRiders.has(group.riderId));
+  }, [riderGroups, selectedRiders]);
 
   const totalAmount = useMemo(() => {
-    return selectedAssignmentsData.reduce((sum, assignment) => {
-      const parcel = assignment.parcel;
-      return sum + (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-        (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-    }, 0);
-  }, [selectedAssignmentsData]);
+    return selectedRidersData.reduce((sum, group) => sum + group.totalDeliveredAmount, 0);
+  }, [selectedRidersData]);
 
-  const handleToggleSelection = (assignmentId: string) => {
-    setSelectedAssignments(prev => {
+  const totalParcels = useMemo(() => {
+    return selectedRidersData.reduce((sum, group) => sum + group.totalDeliveredCount, 0);
+  }, [selectedRidersData]);
+
+  const handleToggleRiderSelection = (riderId: string) => {
+    setSelectedRiders(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(assignmentId)) {
-        newSet.delete(assignmentId);
+      if (newSet.has(riderId)) {
+        newSet.delete(riderId);
       } else {
-        newSet.add(assignmentId);
+        newSet.add(riderId);
       }
       return newSet;
     });
   };
 
   const handleSelectAll = () => {
-    if (selectedAssignments.size === assignments.length) {
-      setSelectedAssignments(new Set());
+    if (selectedRiders.size === riderGroups.length) {
+      setSelectedRiders(new Set());
     } else {
-      setSelectedAssignments(new Set(assignments.map(a => a.assignmentId)));
+      setSelectedRiders(new Set(riderGroups.map(g => g.riderId)));
     }
   };
 
+  const handleToggleRiderExpansion = (riderId: string) => {
+    setExpandedRiders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(riderId)) {
+        newSet.delete(riderId);
+      } else {
+        newSet.add(riderId);
+      }
+      return newSet;
+    });
+  };
+
   const handleReconcile = async () => {
-    if (selectedAssignments.size === 0) {
-      showToast("Please select at least one assignment to reconcile", "error");
+    if (selectedRiders.size === 0) {
+      showToast("Please select at least one rider to reconcile", "error");
       return;
     }
 
     setIsReconciling(true);
     try {
-      const assignmentIds = Array.from(selectedAssignments);
+      // Get all assignment IDs from selected riders
+      const assignmentIds: string[] = [];
+      selectedRidersData.forEach(group => {
+        assignmentIds.push(...group.assignmentIds);
+      });
+
+      console.log('Reconciling assignments:', assignmentIds);
       const response = await frontdeskService.reconcileRiderPayments(assignmentIds);
 
       if (response.success) {
-        showToast(`Successfully reconciled ${assignmentIds.length} assignment(s)`, "success");
-        setSelectedAssignments(new Set());
+        showToast(`Successfully reconciled ${selectedRiders.size} rider(s) with ${totalParcels} parcel(s)`, "success");
+        setSelectedRiders(new Set());
         await fetchAssignments(pagination.page, pagination.size);
         setShowConfirmModal(false);
       } else {
@@ -136,29 +239,35 @@ export const Reconciliation = (): JSX.Element => {
               <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">Reconciliation</h1>
               <p className="text-sm text-gray-600">Approve and reconcile delivered assignments</p>
             </div>
-            {selectedAssignments.size > 0 && (
+            {selectedRiders.size > 0 && (
               <Badge className="bg-orange-100 text-orange-700 border-orange-200 px-4 py-2 text-base font-semibold">
-                {selectedAssignments.size} Selected
+                {selectedRiders.size} Rider{selectedRiders.size !== 1 ? 's' : ''} Selected
               </Badge>
             )}
           </div>
 
           {/* Summary Card */}
-          {selectedAssignments.size > 0 && (
+          {selectedRiders.size > 0 && (
             <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
               <CardContent className="p-4 sm:p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Total Selected</p>
-                    <p className="text-2xl font-bold text-[#ea690c]">{selectedAssignments.size} Assignment(s)</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600 mb-1">Total Amount</p>
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totalAmount)}</p>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Riders Selected</p>
+                      <p className="text-2xl font-bold text-[#ea690c]">{selectedRiders.size}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Delivered Parcels</p>
+                      <p className="text-2xl font-bold text-blue-600">{totalParcels}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Total Amount</p>
+                      <p className="text-2xl font-bold text-green-600">{formatCurrency(totalAmount)}</p>
+                    </div>
                   </div>
                   <Button
                     onClick={() => setShowConfirmModal(true)}
-                    disabled={selectedAssignments.size === 0 || isReconciling}
+                    disabled={selectedRiders.size === 0 || isReconciling}
                     className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                   >
                     {isReconciling ? (
@@ -186,7 +295,7 @@ export const Reconciliation = (): JSX.Element => {
                   <Loader className="w-10 h-10 text-[#ea690c] mx-auto mb-4 animate-spin" />
                   <p className="text-neutral-700 font-semibold text-lg">Loading assignments...</p>
                 </div>
-              ) : assignments.length === 0 ? (
+              ) : riderGroups.length === 0 ? (
                 <div className="text-center py-12">
                   <PackageIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <p className="text-neutral-800 font-semibold text-lg mb-2">No assignments to reconcile</p>
@@ -202,119 +311,170 @@ export const Reconciliation = (): JSX.Element => {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">
                           <input
                             type="checkbox"
-                            checked={selectedAssignments.size === assignments.length && assignments.length > 0}
+                            checked={selectedRiders.size === riderGroups.length && riderGroups.length > 0}
                             onChange={handleSelectAll}
                             className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
                           />
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Rider</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Parcel ID</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Recipient</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Phone</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Location</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Amount</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Completed</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Actions</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivered Parcels</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Total Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Stats</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {assignments.map((assignment, index) => {
-                        const parcel = assignment.parcel;
-                        const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                          (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-                        const isSelected = selectedAssignments.has(assignment.assignmentId);
+                      {riderGroups.map((group, groupIndex) => {
+                        const isSelected = selectedRiders.has(group.riderId);
+                        const isExpanded = expandedRiders.has(group.riderId);
 
                         return (
-                          <tr
-                            key={assignment.assignmentId}
-                            className={`hover:bg-gray-50 transition-colors ${index !== assignments.length - 1 ? 'border-b border-gray-200' : ''} ${isSelected ? 'bg-orange-50' : ''}`}
-                          >
-                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => handleToggleSelection(assignment.assignmentId)}
-                                className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
-                              />
-                            </td>
-                            <td className="px-4 py-4 border-r border-gray-100">
-                              <div className="text-sm font-semibold text-neutral-800">
-                                {assignment.riderName || "N/A"}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                              <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs font-semibold">
-                                {parcel.parcelId}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-4 border-r border-gray-100">
-                              <div className="text-sm font-semibold text-neutral-800">
-                                {parcel.receiverName || "N/A"}
-                              </div>
-                              {parcel.parcelDescription && (
-                                <div className="text-xs text-gray-500 mt-1 truncate max-w-[150px]">
-                                  {parcel.parcelDescription}
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                              {parcel.recieverPhoneNumber ? (
-                                <a
-                                  href={`tel:${parcel.recieverPhoneNumber}`}
-                                  className="text-sm text-[#ea690c] hover:underline font-medium"
-                                >
-                                  {formatPhoneNumber(parcel.recieverPhoneNumber)}
-                                </a>
-                              ) : (
-                                <span className="text-sm text-gray-400">N/A</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-4 border-r border-gray-100">
-                              <div className="text-sm text-neutral-700">
-                                {parcel.homeDelivery && parcel.receiverAddress ? (
-                                  <div className="flex items-start gap-1">
-                                    <MapPinIcon className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                                    <span className="truncate max-w-[200px]" title={parcel.receiverAddress}>
-                                      {parcel.receiverAddress}
-                                    </span>
+                          <>
+                            {/* Rider Group Header Row */}
+                            <tr
+                              key={group.riderId}
+                              className={`hover:bg-gray-50 transition-colors ${groupIndex !== riderGroups.length - 1 ? 'border-b border-gray-200' : ''} ${isSelected ? 'bg-orange-50' : ''}`}
+                            >
+                              <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleRiderSelection(group.riderId)}
+                                  className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
+                                />
+                              </td>
+                              <td className="px-4 py-4 border-r border-gray-100">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleToggleRiderExpansion(group.riderId)}
+                                    className="text-gray-500 hover:text-gray-700"
+                                  >
+                                    {isExpanded ? (
+                                      <ChevronDownIcon className="w-4 h-4" />
+                                    ) : (
+                                      <ChevronRightIcon className="w-4 h-4" />
+                                    )}
+                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <UserIcon className="w-4 h-4 text-blue-500" />
+                                    <div>
+                                      <div className="text-sm font-semibold text-neutral-800">
+                                        {group.riderName}
+                                      </div>
+                                      {group.riderPhoneNumber && (
+                                        <div className="text-xs text-gray-500">
+                                          {formatPhoneNumber(group.riderPhoneNumber)}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                ) : (
-                                  <div className="flex items-center gap-1">
-                                    <PackageIcon className="w-4 h-4 text-purple-500 flex-shrink-0" />
-                                    <span className="text-sm">
-                                      Shelf: <strong>{parcel.shelfName || "N/A"}</strong>
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                              <div className="text-sm font-bold text-[#ea690c]">
-                                {formatCurrency(totalAmount)}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                              {assignment.completedAt ? (
-                                <div className="text-xs text-gray-600">
-                                  {formatDateTime(new Date(assignment.completedAt).toISOString())}
                                 </div>
-                              ) : (
-                                <span className="text-xs text-gray-400">N/A</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              {parcel.recieverPhoneNumber && (
-                                <Button
-                                  onClick={() => window.location.href = `tel:${parcel.recieverPhoneNumber}`}
-                                  variant="outline"
-                                  className="border-green-300 text-green-600 hover:bg-green-50 text-xs px-2.5 py-1.5"
-                                  title={`Call ${parcel.receiverName || 'recipient'}`}
-                                >
-                                  <Phone className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                            </td>
-                          </tr>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                <div className="text-sm font-semibold text-blue-600">
+                                  {group.totalDeliveredCount} / {group.totalParcelsCount}
+                                </div>
+                                <div className="text-xs text-gray-500">Delivered / Total</div>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                <div className="text-sm font-bold text-[#ea690c]">
+                                  {formatCurrency(group.totalDeliveredAmount)}
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap">
+                                <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
+                                  {group.totalDeliveredCount} Delivered
+                                </Badge>
+                              </td>
+                            </tr>
+                            {/* Expanded Parcels Rows */}
+                            {isExpanded && (
+                              <tr>
+                                <td colSpan={5} className="px-0 py-0">
+                                  <div className="bg-gray-50 border-t border-gray-200">
+                                    <table className="w-full">
+                                      <thead className="bg-gray-100">
+                                        <tr>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Recipient</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Phone</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Location</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Amount</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Payment</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Actions</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {group.deliveredParcels.map((parcel, parcelIndex) => (
+                                          <tr
+                                            key={parcel.parcelId}
+                                            className={`${parcelIndex !== group.deliveredParcels.length - 1 ? 'border-b border-gray-200' : ''}`}
+                                          >
+                                            <td className="px-4 py-3">
+                                              <div className="text-sm font-semibold text-neutral-800">
+                                                {parcel.receiverName || "N/A"}
+                                              </div>
+                                              {parcel.parcelDescription && (
+                                                <div className="text-xs text-gray-500 mt-1 truncate max-w-[150px]">
+                                                  {parcel.parcelDescription}
+                                                </div>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                              {parcel.receiverPhoneNumber ? (
+                                                <a
+                                                  href={`tel:${parcel.receiverPhoneNumber}`}
+                                                  className="text-sm text-[#ea690c] hover:underline font-medium"
+                                                >
+                                                  {formatPhoneNumber(parcel.receiverPhoneNumber)}
+                                                </a>
+                                              ) : (
+                                                <span className="text-sm text-gray-400">N/A</span>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                              <div className="text-sm text-neutral-700">
+                                                {parcel.receiverAddress ? (
+                                                  <div className="flex items-start gap-1">
+                                                    <MapPinIcon className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                                    <span className="truncate max-w-[200px]" title={parcel.receiverAddress}>
+                                                      {parcel.receiverAddress}
+                                                    </span>
+                                                  </div>
+                                                ) : (
+                                                  <span className="text-gray-400">N/A</span>
+                                                )}
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                              <div className="text-sm font-bold text-[#ea690c]">
+                                                {formatCurrency(parcel.parcelAmount)}
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                              <Badge className={`${parcel.paymentMethod === 'cash' ? 'bg-green-100 text-green-800' : parcel.paymentMethod === 'momo' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'} border text-xs`}>
+                                                {parcel.paymentMethod || 'N/A'}
+                                              </Badge>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                              {parcel.receiverPhoneNumber && (
+                                                <Button
+                                                  onClick={() => window.location.href = `tel:${parcel.receiverPhoneNumber}`}
+                                                  variant="outline"
+                                                  className="border-green-300 text-green-600 hover:bg-green-50 text-xs px-2.5 py-1.5"
+                                                  title={`Call ${parcel.receiverName || 'recipient'}`}
+                                                >
+                                                  <Phone className="w-3.5 h-3.5" />
+                                                </Button>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </>
                         );
                       })}
                     </tbody>
@@ -327,9 +487,9 @@ export const Reconciliation = (): JSX.Element => {
                 <div className="px-6 py-4 border-t border-[#d1d1d1] flex items-center justify-between">
                   <div className="text-sm text-neutral-700">
                     Showing {pagination.page * pagination.size + 1} to {Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)} of {pagination.totalElements} total assignments
-                    {assignments.length > 0 && (
+                    {riderGroups.length > 0 && (
                       <span className="ml-2 text-gray-500">
-                        ({assignments.length} unpaid delivered)
+                        ({riderGroups.length} riders with delivered parcels)
                       </span>
                     )}
                   </div>
@@ -387,37 +547,35 @@ export const Reconciliation = (): JSX.Element => {
               <div className="flex flex-col gap-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-sm font-semibold text-blue-900 mb-2">
-                    You are about to reconcile {selectedAssignments.size} assignment(s)
+                    You are about to reconcile {selectedRiders.size} rider(s)
                   </p>
-                  <p className="text-sm text-blue-800">
-                    Total Amount: <span className="font-bold">{formatCurrency(totalAmount)}</span>
-                  </p>
+                  <div className="grid grid-cols-2 gap-4 mt-2">
+                    <p className="text-sm text-blue-800">
+                      Total Parcels: <span className="font-bold">{totalParcels}</span>
+                    </p>
+                    <p className="text-sm text-blue-800">
+                      Total Amount: <span className="font-bold">{formatCurrency(totalAmount)}</span>
+                    </p>
+                  </div>
                 </div>
 
                 <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Parcel ID</th>
                         <th className="px-3 py-2 text-left font-semibold text-gray-700">Rider</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Recipient</th>
+                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Parcels</th>
                         <th className="px-3 py-2 text-right font-semibold text-gray-700">Amount</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedAssignmentsData.map((assignment) => {
-                        const parcel = assignment.parcel;
-                        const amount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-                          (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-                        return (
-                          <tr key={assignment.assignmentId} className="border-b border-gray-100">
-                            <td className="px-3 py-2">{parcel.parcelId}</td>
-                            <td className="px-3 py-2">{assignment.riderName}</td>
-                            <td className="px-3 py-2">{parcel.receiverName || "N/A"}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{formatCurrency(amount)}</td>
-                          </tr>
-                        );
-                      })}
+                      {selectedRidersData.map((group) => (
+                        <tr key={group.riderId} className="border-b border-gray-100">
+                          <td className="px-3 py-2 font-semibold">{group.riderName}</td>
+                          <td className="px-3 py-2">{group.totalDeliveredCount} delivered</td>
+                          <td className="px-3 py-2 text-right font-semibold">{formatCurrency(group.totalDeliveredAmount)}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>

@@ -453,8 +453,9 @@ class FrontdeskService {
     /**
      * Get all parcel assignments (paginated)
      * Endpoint: GET /parcel-assignment
+     * Now returns assignments with parcels array
      */
-    async getParcelAssignments(page: number = 0, size: number = 20): Promise<ApiResponse> {
+    async getParcelAssignments(page: number = 0, size: number = 200): Promise<ApiResponse> {
         try {
             const params = new URLSearchParams();
             params.append('page', page.toString());
@@ -462,37 +463,15 @@ class FrontdeskService {
 
             const response = await this.apiClient.get<any>(`/parcel-assignment?${params.toString()}`);
 
-            // Map the API response to the expected format
-            const mappedContent = (response.data?.content || []).map((item: any) => ({
-                assignmentId: item.assignmentId,
-                riderName: item.riderId?.name || "Unknown Rider",
-                parcel: {
-                    ...item.orderId,
-                    parcelId: item.orderId?.parcelId,
-                    receiverName: item.orderId?.receiverName,
-                    recieverPhoneNumber: item.orderId?.recieverPhoneNumber,
-                    receiverAddress: item.orderId?.receiverAddress,
-                    parcelDescription: item.orderId?.parcelDescription,
-                    deliveryCost: item.orderId?.deliveryCost,
-                    pickUpCost: item.orderId?.pickUpCost,
-                    inboundCost: item.orderId?.inboundCost,
-                    storageCost: item.orderId?.storageCost,
-                    shelfName: item.orderId?.shelfName,
-                    shelfNumber: item.orderId?.shelfNumber,
-                    homeDelivery: item.orderId?.homeDelivery,
-                } as ParcelResponse,
-                status: item.status,
-                assignedAt: item.assignedAt,
-                acceptedAt: item.acceptedAt,
-                completedAt: item.completedAt,
-                payed: item.payed || false,
-            }));
+            // Return raw data - the Reconciliation component will handle grouping
+            // The API now returns assignments with parcels array
+            const rawContent = response.data?.content || [];
 
             return {
                 success: true,
                 message: 'Assignments retrieved successfully',
                 data: {
-                    content: mappedContent,
+                    content: rawContent, // Return raw data for processing in component
                     totalElements: response.data?.totalElements || 0,
                     totalPages: response.data?.totalPages || 0,
                     number: response.data?.number || 0,

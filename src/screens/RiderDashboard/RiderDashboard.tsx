@@ -152,8 +152,18 @@ export const RiderDashboard = (): JSX.Element => {
     }, [pagination.page, pagination.size]);
 
 
-    const handleAssignmentStatusUpdate = async (assignmentId: string, newUIStatus: UIStatus) => {
-        const assignment = assignments.find((a) => a.assignmentId === assignmentId);
+    const handleAssignmentStatusUpdate = async (assignmentId: string, newUIStatus: UIStatus, parcelId?: string) => {
+        // Find the correct assignment - if parcelId is provided, match both assignmentId and parcelId
+        // This is important because multiple parcels can share the same assignmentId after flattening
+        const assignment = parcelId
+            ? assignments.find((a) => a.assignmentId === assignmentId && a.parcel.parcelId === parcelId)
+            : assignments.find((a) => a.assignmentId === assignmentId);
+
+        console.log('=== Finding Assignment ===');
+        console.log('Looking for assignmentId:', assignmentId);
+        console.log('Looking for parcelId:', parcelId);
+        console.log('Found assignment:', assignment);
+        console.log('Assignment parcelId:', assignment?.parcel?.parcelId);
 
         if (newUIStatus === "delivered") {
             // Show confirmation modal for delivery
@@ -206,13 +216,24 @@ export const RiderDashboard = (): JSX.Element => {
 
         setUpdatingAssignment(selectedAssignment.assignmentId);
         try {
+            const assignmentId = selectedAssignment.assignmentId;
+            const parcelId = selectedAssignment.parcel.parcelId;
+
+            // Log the payload for debugging
+            console.log('=== Marking Parcel as Delivered ===');
+            console.log('Assignment ID:', assignmentId);
+            console.log('Parcel ID:', parcelId);
+            console.log('Payment Method:', paymentMethod);
+            console.log('Confirmation Code:', confirmationCode.trim() || '(none)');
+            console.log('Amount Collected:', amountCollected);
+
             const response = await riderService.updateAssignmentStatus(
-                selectedAssignment.assignmentId,
+                assignmentId,
                 "DELIVERED",
                 confirmationCode.trim() || undefined, // Optional confirmation code
                 undefined, // reason not needed for DELIVERED
                 paymentMethod, // paymentMethod: "cash" or "momo"
-                selectedAssignment.parcel.parcelId // parcelId
+                parcelId // parcelId - used in URL path and request body for DELIVERED status
             );
 
             if (response.success) {
@@ -383,27 +404,27 @@ export const RiderDashboard = (): JSX.Element => {
                 </div>
 
                 {/* Statistics Cards */}
-                <div className="flex flex-wrap gap-4">
-                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm">
+                <div className="flex flex-row gap-3 sm:gap-4">
+                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm flex-1 min-w-0">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
-                                <div>
+                                <div className="min-w-0 flex-1">
                                     <p className="text-xs text-gray-600 mb-1">Active Deliveries</p>
-                                    <p className="text-2xl font-bold text-blue-600">{activeAssignments.length}</p>
+                                    <p className="text-xl sm:text-2xl font-bold text-blue-600 truncate">{activeAssignments.length}</p>
                                 </div>
-                                <TruckIcon className="w-8 h-8 text-blue-500 opacity-50" />
+                                <TruckIcon className="w-6 h-6 sm:w-8 sm:h-8 text-blue-500 opacity-50 flex-shrink-0 ml-2" />
                             </div>
                         </CardContent>
                     </Card>
 
-                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm">
+                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm flex-1 min-w-0">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
-                                <div>
+                                <div className="min-w-0 flex-1">
                                     <p className="text-xs text-gray-600 mb-1">Total Amount to Collect</p>
-                                    <p className="text-2xl font-bold text-[#ea690c]">{formatCurrency(totalAmountToCollect)}</p>
+                                    <p className="text-xl sm:text-2xl font-bold text-[#ea690c] truncate">{formatCurrency(totalAmountToCollect)}</p>
                                 </div>
-                                <DollarSignIcon className="w-8 h-8 text-[#ea690c] opacity-50" />
+                                <DollarSignIcon className="w-6 h-6 sm:w-8 sm:h-8 text-[#ea690c] opacity-50 flex-shrink-0 ml-2" />
                             </div>
                         </CardContent>
                     </Card>
@@ -544,7 +565,7 @@ export const RiderDashboard = (): JSX.Element => {
                                                             </Button>
                                                             {nextAction && (
                                                                 <Button
-                                                                    onClick={() => handleAssignmentStatusUpdate(assignment.assignmentId, nextAction.status)}
+                                                                    onClick={() => handleAssignmentStatusUpdate(assignment.assignmentId, nextAction.status, parcel.parcelId)}
                                                                     disabled={updatingAssignment === assignment.assignmentId}
                                                                     className={`${nextAction.color} text-white hover:opacity-90 disabled:opacity-50 text-xs px-3 py-1.5`}
                                                                 >
@@ -556,7 +577,7 @@ export const RiderDashboard = (): JSX.Element => {
                                                                 </Button>
                                                             )}
                                                             <Button
-                                                                onClick={() => handleAssignmentStatusUpdate(assignment.assignmentId, "delivery-failed")}
+                                                                onClick={() => handleAssignmentStatusUpdate(assignment.assignmentId, "delivery-failed", parcel.parcelId)}
                                                                 variant="outline"
                                                                 className="border-red-300 text-red-600 hover:bg-red-50 text-xs px-3 py-1.5"
                                                             >
@@ -911,7 +932,7 @@ export const RiderDashboard = (): JSX.Element => {
                                                 <Button
                                                     onClick={() => {
                                                         setShowDetailsModal(false);
-                                                        handleAssignmentStatusUpdate(selectedAssignment.assignmentId, nextAction.status);
+                                                        handleAssignmentStatusUpdate(selectedAssignment.assignmentId, nextAction.status, parcel.parcelId);
                                                     }}
                                                     disabled={updatingAssignment === selectedAssignment.assignmentId}
                                                     className={`${nextAction.color} text-white hover:opacity-90 disabled:opacity-50 w-full shadow-lg hover:shadow-xl transition-all duration-200 font-semibold py-3`}
@@ -933,7 +954,7 @@ export const RiderDashboard = (): JSX.Element => {
                                             <Button
                                                 onClick={() => {
                                                     setShowDetailsModal(false);
-                                                    handleAssignmentStatusUpdate(selectedAssignment.assignmentId, "delivery-failed");
+                                                    handleAssignmentStatusUpdate(selectedAssignment.assignmentId, "delivery-failed", parcel.parcelId);
                                                 }}
                                                 variant="outline"
                                                 className="border-2 border-red-300 text-red-600 hover:bg-red-50 w-full font-semibold py-3 shadow-md hover:shadow-lg transition-all"

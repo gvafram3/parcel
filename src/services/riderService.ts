@@ -275,13 +275,18 @@ class RiderService {
             const mappedContent = flattenedAssignments;
 
             console.log('Mapped assignments:', mappedContent.length);
+            console.log('Original assignments count:', items.length);
+            console.log('Flattened parcels count:', mappedContent.length);
 
+            // Note: The API returns assignments (each can have multiple parcels)
+            // We flatten them client-side so each parcel gets its own row in the UI
+            // Pagination metadata (totalElements, totalPages) is based on assignments, not parcels
             return {
                 success: true,
                 message: 'Assignments retrieved successfully',
                 data: {
-                    content: mappedContent,
-                    totalElements: response.data?.totalElements || 0,
+                    content: mappedContent, // Flattened: one assignment per parcel
+                    totalElements: response.data?.totalElements || 0, // Total assignments from API
                     totalPages: response.data?.totalPages || 0,
                     number: response.data?.number || 0,
                     size: response.data?.size || size,
@@ -309,6 +314,7 @@ class RiderService {
 
     /**
      * Update assignment status (for rider)
+     * For DELIVERED status, uses parcelId in the URL path
      */
     async updateAssignmentStatus(
         assignmentId: string,
@@ -341,8 +347,20 @@ class RiderService {
                 requestBody.cancelationReason = reason;
             }
 
+            // Use assignmentId in the URL path (API expects assignmentId, not parcelId in URL)
+            // parcelId goes in the request body for DELIVERED status
+            const urlPath = `/assignments/${assignmentId}/status`;
+
+            // Log the request payload for debugging
+            console.log('=== API Request Payload ===');
+            console.log('URL Path:', urlPath);
+            console.log('Request Body:', JSON.stringify(requestBody, null, 2));
+            console.log('Assignment ID (in URL):', assignmentId);
+            console.log('Parcel ID (in body):', parcelId);
+            console.log('Status:', status);
+
             const response = await this.apiClient.put<{ message: string }>(
-                `/assignments/${assignmentId}/status`,
+                urlPath,
                 requestBody
             );
             return {
