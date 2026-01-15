@@ -23,6 +23,7 @@ import { ActiveDeliveries } from "./screens/ActiveDeliveries";
 import { RiderDashboard } from "./screens/RiderDashboard";
 import { RiderHistory } from "./screens/RiderHistory";
 import { Reconciliation } from "./screens/Reconciliation";
+import { ReconciliationHistory } from "./screens/ReconciliationHistory";
 import { ReconciliationConfirmation } from "./screens/ReconciliationConfirmation";
 import { FinancialDashboard } from "./screens/FinancialDashboard/FinancialDashboard";
 import { ShelfManagement } from "./screens/ShelfManagement/ShelfManagement";
@@ -173,6 +174,16 @@ export const App = (): JSX.Element => {
                         }
                       />
                       <Route
+                        path="/reconciliation-history"
+                        element={
+                          <ProtectedRoute allowedRoles={["CALLER", "MANAGER", "ADMIN", "FRONTDESK"]}>
+                            <MainLayout>
+                              <ReconciliationHistory />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
                         path="/reconciliation-confirmation"
                         element={
                           <ProtectedRoute>
@@ -205,7 +216,7 @@ export const App = (): JSX.Element => {
                       <Route
                         path="/parcel-edit"
                         element={
-                          <ProtectedRoute allowedRoles={["MANAGER"]}>
+                          <ProtectedRoute allowedRoles={["MANAGER", "FRONTDESK"]}>
                             <MainLayout>
                               <ParcelEdit />
                             </MainLayout>

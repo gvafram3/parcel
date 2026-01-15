@@ -499,13 +499,36 @@ class FrontdeskService {
     }
 
     /**
-     * Reconcile rider payments (manual payment)
+     * Get reconciliations by date
+     * Date should be in milliseconds (start of day)
      */
-    async reconcileRiderPayments(assignmentIds: string[]): Promise<ApiResponse> {
+    async getReconciliationsByDate(dateInMillis: number): Promise<ApiResponse> {
         try {
-            const response = await this.apiClient.post<{ message: string }>('/reconcilation-parcels', {
-                assignmentIds,
-            });
+            const response = await this.apiClient.get(`/reconciliations/by-date?date=${dateInMillis}`);
+            return {
+                success: true,
+                data: response.data,
+            };
+        } catch (error: any) {
+            console.error('Failed to fetch reconciliations by date:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to fetch reconciliations',
+            };
+        }
+    }
+
+    /**
+     * Reconcile rider payments (manual payment)
+     * Expects array of objects with: { assignmentId, reconciledAt, payedAmount }
+     */
+    async reconcileRiderPayments(reconciliationData: Array<{
+        assignmentId: string;
+        reconciledAt: number;
+        payedAmount: number;
+    }>): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.post<{ message: string }>('/reconcilation-parcels', reconciliationData);
             return {
                 success: true,
                 message: response.data.message || 'Reconciliation completed successfully',

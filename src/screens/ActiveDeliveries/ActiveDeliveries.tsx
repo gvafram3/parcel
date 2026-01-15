@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   PackageIcon,
-  CameraIcon,
   SearchIcon,
   XIcon,
   FilterIcon,
@@ -20,7 +19,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { useStation } from "../../contexts/StationContext";
 import { formatPhoneNumber, formatDateTime, formatCurrency } from "../../utils/dataHelpers";
-import frontdeskService, { DeliveryAssignmentResponse, ParcelResponse, RiderResponse } from "../../services/frontdeskService";
+import frontdeskService, { ParcelResponse, RiderResponse } from "../../services/frontdeskService";
 import riderService from "../../services/riderService";
 import { useToast } from "../../components/ui/toast";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
@@ -38,6 +37,8 @@ interface DeliveryItem {
   acceptedAt?: number;
   completedAt?: number;
   riderName?: string;
+  delivered?: boolean;
+  cancelled?: boolean;
 }
 
 interface RiderWithAssignments {
@@ -49,21 +50,7 @@ interface RiderWithAssignments {
   completedDeliveries: number;
 }
 
-const mapAssignmentStatusToUI = (status: AssignmentStatus): UIStatus => {
-  switch (status) {
-    case "ASSIGNED":
-    case "ACCEPTED":
-      return "assigned";
-    case "PICKED_UP":
-      return "picked-up";
-    case "DELIVERED":
-      return "delivered";
-    case "CANCELLED":
-      return "delivery-failed";
-    default:
-      return "assigned";
-  }
-};
+// No longer using assignment status mapping - using parcel delivery status instead
 
 
 export const ActiveDeliveries = (): JSX.Element => {
@@ -76,7 +63,7 @@ export const ActiveDeliveries = (): JSX.Element => {
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryItem | null>(null);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [showFailedModal, setShowFailedModal] = useState(false);
-  const [amountCollected, setAmountCollected] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [failureReason, setFailureReason] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [expandedRiders, setExpandedRiders] = useState<Set<string>>(new Set());
@@ -84,137 +71,125 @@ export const ActiveDeliveries = (): JSX.Element => {
   // Get rider ID - if user is a rider, use their id
   const riderId = userRole === "RIDER" ? currentUser?.id : undefined;
 
-  // Fetch riders and their assignments
-  useEffect(() => {
-    const fetchRidersAndAssignments = async () => {
-      setLoading(true);
-      try {
-        if (userRole === "RIDER" && riderId) {
-          // For riders: fetch only their assignments
-          const response = await frontdeskService.getRiderAssignments(riderId, false);
+  // Fetch riders and their assignments using getParcelAssignments
+  const fetchRidersAndAssignments = async () => {
+    setLoading(true);
+    try {
+      // Use the same endpoint as Reconciliation page
+      const response = await frontdeskService.getParcelAssignments(0, 200);
 
-          if (response.success && response.data) {
-            const assignments = response.data as DeliveryAssignmentResponse[];
-            const deliveryItems: DeliveryItem[] = assignments
-              .filter(assignment => assignment.status !== "DELIVERED" && assignment.status !== "CANCELLED") // Only show active assignments, exclude delivered and failed
-              .map(assignment => ({
-                assignmentId: assignment.assignmentId,
-                parcelId: assignment.parcel.parcelId,
-                parcel: assignment.parcel,
-                status: assignment.status,
-                assignedAt: assignment.assignedAt,
-                acceptedAt: assignment.acceptedAt,
-                completedAt: assignment.completedAt,
-                riderName: assignment.riderName,
-              }));
+      if (response.success && response.data) {
+        const rawAssignments = response.data.content || [];
 
-            // Create a single rider entry for the current rider
-            const riderData: RiderWithAssignments = {
-              rider: {
-                userId: riderId,
-                name: currentUser?.name || "You",
-                phoneNumber: (currentUser as any)?.phone || "",
-                email: currentUser?.email,
-                role: "RIDER",
-                status: "ACTIVE",
-              } as RiderResponse,
-              assignments: deliveryItems,
-              totalParcels: deliveryItems.length,
-              activeDeliveries: deliveryItems.filter(d => {
-                const uiStatus = mapAssignmentStatusToUI(d.status);
-                return uiStatus === "picked-up" || uiStatus === "out-for-delivery";
-              }).length,
-              pendingPickups: deliveryItems.filter(d => {
-                const uiStatus = mapAssignmentStatusToUI(d.status);
-                return uiStatus === "assigned";
-              }).length,
-              completedDeliveries: deliveryItems.filter(d => {
-                const uiStatus = mapAssignmentStatusToUI(d.status);
-                return uiStatus === "delivered";
-              }).length,
-            };
-            setRidersWithAssignments([riderData]);
-            setExpandedRiders(new Set([riderId]));
-          } else {
-            showToast(response.message || "Failed to load deliveries", "error");
-          }
-        } else if (userRole === "MANAGER" || userRole === "ADMIN" || userRole === "FRONTDESK") {
-          // For managers/admins: fetch all riders and their assignments
-          const ridersResponse = await frontdeskService.getRiders();
+        // Group assignments by rider and filter active parcels
+        const ridersMap = new Map<string, {
+          rider: RiderResponse;
+          assignments: DeliveryItem[];
+        }>();
 
-          if (!ridersResponse.success || !ridersResponse.data) {
-            showToast(ridersResponse.message || "Failed to load riders", "error");
-            setLoading(false);
-            return;
-          }
+        rawAssignments.forEach((assignment: any) => {
+          const assignmentRiderId = assignment.riderInfo?.riderId || assignment.riderId || 'unknown';
+          const riderName = assignment.riderInfo?.riderName || assignment.riderName || 'Unknown Rider';
+          const riderPhoneNumber = assignment.riderInfo?.riderPhoneNumber || assignment.riderPhoneNumber;
 
-          const riders = ridersResponse.data as RiderResponse[];
-          const ridersData: RiderWithAssignments[] = [];
-
-          // Fetch assignments for each rider
-          for (const rider of riders) {
-            try {
-              const assignmentsResponse = await frontdeskService.getRiderAssignments(rider.userId, false);
-
-              if (assignmentsResponse.success && assignmentsResponse.data) {
-                const assignments = assignmentsResponse.data as DeliveryAssignmentResponse[];
-                const deliveryItems: DeliveryItem[] = assignments
-                  .filter(assignment => assignment.status !== "DELIVERED" && assignment.status !== "CANCELLED") // Only show active assignments, exclude delivered and failed
-                  .map(assignment => ({
-                    assignmentId: assignment.assignmentId,
-                    parcelId: assignment.parcel.parcelId,
-                    parcel: assignment.parcel,
-                    status: assignment.status,
-                    assignedAt: assignment.assignedAt,
-                    acceptedAt: assignment.acceptedAt,
-                    completedAt: assignment.completedAt,
-                    riderName: assignment.riderName,
-                  }));
-
-                if (deliveryItems.length > 0) {
-                  ridersData.push({
-                    rider,
-                    assignments: deliveryItems,
-                    totalParcels: deliveryItems.length,
-                    activeDeliveries: deliveryItems.filter(d => {
-                      const uiStatus = mapAssignmentStatusToUI(d.status);
-                      return uiStatus === "picked-up" || uiStatus === "out-for-delivery";
-                    }).length,
-                    pendingPickups: deliveryItems.filter(d => {
-                      const uiStatus = mapAssignmentStatusToUI(d.status);
-                      return uiStatus === "assigned";
-                    }).length,
-                    completedDeliveries: deliveryItems.filter(d => {
-                      const uiStatus = mapAssignmentStatusToUI(d.status);
-                      return uiStatus === "delivered";
-                    }).length,
+          // Process parcels array
+          if (assignment.parcels && Array.isArray(assignment.parcels)) {
+            assignment.parcels.forEach((parcel: any) => {
+              // Only include parcels where delivered === false AND cancelled === false
+              if (parcel.delivered === false && parcel.cancelled === false) {
+                // Initialize rider if not exists
+                if (!ridersMap.has(assignmentRiderId)) {
+                  ridersMap.set(assignmentRiderId, {
+                    rider: {
+                      userId: assignmentRiderId,
+                      name: riderName,
+                      phoneNumber: riderPhoneNumber,
+                      role: "RIDER",
+                      status: "ACTIVE",
+                    } as RiderResponse,
+                    assignments: [],
                   });
                 }
-              }
-            } catch (error) {
-              console.error(`Failed to fetch assignments for rider ${rider.userId}:`, error);
-            }
-          }
 
-          setRidersWithAssignments(ridersData);
-          // Expand all riders by default
+                const riderData = ridersMap.get(assignmentRiderId)!;
+
+                // Map parcel to ParcelResponse format
+                const mappedParcel: ParcelResponse = {
+                  parcelId: parcel.parcelId,
+                  receiverName: parcel.receiverName,
+                  recieverPhoneNumber: parcel.receiverPhoneNumber,
+                  receiverAddress: parcel.receiverAddress,
+                  parcelDescription: parcel.parcelDescription,
+                  deliveryCost: parcel.parcelAmount || 0,
+                  pickUpCost: 0,
+                  inboundCost: 0,
+                  storageCost: 0,
+                  senderName: parcel.senderName,
+                  senderPhoneNumber: parcel.senderPhoneNumber,
+                };
+
+                // Create delivery item
+                const deliveryItem: DeliveryItem = {
+                  assignmentId: assignment.assignmentId,
+                  parcelId: parcel.parcelId,
+                  parcel: mappedParcel,
+                  status: assignment.status as AssignmentStatus,
+                  assignedAt: assignment.assignedAt,
+                  acceptedAt: assignment.acceptedAt,
+                  completedAt: assignment.completedAt,
+                  riderName: riderName,
+                  delivered: parcel.delivered,
+                  cancelled: parcel.cancelled,
+                };
+
+                riderData.assignments.push(deliveryItem);
+              }
+            });
+          }
+        });
+
+        // Convert map to array and filter based on user role
+        let ridersData: RiderWithAssignments[] = Array.from(ridersMap.values()).map(riderData => ({
+          rider: riderData.rider,
+          assignments: riderData.assignments,
+          totalParcels: riderData.assignments.length,
+          // All parcels in this view are active (not delivered and not cancelled)
+          activeDeliveries: riderData.assignments.length,
+          pendingPickups: riderData.assignments.length,
+          completedDeliveries: 0,
+        }));
+
+        // Filter by rider if user is a rider
+        if (userRole === "RIDER" && riderId) {
+          ridersData = ridersData.filter(r => r.rider.userId === riderId);
+          if (ridersData.length > 0) {
+            setExpandedRiders(new Set([riderId]));
+          }
+        } else {
+          // Expand all riders by default for managers/admins
           setExpandedRiders(new Set(ridersData.map(r => r.rider.userId)));
         }
-      } catch (error) {
-        console.error("Failed to fetch riders and assignments:", error);
-        showToast("Failed to load deliveries. Please try again.", "error");
-      } finally {
-        setLoading(false);
-      }
-    };
 
+        setRidersWithAssignments(ridersData);
+      } else {
+        showToast(response.message || "Failed to load deliveries", "error");
+      }
+    } catch (error) {
+      console.error("Failed to fetch riders and assignments:", error);
+      showToast("Failed to load deliveries. Please try again.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchRidersAndAssignments();
   }, [userRole, riderId, currentUser, showToast]);
 
-  // Flatten all deliveries for statistics
-  const allDeliveries = useMemo(() => {
-    return ridersWithAssignments.flatMap(riderData => riderData.assignments);
-  }, [ridersWithAssignments]);
+  // Flatten all deliveries for potential future use
+  // const allDeliveries = useMemo(() => {
+  //   return ridersWithAssignments.flatMap(riderData => riderData.assignments);
+  // }, [ridersWithAssignments]);
 
   // Filter riders and their assignments
   const filteredRidersWithAssignments = useMemo(() => {
@@ -227,8 +202,9 @@ export const ActiveDeliveries = (): JSX.Element => {
           delivery.parcel.recieverPhoneNumber?.includes(searchQuery) ||
           riderData.rider.name?.toLowerCase().includes(searchQuery.toLowerCase());
 
-        const uiStatus = mapAssignmentStatusToUI(delivery.status);
-        const matchesStatus = statusFilter === "all" || uiStatus === statusFilter;
+        // For status filtering, since all parcels are active (not delivered, not cancelled),
+        // we only match "assigned" status filter or "all"
+        const matchesStatus = statusFilter === "all" || statusFilter === "assigned";
 
         return matchesSearch && matchesStatus;
       });
@@ -250,128 +226,23 @@ export const ActiveDeliveries = (): JSX.Element => {
     setExpandedRiders(newExpanded);
   };
 
-  const fetchRidersAndAssignments = async () => {
-    setLoading(true);
-    try {
-      if (userRole === "RIDER" && riderId) {
-        const response = await frontdeskService.getRiderAssignments(riderId, false);
-
-        if (response.success && response.data) {
-          const assignments = response.data as DeliveryAssignmentResponse[];
-          const deliveryItems: DeliveryItem[] = assignments
-            .filter(assignment => assignment.status !== "DELIVERED" && assignment.status !== "CANCELLED") // Only show active assignments, exclude delivered and failed
-            .map(assignment => ({
-              assignmentId: assignment.assignmentId,
-              parcelId: assignment.parcel.parcelId,
-              parcel: assignment.parcel,
-              status: assignment.status,
-              assignedAt: assignment.assignedAt,
-              acceptedAt: assignment.acceptedAt,
-              completedAt: assignment.completedAt,
-              riderName: assignment.riderName,
-            }));
-
-          const riderData: RiderWithAssignments = {
-            rider: {
-              userId: riderId,
-              name: currentUser?.name || "You",
-              phoneNumber: (currentUser as any)?.phone || "",
-              email: currentUser?.email,
-              role: "RIDER",
-              status: "ACTIVE",
-            } as RiderResponse,
-            assignments: deliveryItems,
-            totalParcels: deliveryItems.length,
-            activeDeliveries: deliveryItems.filter(d => {
-              const uiStatus = mapAssignmentStatusToUI(d.status);
-              return uiStatus === "picked-up" || uiStatus === "out-for-delivery";
-            }).length,
-            pendingPickups: deliveryItems.filter(d => {
-              const uiStatus = mapAssignmentStatusToUI(d.status);
-              return uiStatus === "assigned";
-            }).length,
-            completedDeliveries: deliveryItems.filter(d => {
-              const uiStatus = mapAssignmentStatusToUI(d.status);
-              return uiStatus === "delivered";
-            }).length,
-          };
-          setRidersWithAssignments([riderData]);
-        }
-      } else if (userRole === "MANAGER" || userRole === "ADMIN" || userRole === "FRONTDESK") {
-        const ridersResponse = await frontdeskService.getRiders();
-
-        if (!ridersResponse.success || !ridersResponse.data) {
-          return;
-        }
-
-        const riders = ridersResponse.data as RiderResponse[];
-        const ridersData: RiderWithAssignments[] = [];
-
-        for (const rider of riders) {
-          try {
-            const assignmentsResponse = await frontdeskService.getRiderAssignments(rider.userId, false);
-
-            if (assignmentsResponse.success && assignmentsResponse.data) {
-              const assignments = assignmentsResponse.data as DeliveryAssignmentResponse[];
-              const deliveryItems: DeliveryItem[] = assignments
-                .filter(assignment => assignment.status !== "DELIVERED" && assignment.status !== "CANCELLED") // Only show active assignments, exclude delivered and failed
-                .map(assignment => ({
-                  assignmentId: assignment.assignmentId,
-                  parcelId: assignment.parcel.parcelId,
-                  parcel: assignment.parcel,
-                  status: assignment.status,
-                  assignedAt: assignment.assignedAt,
-                  acceptedAt: assignment.acceptedAt,
-                  completedAt: assignment.completedAt,
-                  riderName: assignment.riderName,
-                }));
-
-              if (deliveryItems.length > 0) {
-                ridersData.push({
-                  rider,
-                  assignments: deliveryItems,
-                  totalParcels: deliveryItems.length,
-                  activeDeliveries: deliveryItems.filter(d => {
-                    const uiStatus = mapAssignmentStatusToUI(d.status);
-                    return uiStatus === "picked-up" || uiStatus === "out-for-delivery";
-                  }).length,
-                  pendingPickups: deliveryItems.filter(d => {
-                    const uiStatus = mapAssignmentStatusToUI(d.status);
-                    return uiStatus === "assigned";
-                  }).length,
-                  completedDeliveries: deliveryItems.filter(d => {
-                    const uiStatus = mapAssignmentStatusToUI(d.status);
-                    return uiStatus === "delivered";
-                  }).length,
-                });
-              }
-            }
-          } catch (error) {
-            console.error(`Failed to fetch assignments for rider ${rider.userId}:`, error);
-          }
-        }
-
-        setRidersWithAssignments(ridersData);
-      }
-    } catch (error) {
-      console.error("Failed to fetch riders and assignments:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // This function is now handled in useEffect above
 
   const handleStatusUpdate = async (assignmentId: string, parcelId: string, newUIStatus: UIStatus, riderUserId: string) => {
     if (!currentUser) return;
 
     if (newUIStatus === "delivered") {
       const riderData = ridersWithAssignments.find(r => r.rider.userId === riderUserId);
-      const delivery = riderData?.assignments.find((d) => d.assignmentId === assignmentId);
+      // Find delivery by parcelId to get the correct parcel
+      const delivery = riderData?.assignments.find((d) => d.parcelId === parcelId);
       setSelectedDelivery(delivery || null);
+      setPaymentMethod("");
       setShowDeliveryModal(true);
       return;
     } else if (newUIStatus === "delivery-failed") {
       const riderData = ridersWithAssignments.find(r => r.rider.userId === riderUserId);
-      const delivery = riderData?.assignments.find((d) => d.assignmentId === assignmentId);
+      // Find delivery by parcelId to get the correct parcel
+      const delivery = riderData?.assignments.find((d) => d.parcelId === parcelId);
       setSelectedDelivery(delivery || null);
       setShowFailedModal(true);
       return;
@@ -407,34 +278,29 @@ export const ActiveDeliveries = (): JSX.Element => {
   };
 
   const handleDeliveryComplete = async () => {
-    if (!selectedDelivery || !currentUser || !amountCollected) return;
+    if (!selectedDelivery || !currentUser || !paymentMethod) return;
 
     setUpdatingStatus(selectedDelivery.assignmentId);
     try {
-      const collected = parseFloat(amountCollected);
-      const parcel = selectedDelivery.parcel;
-
-      const totalAmount =
-        (parcel.deliveryCost || 0) +
-        (parcel.pickUpCost || 0) +
-        (parcel.inboundCost || 0) +
-        (parcel.storageCost || 0);
-
-      // Manager marks assignment as delivered via rider API
-      const response = await riderService.updateManagerAssignmentStatus(
+      // Manager marks parcel as delivered via rider API with payment method
+      const response = await riderService.updateAssignmentStatus(
         selectedDelivery.assignmentId,
-        "DELIVERED"
+        "DELIVERED",
+        undefined, // confirmationCode is optional
+        undefined, // reason
+        paymentMethod,
+        selectedDelivery.parcelId
       );
 
       if (response.success) {
         showToast(
-          `Delivery completed! Collected GHC ${collected.toFixed(2)}${collected !== totalAmount ? ` (Expected: GHC ${totalAmount.toFixed(2)})` : ''}`,
+          `Delivery completed! Payment method: ${paymentMethod}`,
           "success"
         );
 
         setShowDeliveryModal(false);
         setSelectedDelivery(null);
-        setAmountCollected("");
+        setPaymentMethod("");
 
         // Refresh all riders and assignments
         await fetchRidersAndAssignments();
@@ -481,62 +347,29 @@ export const ActiveDeliveries = (): JSX.Element => {
   };
 
   // Calculate statistics from all deliveries
-  const pendingCount = allDeliveries.filter((d) => {
-    const uiStatus = mapAssignmentStatusToUI(d.status);
-    return uiStatus === "assigned";
-  }).length;
-  const totalDeliveryFee = allDeliveries
-    .filter((d) => {
-      const uiStatus = mapAssignmentStatusToUI(d.status);
-      return uiStatus !== "delivered" && uiStatus !== "delivery-failed";
-    })
-    .reduce((sum, d) => {
-      return sum + (d.parcel.deliveryCost || 0);
-    }, 0);
-  const totalPickupCost = allDeliveries
-    .filter((d) => {
-      const uiStatus = mapAssignmentStatusToUI(d.status);
-      return uiStatus !== "delivered" && uiStatus !== "delivery-failed";
-    })
-    .reduce((sum, d) => {
-      return sum + (d.parcel.pickUpCost || 0);
-    }, 0);
-  const expectedCollections = allDeliveries
-    .filter((d) => {
-      const uiStatus = mapAssignmentStatusToUI(d.status);
-      return uiStatus !== "delivered" && uiStatus !== "delivery-failed";
-    })
-    .reduce((sum, d) => {
-      const parcel = d.parcel;
-      return sum + (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
-        (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-    }, 0);
+  // All parcels in this view are active (not delivered and not cancelled)
+  // Stats are calculated but commented out in UI
 
-  const getStatusBadge = (status: AssignmentStatus) => {
-    const uiStatus = mapAssignmentStatusToUI(status);
-    const statusConfig: Record<UIStatus, { label: string; color: string }> = {
-      "assigned": { label: "Assigned", color: "bg-blue-100 text-blue-800" },
-      "picked-up": { label: "Picked Up", color: "bg-indigo-100 text-indigo-800" },
-      "out-for-delivery": { label: "Out for Delivery", color: "bg-purple-100 text-purple-800" },
-      "delivered": { label: "Delivered", color: "bg-green-100 text-green-800" },
-      "delivery-failed": { label: "Failed", color: "bg-red-100 text-red-800" },
-    };
-    const config = statusConfig[uiStatus] || { label: status, color: "bg-gray-100 text-gray-800" };
-    return <Badge className={config.color}>{config.label}</Badge>;
+  const getStatusBadge = (delivered?: boolean, cancelled?: boolean) => {
+    // Use parcel delivery status instead of assignment status
+    if (cancelled === true) {
+      return <Badge className="bg-red-100 text-red-800">Cancelled</Badge>;
+    }
+    if (delivered === true) {
+      return <Badge className="bg-green-100 text-green-800">Delivered</Badge>;
+    }
+    // Default to "Assigned" for active parcels (not delivered and not cancelled)
+    return <Badge className="bg-blue-100 text-blue-800">Assigned</Badge>;
   };
 
   const getNextStatusAction = (delivery: DeliveryItem) => {
-    const uiStatus = mapAssignmentStatusToUI(delivery.status);
-    switch (uiStatus) {
-      case "assigned":
-        return { label: "Mark Picked Up", status: "picked-up" as UIStatus, color: "bg-blue-600" };
-      case "picked-up":
-        return { label: "Out for Delivery", status: "out-for-delivery" as UIStatus, color: "bg-indigo-600" };
-      case "out-for-delivery":
-        return { label: "Mark Delivered", status: "delivered" as UIStatus, color: "bg-green-600" };
-      default:
-        return null;
+    // Use parcel delivery status instead of assignment status
+    // For active deliveries page, all parcels shown are not delivered and not cancelled
+    // So we just show "Mark Delivered" action
+    if (delivery.delivered === false && delivery.cancelled === false) {
+      return { label: "Mark Delivered", status: "delivered" as UIStatus, color: "bg-green-600" };
     }
+    return null;
   };
 
   return (
@@ -552,7 +385,7 @@ export const ActiveDeliveries = (): JSX.Element => {
           </div> */}
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
@@ -616,7 +449,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </div> */}
 
           {/* Search and Filter */}
           <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
@@ -757,7 +590,6 @@ export const ActiveDeliveries = (): JSX.Element => {
                               const parcel = delivery.parcel;
                               const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
                                 (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-                              const uiStatus = mapAssignmentStatusToUI(delivery.status);
 
                               return (
                                 <Card
@@ -772,7 +604,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                                           <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50">
                                             {parcel.parcelId}
                                           </Badge>
-                                          {getStatusBadge(delivery.status)}
+                                          {getStatusBadge(delivery.delivered, delivery.cancelled)}
                                         </div>
 
                                         <div className="flex items-center gap-2">
@@ -887,42 +719,47 @@ export const ActiveDeliveries = (): JSX.Element => {
                                           </Button>
                                         )}
 
-                                        {/* Show Mark Delivered and Mark Failed for assigned, picked-up, and out-for-delivery statuses */}
-                                        {(uiStatus === "assigned" || uiStatus === "picked-up" || uiStatus === "out-for-delivery") && (
-                                          <div className="flex flex-col gap-2 w-full">
-                                            <Button
-                                              onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivered", riderData.rider.userId)}
-                                              disabled={updatingStatus === delivery.assignmentId}
-                                              className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 w-full"
-                                            >
-                                              {updatingStatus === delivery.assignmentId ? (
-                                                <>
-                                                  <Loader className="w-4 h-4 animate-spin mr-2" />
-                                                  Processing...
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <CheckCircleIcon className="w-4 h-4 mr-2" />
-                                                  Mark Delivered
-                                                </>
-                                              )}
-                                            </Button>
-                                            <Button
-                                              onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivery-failed", riderData.rider.userId)}
-                                              disabled={updatingStatus === delivery.assignmentId}
-                                              variant="outline"
-                                              className="border-red-300 text-red-600 hover:bg-red-50 w-full"
-                                            >
-                                              <XCircleIcon className="w-4 h-4 mr-2" />
-                                              Mark Failed
-                                            </Button>
-                                          </div>
-                                        )}
+                                        {/* Show Mark Delivered and Mark Failed for all active deliveries */}
+                                        <div className="flex flex-col gap-2 w-full">
+                                          <Button
+                                            onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivered", riderData.rider.userId)}
+                                            disabled={updatingStatus === delivery.assignmentId}
+                                            className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 w-full"
+                                          >
+                                            {updatingStatus === delivery.assignmentId ? (
+                                              <>
+                                                <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                Processing...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <CheckCircleIcon className="w-4 h-4 mr-2" />
+                                                Mark Delivered
+                                              </>
+                                            )}
+                                          </Button>
+                                          <Button
+                                            onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivery-failed", riderData.rider.userId)}
+                                            disabled={updatingStatus === delivery.assignmentId}
+                                            variant="outline"
+                                            className="border-red-300 text-red-600 hover:bg-red-50 w-full"
+                                          >
+                                            <XCircleIcon className="w-4 h-4 mr-2" />
+                                            Mark Failed
+                                          </Button>
+                                        </div>
 
-                                        {uiStatus === "delivered" && (
+                                        {delivery.delivered && (
                                           <Badge className="bg-green-100 text-green-800">
                                             <CheckCircleIcon className="w-3 h-3 mr-1" />
                                             Delivered
+                                          </Badge>
+                                        )}
+
+                                        {delivery.cancelled && (
+                                          <Badge className="bg-red-100 text-red-800">
+                                            <XCircleIcon className="w-3 h-3 mr-1" />
+                                            Failed
                                           </Badge>
                                         )}
                                       </div>
@@ -954,7 +791,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                   onClick={() => {
                     setShowDeliveryModal(false);
                     setSelectedDelivery(null);
-                    setAmountCollected("");
+                    setPaymentMethod("");
                   }}
                   className="text-[#9a9a9a] hover:text-neutral-800"
                 >
@@ -985,15 +822,17 @@ export const ActiveDeliveries = (): JSX.Element => {
 
                 <div>
                   <Label className="text-sm font-semibold text-neutral-800 mb-2">
-                    Amount Collected (GHC) <span className="text-[#e22420]">*</span>
+                    Payment Method <span className="text-[#e22420]">*</span>
                   </Label>
-                  <Input
-                    type="number"
-                    value={amountCollected}
-                    onChange={(e) => setAmountCollected(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full"
-                  />
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                  >
+                    <option value="">Select payment method</option>
+                    <option value="cash">Cash</option>
+                    <option value="momo">Mobile Money (MoMo)</option>
+                  </select>
                 </div>
 
                 <div className="flex gap-3 pt-4">
@@ -1001,7 +840,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                     onClick={() => {
                       setShowDeliveryModal(false);
                       setSelectedDelivery(null);
-                      setAmountCollected("");
+                      setPaymentMethod("");
                     }}
                     variant="outline"
                     className="flex-1 border border-[#d1d1d1]"
@@ -1010,7 +849,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                   </Button>
                   <Button
                     onClick={handleDeliveryComplete}
-                    disabled={!amountCollected || updatingStatus === selectedDelivery.assignmentId}
+                    disabled={!paymentMethod || updatingStatus === selectedDelivery.assignmentId}
                     className="flex-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                   >
                     {updatingStatus === selectedDelivery.assignmentId ? (

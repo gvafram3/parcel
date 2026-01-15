@@ -38,7 +38,7 @@ const mapAssignmentStatusToUI = (status: AssignmentStatus): UIStatus => {
             return "picked-up";
         case "DELIVERED":
             return "delivered";
-        case "CANCELLED":
+        case "RETURNED":
             return "delivery-failed";
         default:
             return "assigned";
@@ -58,7 +58,7 @@ const mapUIToAssignmentStatus = (uiStatus: UIStatus): AssignmentStatus => {
         case "delivered":
             return "DELIVERED";
         case "delivery-failed":
-            return "CANCELLED";
+            return "RETURNED";
         default:
             return "ASSIGNED";
     }
@@ -182,6 +182,9 @@ export const RiderDashboard = (): JSX.Element => {
         } else if (newUIStatus === "delivery-failed") {
             // Show confirmation modal for failure
             setSelectedAssignment(assignment || null);
+            setPaymentMethod(""); // Reset payment method
+            setFailureReason("");
+            setSelectedFailureReason("");
             setShowFailedModal(true);
             return;
         }
@@ -279,19 +282,28 @@ export const RiderDashboard = (): JSX.Element => {
 
         setUpdatingAssignment(selectedAssignment.assignmentId);
         try {
+            console.log(">>>>>>>>>>>>>>>>>>>>>");
+            console.log(finalReason);
+            // console.log(parcelId);
+            console.log(">>>>>>>>>>>.>>>>>>>>>>");
             const response = await riderService.updateAssignmentStatus(
                 selectedAssignment.assignmentId,
-                "CANCELLED",
+                "RETURNED",
                 undefined, // confirmationCode not needed for CANCELLED
-                finalReason // reason is required for CANCELLED
+                finalReason, // reason is required for RETURNED
+                // parcelId
             );
 
+            console.log(">>>>>>>>>>>.>>>>>>>>>>");
+            console.log(response);
+            console.log(">>>>>>>>>>>.>>>>>>>>>>");
             if (response.success) {
                 showToast("Delivery failure recorded", "success");
                 setShowFailedModal(false);
                 setSelectedAssignment(null);
                 setFailureReason("");
                 setSelectedFailureReason("");
+                setPaymentMethod("");
                 await fetchAssignments(pagination.page, pagination.size);
             } else {
                 showToast(response.message || "Failed to record failure", "error");
@@ -985,6 +997,7 @@ export const RiderDashboard = (): JSX.Element => {
                                         setSelectedAssignment(null);
                                         setFailureReason("");
                                         setSelectedFailureReason("");
+                                        setPaymentMethod("");
                                     }}
                                     className="text-[#9a9a9a] hover:text-neutral-800"
                                 >
@@ -1070,7 +1083,10 @@ export const RiderDashboard = (): JSX.Element => {
                                 </Button>
                                 <Button
                                     onClick={handleDeliveryFailed}
-                                    disabled={(!selectedFailureReason || (selectedFailureReason === "Other" && !failureReason.trim())) || updatingAssignment === selectedAssignment.assignmentId}
+                                    disabled={
+                                        (!selectedFailureReason || (selectedFailureReason === "Other" && !failureReason.trim()))
+                                        || updatingAssignment === selectedAssignment.assignmentId
+                                    }
                                     className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 py-2.5 sm:py-2"
                                 >
                                     {updatingAssignment === selectedAssignment.assignmentId ? (

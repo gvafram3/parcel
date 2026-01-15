@@ -5,7 +5,7 @@ import { API_ENDPOINTS } from '../config/api';
 const API_BASE_URL_RIDER = API_ENDPOINTS.RIDER;
 
 export type RiderStatus = "BUSY" | "OFFLINE" | "READY" | "ON_TRIP";
-export type AssignmentStatus = "ASSIGNED" | "ACCEPTED" | "PICKED_UP" | "DELIVERED" | "CANCELLED";
+export type AssignmentStatus = "ASSIGNED" | "ACCEPTED" | "PICKED_UP" | "DELIVERED" | "RETURNED";
 
 interface RiderStatusRequest {
     riderStatus: RiderStatus;
@@ -341,10 +341,17 @@ class RiderService {
                     requestBody.parcelId = parcelId;
                 }
             }
-
-            // Include cancelationReason only for CANCELLED status
-            if (status === "CANCELLED" && reason) {
-                requestBody.cancelationReason = reason;
+            console.log(">>>>>>>>>>>+++++>>>>>>>>>>");
+            console.log(requestBody);
+            console.log(">>>>>>>>>>>+++++>>>>>>>>>>");
+            // Include fields for RETURNED status
+            if (status === "RETURNED") {
+                if (reason) {
+                    requestBody.cancelationReason = reason;
+                }
+                if (parcelId) {
+                    requestBody.parcelId = parcelId;
+                }
             }
 
             // Use assignmentId in the URL path (API expects assignmentId, not parcelId in URL)
@@ -384,7 +391,9 @@ class RiderService {
         assignmentId: string,
         status: AssignmentStatus,
         confirmationCode?: string,
-        reason?: string
+
+        reason?: string,
+
     ): Promise<ApiResponse> {
         try {
             const requestBody: UpdateAssignmentStatusRequest = {
@@ -395,8 +404,9 @@ class RiderService {
                 requestBody.confirmationCode = confirmationCode;
             }
 
-            if (status === "CANCELLED" && reason) {
+            if (status === "RETURNED" && reason) {
                 requestBody.cancelationReason = reason;
+
             }
 
             const response = await this.apiClient.put<{ message: string }>(

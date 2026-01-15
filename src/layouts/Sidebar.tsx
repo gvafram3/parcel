@@ -29,7 +29,7 @@ const navItems = [
     { label: "Shelf Management", path: "/shelf-management", icon: Layers, roles: ["MANAGER",] },
 
     // Manager Only - Parcel Editing
-    { label: "Edit Parcels", path: "/parcel-edit", icon: Edit, roles: ["MANAGER"] },
+    { label: "Edit Parcels", path: "/parcel-edit", icon: Edit, roles: ["MANAGER", "FRONTDESK"] },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {

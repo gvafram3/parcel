@@ -1,7 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import {
-  CheckCircleIcon,
-  XIcon,
   Loader,
   PackageIcon,
   MapPinIcon,
@@ -9,6 +7,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   UserIcon,
+  CalendarIcon,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -29,11 +28,6 @@ interface ReconciliationParcel {
   paymentMethod?: string | null;
 }
 
-interface AssignmentData {
-  assignmentId: string;
-  totalAmount: number; // Total amount for delivered parcels in this assignment
-}
-
 interface RiderGroup {
   riderId: string;
   riderName: string;
@@ -41,50 +35,42 @@ interface RiderGroup {
   deliveredParcels: ReconciliationParcel[];
   totalDeliveredAmount: number;
   totalDeliveredCount: number;
-  totalParcelsCount: number; // Total parcels (delivered + not delivered)
-  assignmentIds: string[]; // All assignment IDs for this rider
-  assignments: Map<string, AssignmentData>; // Map of assignmentId to assignment data with amounts
+  totalParcelsCount: number;
+  assignmentIds: string[];
 }
 
-export const Reconciliation = (): JSX.Element => {
+export const ReconciliationHistory = (): JSX.Element => {
   const { showToast } = useToast();
   const [rawAssignments, setRawAssignments] = useState<any[]>([]);
-  const [selectedRiders, setSelectedRiders] = useState<Set<string>>(new Set());
   const [expandedRiders, setExpandedRiders] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
-  const [isReconciling, setIsReconciling] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pagination, setPagination] = useState({
-    page: 0,
-    size: 200, // Fetch at least 200 items
-    totalElements: 0,
-    totalPages: 0,
-  });
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
-  // Fetch all parcel assignments with pagination (fetch at least 200)
-  const fetchAssignments = async (page: number = 0, size: number = 200) => {
+  // Fetch reconciliations by date
+  const fetchAssignments = async (date: Date) => {
     setLoading(true);
     try {
-      const response = await frontdeskService.getParcelAssignments(page, size);
+      // Convert date to start of day in milliseconds
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const dateInMillis = startOfDay.getTime();
+
+      console.log('Fetching reconciliation history for date:', startOfDay.toDateString(), 'Millis:', dateInMillis);
+
+      const response = await frontdeskService.getReconciliationsByDate(dateInMillis);
 
       if (response.success && response.data) {
         const data = response.data as any;
-        const allAssignments = data.content || [];
-        console.log('Fetched assignments:', allAssignments.length);
+        const allAssignments = Array.isArray(data) ? data : (data.content || []);
+        console.log('Fetched reconciliation history:', allAssignments.length);
         setRawAssignments(allAssignments);
-        setPagination({
-          page: data.number || 0,
-          size: data.size || size,
-          totalElements: data.totalElements || 0,
-          totalPages: data.totalPages || 0,
-        });
       } else {
-        showToast(response.message || "Failed to load assignments", "error");
+        showToast(response.message || "Failed to load reconciliation history", "error");
         setRawAssignments([]);
       }
     } catch (error) {
-      console.error("Failed to fetch assignments:", error);
-      showToast("Failed to load assignments. Please try again.", "error");
+      console.error("Failed to fetch reconciliation history:", error);
+      showToast("Failed to load reconciliation history. Please try again.", "error");
       setRawAssignments([]);
     } finally {
       setLoading(false);
@@ -92,9 +78,9 @@ export const Reconciliation = (): JSX.Element => {
   };
 
   useEffect(() => {
-    fetchAssignments(pagination.page, pagination.size);
+    fetchAssignments(selectedDate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagination.page, pagination.size]);
+  }, [selectedDate]);
 
   // Group assignments by rider and filter only delivered parcels
   const riderGroups = useMemo(() => {
@@ -115,28 +101,21 @@ export const Reconciliation = (): JSX.Element => {
           totalDeliveredCount: 0,
           totalParcelsCount: 0,
           assignmentIds: [],
-          assignments: new Map<string, AssignmentData>(),
         });
       }
 
       const group = groupsMap.get(riderId)!;
-
-      // Initialize assignment data if not exists
-      if (!group.assignments.has(assignment.assignmentId)) {
-        group.assignments.set(assignment.assignmentId, {
-          assignmentId: assignment.assignmentId,
-          totalAmount: 0,
-        });
+      
+      // Add assignment ID
+      if (!group.assignmentIds.includes(assignment.assignmentId)) {
         group.assignmentIds.push(assignment.assignmentId);
       }
-
-      const assignmentData = group.assignments.get(assignment.assignmentId)!;
 
       // Process parcels array
       if (assignment.parcels && Array.isArray(assignment.parcels)) {
         assignment.parcels.forEach((parcel: any) => {
           group.totalParcelsCount++;
-
+          
           // Only include delivered parcels (not cancelled)
           if (parcel.delivered && !parcel.cancelled) {
             const parcelAmount = parcel.parcelAmount || 0;
@@ -152,7 +131,6 @@ export const Reconciliation = (): JSX.Element => {
               paymentMethod: parcel.paymentMethod,
             });
             group.totalDeliveredAmount += parcelAmount;
-            assignmentData.totalAmount += parcelAmount;
             group.totalDeliveredCount++;
           }
         });
@@ -165,38 +143,14 @@ export const Reconciliation = (): JSX.Element => {
       .sort((a, b) => a.riderName.localeCompare(b.riderName));
   }, [rawAssignments]);
 
-  // Calculate totals for selected riders
-  const selectedRidersData = useMemo(() => {
-    return riderGroups.filter(group => selectedRiders.has(group.riderId));
-  }, [riderGroups, selectedRiders]);
-
+  // Calculate totals
   const totalAmount = useMemo(() => {
-    return selectedRidersData.reduce((sum, group) => sum + group.totalDeliveredAmount, 0);
-  }, [selectedRidersData]);
+    return riderGroups.reduce((sum, group) => sum + group.totalDeliveredAmount, 0);
+  }, [riderGroups]);
 
   const totalParcels = useMemo(() => {
-    return selectedRidersData.reduce((sum, group) => sum + group.totalDeliveredCount, 0);
-  }, [selectedRidersData]);
-
-  const handleToggleRiderSelection = (riderId: string) => {
-    setSelectedRiders(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(riderId)) {
-        newSet.delete(riderId);
-      } else {
-        newSet.add(riderId);
-      }
-      return newSet;
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (selectedRiders.size === riderGroups.length) {
-      setSelectedRiders(new Set());
-    } else {
-      setSelectedRiders(new Set(riderGroups.map(g => g.riderId)));
-    }
-  };
+    return riderGroups.reduce((sum, group) => sum + group.totalDeliveredCount, 0);
+  }, [riderGroups]);
 
   const handleToggleRiderExpansion = (riderId: string) => {
     setExpandedRiders(prev => {
@@ -210,107 +164,100 @@ export const Reconciliation = (): JSX.Element => {
     });
   };
 
-  const handleReconcile = async () => {
-    if (selectedRiders.size === 0) {
-      showToast("Please select at least one rider to reconcile", "error");
-      return;
-    }
-
-    setIsReconciling(true);
-    try {
-      // Build reconciliation payload with assignmentId, reconciledAt, and payedAmount
-      const reconciliationPayload: Array<{
-        assignmentId: string;
-        reconciledAt: number;
-        payedAmount: number;
-      }> = [];
-
-      selectedRidersData.forEach(group => {
-        // For each assignment in the selected rider group
-        group.assignments.forEach((assignmentData) => {
-          // Only include assignments that have delivered parcels (amount > 0)
-          if (assignmentData.totalAmount > 0) {
-            reconciliationPayload.push({
-              assignmentId: assignmentData.assignmentId,
-              reconciledAt: Date.now(), // Current timestamp in milliseconds
-              payedAmount: assignmentData.totalAmount,
-            });
-          }
-        });
-      });
-
-      console.log('Reconciling assignments with payload:', reconciliationPayload);
-      const response = await frontdeskService.reconcileRiderPayments(reconciliationPayload);
-
-      if (response.success) {
-        showToast(`Successfully reconciled ${selectedRiders.size} rider(s) with ${totalParcels} parcel(s)`, "success");
-        setSelectedRiders(new Set());
-        await fetchAssignments(pagination.page, pagination.size);
-        setShowConfirmModal(false);
-      } else {
-        showToast(response.message || "Failed to reconcile assignments", "error");
-      }
-    } catch (error) {
-      console.error("Reconciliation error:", error);
-      showToast("Failed to reconcile assignments. Please try again.", "error");
-    } finally {
-      setIsReconciling(false);
-    }
-  };
-
   return (
-    <div className={`w-full ${showConfirmModal ? "overflow-hidden" : ""}`}>
+    <div className="w-full">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <main className="flex-1 space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">Reconciliation</h1>
-              <p className="text-sm text-gray-600">Approve and reconcile delivered assignments</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">Reconciliation History</h1>
+              <p className="text-sm text-gray-600">View historical reconciliation data by date</p>
             </div>
-            {selectedRiders.size > 0 && (
-              <Badge className="bg-orange-100 text-orange-700 border-orange-200 px-4 py-2 text-base font-semibold">
-                {selectedRiders.size} Rider{selectedRiders.size !== 1 ? 's' : ''} Selected
-              </Badge>
-            )}
           </div>
 
+          {/* Date Filter */}
+          <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <div className="flex-1">
+                  <label htmlFor="reconciliation-history-date" className="block text-sm font-semibold text-neutral-800 mb-2">
+                    Select Date
+                  </label>
+                  <div className="relative">
+                    <CalendarIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      id="reconciliation-history-date"
+                      type="date"
+                      value={selectedDate.toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        const newDate = new Date(e.target.value);
+                        // Set to start of day in local timezone
+                        newDate.setHours(0, 0, 0, 0);
+                        setSelectedDate(newDate);
+                      }}
+                      className="w-full sm:w-auto pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#ea690c] text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => setSelectedDate(new Date())}
+                    variant="outline"
+                    className="border border-gray-300 text-neutral-800 hover:bg-gray-50"
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const yesterday = new Date(selectedDate);
+                      yesterday.setDate(yesterday.getDate() - 1);
+                      setSelectedDate(yesterday);
+                    }}
+                    variant="outline"
+                    className="border border-gray-300 text-neutral-800 hover:bg-gray-50"
+                  >
+                    Previous Day
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const tomorrow = new Date(selectedDate);
+                      tomorrow.setDate(tomorrow.getDate() + 1);
+                      if (tomorrow <= new Date()) {
+                        setSelectedDate(tomorrow);
+                      }
+                    }}
+                    variant="outline"
+                    className="border border-gray-300 text-neutral-800 hover:bg-gray-50"
+                    disabled={new Date(selectedDate).setHours(23, 59, 59, 999) >= new Date().getTime()}
+                  >
+                    Next Day
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                Showing reconciliation history for: <span className="font-semibold text-neutral-800">{selectedDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Summary Card */}
-          {selectedRiders.size > 0 && (
+          {riderGroups.length > 0 && (
             <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
               <CardContent className="p-4 sm:p-6">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Riders Selected</p>
-                      <p className="text-2xl font-bold text-[#ea690c]">{selectedRiders.size}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Delivered Parcels</p>
-                      <p className="text-2xl font-bold text-blue-600">{totalParcels}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Total Amount</p>
-                      <p className="text-2xl font-bold text-green-600">{formatCurrency(totalAmount)}</p>
-                    </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Total Riders</p>
+                    <p className="text-2xl font-bold text-[#ea690c]">{riderGroups.length}</p>
                   </div>
-                  <Button
-                    onClick={() => setShowConfirmModal(true)}
-                    disabled={selectedRiders.size === 0 || isReconciling}
-                    className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                  >
-                    {isReconciling ? (
-                      <>
-                        <Loader className="w-4 h-4 animate-spin mr-2" />
-                        Reconciling...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircleIcon className="w-4 h-4 mr-2" />
-                        Reconcile Selected
-                      </>
-                    )}
-                  </Button>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Delivered Parcels</p>
+                    <p className="text-2xl font-bold text-blue-600">{totalParcels}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Total Amount</p>
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totalAmount)}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -322,14 +269,14 @@ export const Reconciliation = (): JSX.Element => {
               {loading ? (
                 <div className="text-center py-12">
                   <Loader className="w-10 h-10 text-[#ea690c] mx-auto mb-4 animate-spin" />
-                  <p className="text-neutral-700 font-semibold text-lg">Loading assignments...</p>
+                  <p className="text-neutral-700 font-semibold text-lg">Loading reconciliation history...</p>
                 </div>
               ) : riderGroups.length === 0 ? (
                 <div className="text-center py-12">
                   <PackageIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-neutral-800 font-semibold text-lg mb-2">No assignments to reconcile</p>
+                  <p className="text-neutral-800 font-semibold text-lg mb-2">No reconciliation data found</p>
                   <p className="text-sm text-gray-500">
-                    Delivered assignments will appear here for reconciliation
+                    No delivered assignments found for the selected date
                   </p>
                 </div>
               ) : (
@@ -337,14 +284,6 @@ export const Reconciliation = (): JSX.Element => {
                   <table className="w-full border-collapse">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={selectedRiders.size === riderGroups.length && riderGroups.length > 0}
-                            onChange={handleSelectAll}
-                            className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
-                          />
-                        </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Rider</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivered Parcels</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Total Amount</th>
@@ -353,7 +292,6 @@ export const Reconciliation = (): JSX.Element => {
                     </thead>
                     <tbody className="bg-white">
                       {riderGroups.map((group, groupIndex) => {
-                        const isSelected = selectedRiders.has(group.riderId);
                         const isExpanded = expandedRiders.has(group.riderId);
 
                         return (
@@ -361,16 +299,8 @@ export const Reconciliation = (): JSX.Element => {
                             {/* Rider Group Header Row */}
                             <tr
                               key={group.riderId}
-                              className={`hover:bg-gray-50 transition-colors ${groupIndex !== riderGroups.length - 1 ? 'border-b border-gray-200' : ''} ${isSelected ? 'bg-orange-50' : ''}`}
+                              className={`hover:bg-gray-50 transition-colors ${groupIndex !== riderGroups.length - 1 ? 'border-b border-gray-200' : ''}`}
                             >
-                              <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => handleToggleRiderSelection(group.riderId)}
-                                  className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
-                                />
-                              </td>
                               <td className="px-4 py-4 border-r border-gray-100">
                                 <div className="flex items-center gap-2">
                                   <button
@@ -418,7 +348,7 @@ export const Reconciliation = (): JSX.Element => {
                             {/* Expanded Parcels Rows */}
                             {isExpanded && (
                               <tr>
-                                <td colSpan={5} className="px-0 py-0">
+                                <td colSpan={4} className="px-0 py-0">
                                   <div className="bg-gray-50 border-t border-gray-200">
                                     <table className="w-full">
                                       <thead className="bg-gray-100">
@@ -510,133 +440,10 @@ export const Reconciliation = (): JSX.Element => {
                   </table>
                 </div>
               )}
-
-              {/* Pagination */}
-              {!loading && pagination.totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-[#d1d1d1] flex items-center justify-between">
-                  <div className="text-sm text-neutral-700">
-                    Showing {pagination.page * pagination.size + 1} to {Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)} of {pagination.totalElements} total assignments
-                    {riderGroups.length > 0 && (
-                      <span className="ml-2 text-gray-500">
-                        ({riderGroups.length} riders with delivered parcels)
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => {
-                        setPagination(prev => ({ ...prev, page: prev.page - 1 }));
-                      }}
-                      disabled={pagination.page === 0 || loading}
-                      variant="outline"
-                      size="sm"
-                      className="border border-[#d1d1d1]"
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        setPagination(prev => ({ ...prev, page: prev.page + 1 }));
-                      }}
-                      disabled={pagination.page >= pagination.totalPages - 1 || loading}
-                      variant="outline"
-                      size="sm"
-                      className="border border-[#d1d1d1]"
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
         </main>
       </div>
-
-      {/* Confirm Reconciliation Modal */}
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-2xl rounded-lg border border-[#d1d1d1] bg-white shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="inline-flex items-center gap-2">
-                  <CheckCircleIcon className="w-6 h-6 text-[#ea690c]" />
-                  <h2 className="font-body-lg-semibold font-[number:var(--body-lg-semibold-font-weight)] text-[#ea690c] text-[length:var(--body-lg-semibold-font-size)]">
-                    Confirm Reconciliation
-                  </h2>
-                </div>
-                <button
-                  onClick={() => setShowConfirmModal(false)}
-                  className="text-[#9a9a9a] hover:text-neutral-800"
-                >
-                  <XIcon className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm font-semibold text-blue-900 mb-2">
-                    You are about to reconcile {selectedRiders.size} rider(s)
-                  </p>
-                  <div className="grid grid-cols-2 gap-4 mt-2">
-                    <p className="text-sm text-blue-800">
-                      Total Parcels: <span className="font-bold">{totalParcels}</span>
-                    </p>
-                    <p className="text-sm text-blue-800">
-                      Total Amount: <span className="font-bold">{formatCurrency(totalAmount)}</span>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Rider</th>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700">Parcels</th>
-                        <th className="px-3 py-2 text-right font-semibold text-gray-700">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedRidersData.map((group) => (
-                        <tr key={group.riderId} className="border-b border-gray-100">
-                          <td className="px-3 py-2 font-semibold">{group.riderName}</td>
-                          <td className="px-3 py-2">{group.totalDeliveredCount} delivered</td>
-                          <td className="px-3 py-2 text-right font-semibold">{formatCurrency(group.totalDeliveredAmount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowConfirmModal(false)}
-                    className="flex-1 border border-[#d1d1d1]"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleReconcile}
-                    disabled={isReconciling}
-                    className="flex-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                  >
-                    {isReconciling ? (
-                      <>
-                        <Loader className="w-4 h-4 animate-spin mr-2" />
-                        Reconciling...
-                      </>
-                    ) : (
-                      "Confirm Reconciliation"
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 };
