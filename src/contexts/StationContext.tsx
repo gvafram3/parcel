@@ -71,21 +71,20 @@ const normalizeRole = (role: string): UserRole => {
 };
 
 export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    // Initialize user synchronously from auth service to prevent redirect on refresh
-    const initializeUser = (): User | null => {
+    const [currentStation, setCurrentStation] = useState<Station | null>(null);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+
+    // Initialize from auth service on mount
+    useEffect(() => {
         const userData = authService.getUser();
         if (userData) {
             console.log("Initializing user from storage:", userData);
-            return {
+            setCurrentUser({
                 ...userData,
                 role: normalizeRole(userData.role),
-            };
+            });
         }
-        return null;
-    };
-
-    const [currentStation, setCurrentStation] = useState<Station | null>(null);
-    const [currentUser, setCurrentUser] = useState<User | null>(initializeUser);
+    }, []);
 
     const handleSetStation = (station: Station | null) => {
         setCurrentStation(station);

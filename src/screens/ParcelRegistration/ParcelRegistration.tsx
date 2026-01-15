@@ -22,9 +22,6 @@ interface ParcelFormData {
   shelfName?: string; // Stores shelf name for display
   itemValue: number;
   pickUpCost?: number;
-  homeDelivery?: boolean;
-  deliveryCost?: number;
-  hasCalled?: boolean;
 }
 
 const STORAGE_KEY_PARCELS = "parcel_registration_parcels";
@@ -152,11 +149,8 @@ export const ParcelRegistration = (): JSX.Element => {
     }
   };
 
-  const handleSaveAll = async (additionalParcel?: ParcelFormData) => {
-    // Combine existing parcels with additional parcel if provided
-    const parcelsToSave = additionalParcel ? [...parcels, additionalParcel] : parcels;
-
-    if (parcelsToSave.length === 0) {
+  const handleSaveAll = async () => {
+    if (parcels.length === 0) {
       showToast("No parcels to save", "warning");
       return;
     }
@@ -171,11 +165,14 @@ export const ParcelRegistration = (): JSX.Element => {
     }
 
     // Validate required fields for each parcel
-    const invalidParcels = parcelsToSave.filter(p =>
+    const invalidParcels = parcels.filter(p =>
       !p.recipientName ||
       !p.recipientPhone ||
       !p.shelfLocation ||
-      (p.homeDelivery && (!p.deliveryCost || p.deliveryCost === undefined))
+      !p.driverName ||
+      !p.driverPhone ||
+      !p.vehicleNumber ||
+      p.pickUpCost === undefined
     );
 
     if (invalidParcels.length > 0) {
@@ -187,7 +184,7 @@ export const ParcelRegistration = (): JSX.Element => {
 
     try {
       // Save all parcels to backend API
-      const savePromises = parcelsToSave.map(async (parcelData) => {
+      const savePromises = parcels.map(async (parcelData) => {
         const parcelRequest = {
           senderName: parcelData.senderName || undefined,
           senderPhoneNumber: parcelData.senderPhone || "", // API requires this field
@@ -195,16 +192,15 @@ export const ParcelRegistration = (): JSX.Element => {
           receiverAddress: parcelData.receiverAddress || undefined,
           recieverPhoneNumber: parcelData.recipientPhone, // Note: API has typo "reciever"
           parcelDescription: parcelData.itemDescription || undefined,
-          driverName: parcelData.driverName || "",
-          driverPhoneNumber: parcelData.driverPhone || "",
+          driverName: parcelData.driverName!,
+          driverPhoneNumber: parcelData.driverPhone!,
           inboundCost: parcelData.itemValue > 0 ? parcelData.itemValue : undefined,
-          pickUpCost: 0, // Default to 0
-          deliveryCost: parcelData.deliveryCost || undefined,
+          pickUpCost: parcelData.pickUpCost || 0,
+          deliveryCost: undefined,
           storageCost: undefined,
           shelfNumber: parcelData.shelfLocation, // shelfLocation now contains shelf ID
-          hasCalled: parcelData.hasCalled || false,
-          homeDelivery: parcelData.homeDelivery || false,
-          vehicleNumber: parcelData.vehicleNumber || "",
+          hasCalled: false,
+          vehicleNumber: parcelData.vehicleNumber!,
           officeId: officeId,
           pod: false,
           delivered: false,
@@ -226,7 +222,7 @@ export const ParcelRegistration = (): JSX.Element => {
         return;
       }
 
-      const parcelCount = parcelsToSave.length;
+      const parcelCount = parcels.length;
       const driverInfo = sessionDriver?.driverName
         ? ` for driver ${sessionDriver.driverName}`
         : "";
@@ -277,11 +273,19 @@ export const ParcelRegistration = (): JSX.Element => {
   };
 
   return (
-    <div className="w-full min-h-screen">
-      <div className="mx-auto max-w-6xl w-full px-4 py-4 sm:px-6 lg:px-8">
+    <div className="w-full bg-gray-50 min-h-screen">
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* Header */}
+        {/* <div className="mb-8">
+          <h1 className="text-3xl font-bold text-neutral-800">Parcel Registration</h1>
+          <p className="text-sm text-[#5d5d5d] mt-2">
+            {currentStation?.name} - Register new parcels for processing
+          </p>
+        </div> */}
+
         {/* Session Banner - Only show if there's an active session */}
         {sessionDriver && parcels.length > 0 && (
-          <Card className="mb-4 border-blue-200 bg-gradient-to-r from-blue-50 to-blue-100">
+          <Card className="mb-6 border-blue-200 bg-gradient-to-r from-blue-50 to-blue-100">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -346,7 +350,6 @@ export const ParcelRegistration = (): JSX.Element => {
           </div>
         )}
 
-        {/* Content Area */}
         <InfoSection
           parcels={parcels}
           sessionDriver={sessionDriver}

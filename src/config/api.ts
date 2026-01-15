@@ -10,7 +10,6 @@ export const API_ENDPOINTS = {
     ADMIN: `${API_BASE_URL}/api-admin`,
     PARCEL: `${API_BASE_URL}/api-parcel`,
     FRONTDESK: `${API_BASE_URL}/api-frontdesk`,
-    RIDER: `${API_BASE_URL}/api-rider`,
     OFFICES: `${API_BASE_URL}/api/offices`,
 };
 

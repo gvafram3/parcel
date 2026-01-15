@@ -9,11 +9,14 @@ import {
     UserIcon,
     AlertCircleIcon,
     X,
+    Calendar,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
 import { formatPhoneNumber, formatCurrency } from "../../utils/dataHelpers";
 import { ParcelResponse, RiderResponse } from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
@@ -140,7 +143,8 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
 export const ParcelSelection = (): JSX.Element => {
     const { showToast } = useToast();
     const { currentUser } = useStation();
-    const [readyParcels, setReadyParcels] = useState<ParcelResponse[]>([]);
+    const [allParcels, setAllParcels] = useState<ParcelResponse[]>([]);
+    const [filteredParcels, setFilteredParcels] = useState<ParcelResponse[]>([]);
     const [loading, setLoading] = useState(false);
     const [selectedParcels, setSelectedParcels] = useState<Set<string>>(new Set());
     const [showRiderModal, setShowRiderModal] = useState(false);
@@ -148,6 +152,32 @@ export const ParcelSelection = (): JSX.Element => {
     const [loadingRiders, setLoadingRiders] = useState(false);
     const [selectedRider, setSelectedRider] = useState<string | null>(null);
     const [isAssigning, setIsAssigning] = useState(false);
+    const [selectedDate, setSelectedDate] = useState<string>("");
+
+    // Helper function to get today's date in YYYY-MM-DD format
+    const getTodayDate = (): string => {
+        const today = new Date();
+        return today.toISOString().split('T')[0];
+    };
+
+    // Helper function to convert timestamp to YYYY-MM-DD format
+    const formatDateFromTimestamp = (timestamp: number | null | undefined): string => {
+        if (!timestamp) {
+            return getTodayDate(); // Default to today if timestamp is missing
+        }
+        const date = new Date(timestamp);
+        return date.toISOString().split('T')[0];
+    };
+
+    // Filter parcels by selected date
+    const filterParcelsByDate = (parcels: ParcelResponse[], dateString: string): ParcelResponse[] => {
+        if (!dateString) return parcels;
+
+        return parcels.filter((parcel) => {
+            const parcelDate = formatDateFromTimestamp(parcel.createdAt);
+            return parcelDate === dateString;
+        });
+    };
 
     // Load home delivery parcels on mount
     useEffect(() => {
@@ -161,16 +191,26 @@ export const ParcelSelection = (): JSX.Element => {
                     const parcels = Array.isArray(response.data)
                         ? response.data as ParcelResponse[]
                         : [];
-                    // Backend already returns filtered parcels, use them directly
-                    setReadyParcels(parcels);
+
+                    // Filter out parcels with undefined createdAt
+                    const validParcels = parcels.filter(p => p.createdAt);
+
+                    setAllParcels(validParcels);
+
+                    // Initialize with today's date
+                    const today = getTodayDate();
+                    setSelectedDate(today);
+                    setFilteredParcels(filterParcelsByDate(validParcels, today));
                 } else {
                     showToast(response.message || "Failed to load parcels", "error");
-                    setReadyParcels([]); // Ensure it's always an array
+                    setAllParcels([]);
+                    setFilteredParcels([]);
                 }
             } catch (error) {
                 console.error("Failed to fetch home delivery parcels:", error);
                 showToast("Failed to load parcels. Please try again.", "error");
-                setReadyParcels([]); // Ensure it's always an array
+                setAllParcels([]);
+                setFilteredParcels([]);
             } finally {
                 setLoading(false);
             }
@@ -178,6 +218,31 @@ export const ParcelSelection = (): JSX.Element => {
 
         fetchHomeDeliveryParcels();
     }, [showToast]);
+
+    // Handle date change
+    const handleDateChange = (newDate: string) => {
+        setSelectedDate(newDate);
+        setFilteredParcels(filterParcelsByDate(allParcels, newDate));
+        // Clear selections when date changes
+        setSelectedParcels(new Set());
+    };
+
+    // Get unique dates from parcels
+    const getUniqueDates = (): string[] => {
+        const dates = new Set<string>();
+        allParcels.forEach((parcel) => {
+            if (parcel.createdAt) { // Add null check
+                const dateStr = formatDateFromTimestamp(parcel.createdAt);
+                dates.add(dateStr);
+            }
+        });
+        return Array.from(dates).sort().reverse();
+    };
+
+    const uniqueDates = getUniqueDates();
+    const parcelCountByDate = (dateString: string): number => {
+        return filterParcelsByDate(allParcels, dateString).length;
+    };
 
     const toggleParcel = (parcelId: string) => {
         const newSelected = new Set(selectedParcels);
@@ -242,14 +307,15 @@ export const ParcelSelection = (): JSX.Element => {
                 // Refresh parcels to update the list
                 const refreshResponse = await frontdeskService.getHomeDeliveryParcels();
                 if (refreshResponse.success && refreshResponse.data) {
-                    // Ensure data is an array
                     const parcels = Array.isArray(refreshResponse.data)
                         ? refreshResponse.data as ParcelResponse[]
                         : [];
-                    // Backend already returns filtered parcels, use them directly
-                    setReadyParcels(parcels);
+                    setAllParcels(parcels);
+                    // Re-filter with current selected date
+                    setFilteredParcels(filterParcelsByDate(parcels, selectedDate));
                 } else {
-                    setReadyParcels([]); // Ensure it's always an array
+                    setAllParcels([]);
+                    setFilteredParcels([]);
                 }
             } else {
                 showToast(response.message || "Failed to assign parcels. Please try again.", "error");
@@ -269,19 +335,42 @@ export const ParcelSelection = (): JSX.Element => {
             <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <main className="flex-1 space-y-6">
                     {/* Header */}
-                    <div>
-                        <h1 className="text-2xl font-bold text-neutral-800">Parcel Assignment</h1>
-                        <p className="text-sm text-[#5d5d5d] mt-1">
-                            Select parcels with home delivery requests and assign them to a rider
-                        </p>
-                    </div>
+
+
+                    {/* Date Filter */}
+                    <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+                        <CardContent className="p-4">
+                            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+                                <div className="flex-1">
+                                    <Label className="block text-xs font-semibold text-[#5d5d5d] mb-2">Select Date</Label>
+                                    <Input
+                                        type="date"
+                                        value={selectedDate}
+                                        onChange={(e) => handleDateChange(e.target.value)}
+                                        className="w-full border border-[#d1d1d1]"
+                                        max={getTodayDate()}
+                                    />
+                                </div>
+                                <Button
+                                    onClick={() => {
+                                        const today = getTodayDate();
+                                        handleDateChange(today);
+                                    }}
+                                    className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 w-full sm:w-auto"
+                                >
+                                    Today
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
 
                     {/* Banner */}
                     <div className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
                         <p className="[font-family:'Lato',Helvetica] font-normal text-blue-800 text-sm">
-                            <span className="font-semibold">{selectedParcels.size} Parcel(s) Selected</span>
+                            <span className="font-semibold">{filteredParcels.length} Parcel(s)</span> available for
+                            <span className="font-semibold ml-1">{selectedDate ? new Date(selectedDate).toLocaleDateString() : 'selected date'}</span>
                             {" - "}
-                            10 maximum parcels can be selected and assigned to a rider at once.
+                            <span className="font-semibold">{selectedParcels.size}</span> selected
                         </p>
                     </div>
 
@@ -291,7 +380,7 @@ export const ParcelSelection = (): JSX.Element => {
                             <div className="flex items-center gap-2">
                                 <TruckIcon className="w-5 h-5 text-[#ea690c]" />
                                 <span className="text-sm font-medium text-neutral-700">
-                                    {readyParcels.length} parcel{readyParcels.length !== 1 ? 's' : ''} ready for home delivery
+                                    {filteredParcels.length} parcel{filteredParcels.length !== 1 ? 's' : ''} ready for assignment
                                 </span>
                             </div>
 
@@ -315,19 +404,25 @@ export const ParcelSelection = (): JSX.Element => {
                                 <p className="text-neutral-700 font-medium">Loading parcels...</p>
                             </CardContent>
                         </Card>
-                    ) : readyParcels.length === 0 ? (
+                    ) : filteredParcels.length === 0 ? (
                         <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
                             <CardContent className="p-12 text-center">
                                 <PackageIcon className="w-16 h-16 text-[#9a9a9a] mx-auto mb-4 opacity-50" />
-                                <p className="text-neutral-700 font-medium">No parcels ready for assignment</p>
+                                <p className="text-neutral-700 font-medium">
+                                    {allParcels.length === 0
+                                        ? "No parcels ready for assignment"
+                                        : `No parcels for ${new Date(selectedDate).toLocaleDateString()}`}
+                                </p>
                                 <p className="text-sm text-[#5d5d5d] mt-2">
-                                    Parcels will appear here once customers are contacted and request home delivery
+                                    {allParcels.length === 0
+                                        ? "Parcels will appear here once customers are contacted and request home delivery"
+                                        : "Try selecting a different date"}
                                 </p>
                             </CardContent>
                         </Card>
-                    ) : Array.isArray(readyParcels) && readyParcels.length > 0 ? (
+                    ) : Array.isArray(filteredParcels) && filteredParcels.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {readyParcels.map((parcel) => (
+                            {filteredParcels.map((parcel) => (
                                 <ParcelCard
                                     key={parcel.parcelId}
                                     parcel={parcel}
@@ -340,9 +435,9 @@ export const ParcelSelection = (): JSX.Element => {
                         <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
                             <CardContent className="p-12 text-center">
                                 <PackageIcon className="w-16 h-16 text-[#9a9a9a] mx-auto mb-4 opacity-50" />
-                                <p className="text-neutral-700 font-medium">No parcels ready for assignment</p>
+                                <p className="text-neutral-700 font-medium">No parcels available</p>
                                 <p className="text-sm text-[#5d5d5d] mt-2">
-                                    Parcels will appear here once customers are contacted and request home delivery
+                                    Try selecting a different date
                                 </p>
                             </CardContent>
                         </Card>
