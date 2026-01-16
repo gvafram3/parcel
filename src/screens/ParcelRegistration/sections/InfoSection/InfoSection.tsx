@@ -4,7 +4,7 @@ import {
   InboxIcon,
   UploadIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "../../../../components/ui/button";
 import { Card, CardContent } from "../../../../components/ui/card";
 import { Input } from "../../../../components/ui/input";
@@ -50,13 +50,45 @@ interface FormData {
   additionalInfo?: string;
 }
 
+// Minimal ParcelFormData (matches ParcelRegistration)
+interface ParcelFormData {
+  driverName?: string;
+  driverPhone?: string;
+  vehicleNumber?: string;
+  senderName?: string;
+  senderPhone?: string;
+  recipientName: string;
+  recipientPhone: string;
+  receiverAddress?: string;
+  itemDescription?: string;
+  shelfLocation: string;
+  shelfName?: string;
+  itemValue: number;
+  pickUpCost?: number;
+  homeDelivery?: boolean;
+  deliveryCost?: number;
+  hasCalled?: boolean;
+}
+
 interface InfoSectionProps {
+  // compatibility with single-parcel save flow
+  parcels?: ParcelFormData[];
+  sessionDriver?: { driverName?: string; driverPhone?: string; vehicleNumber?: string } | null;
+  onAddParcel?: (data: ParcelFormData) => void;
+  onSaveAll?: (additionalParcel?: ParcelFormData) => Promise<any>;
+  onRemoveParcel?: (index: number) => void;
+  isSaving?: boolean;
+
+  // existing flow
   onNext?: () => void;
   onStartSession?: (driverName: string, vehicleNumber: string) => void;
   onUpdateFormData?: (data: Partial<FormData>) => void;
   driverName?: string;
   vehicleNumber?: string;
   formData?: Partial<FormData>;
+
+  // NEW: reset trigger from parent
+  resetTrigger?: number;
 }
 
 export const InfoSection = ({
@@ -65,7 +97,15 @@ export const InfoSection = ({
   onUpdateFormData,
   driverName,
   vehicleNumber,
-  formData = {}
+  formData = {},
+  // parcel flow props (optional)
+  parcels,
+  sessionDriver,
+  onAddParcel,
+  onSaveAll,
+  onRemoveParcel,
+  isSaving,
+  resetTrigger = 0,
 }: InfoSectionProps): JSX.Element => {
   const [showingDriverSelection, setShowingDriverSelection] = useState(!driverName);
   const [formDriverName, setFormDriverName] = useState(driverName || "");
@@ -78,6 +118,20 @@ export const InfoSection = ({
   const [receiverAddress, setReceiverAddress] = useState(formData.receiverAddress || "");
   const [additionalInfo, setAdditionalInfo] = useState(formData.additionalInfo || "");
 
+  // Reset all form fields (including driver) when parent bumps resetTrigger
+  useEffect(() => {
+    setFormDriverName("");
+    setFormVehicleNumber("");
+    setShowingDriverSelection(true);
+
+    setSenderName("");
+    setSenderPhone("");
+    setReceiverName("");
+    setReceiverPhone("");
+    setReceiverAddress("");
+    setAdditionalInfo("");
+  }, [resetTrigger]);
+
   const handleContinueDriverSelection = () => {
     if (formDriverName.trim() && formVehicleNumber.trim() && onStartSession) {
       onStartSession(formDriverName, formVehicleNumber);
@@ -87,15 +141,53 @@ export const InfoSection = ({
 
   const handleContinueParcelInfo = () => {
     if (senderName.trim() && senderPhone.trim() && receiverName.trim() && receiverPhone.trim()) {
-      onUpdateFormData?.({
+      const formPayload = {
         senderName,
         senderPhone,
         receiverName,
         receiverPhone,
         receiverAddress,
         additionalInfo,
-      });
-      onNext?.();
+      };
+
+      // If parent expects a ParcelFormData (ParcelRegistration flow), construct and send it
+      if (onAddParcel) {
+        const parcelData: ParcelFormData = {
+          driverName: formDriverName || sessionDriver?.driverName || undefined,
+          driverPhone: undefined,
+          vehicleNumber: formVehicleNumber || sessionDriver?.vehicleNumber || undefined,
+          senderName: senderName || undefined,
+          senderPhone: senderPhone || undefined,
+          recipientName: receiverName,
+          recipientPhone: receiverPhone,
+          receiverAddress: receiverAddress || undefined,
+          itemDescription: additionalInfo || undefined,
+          shelfLocation: "", // left empty; parent or UI should collect actual shelf
+          shelfName: undefined,
+          itemValue: 0, // default; parent should update if needed
+          pickUpCost: undefined,
+          homeDelivery: false,
+          deliveryCost: undefined,
+          hasCalled: false,
+        };
+
+        onAddParcel(parcelData);
+        // also notify update for any parent that uses formData flow
+        onUpdateFormData?.(formPayload);
+      } else {
+        // Existing behavior for onNext/onUpdateFormData flow
+        onUpdateFormData?.(formPayload);
+        onNext?.();
+      }
+
+      // Clear local parcel inputs after submit
+      setSenderName("");
+      setSenderPhone("");
+      setReceiverName("");
+      setReceiverPhone("");
+      setReceiverAddress("");
+      setAdditionalInfo("");
+      // keep driver selection state as-is unless resetTrigger triggers a full reset
     }
   };
 
@@ -106,16 +198,14 @@ export const InfoSection = ({
           <header className="inline-flex items-center gap-2">
             <InboxIcon className="w-6 h-6 text-[#ea690c]" />
             <h1 className="font-body-lg-semibold font-[number:var(--body-lg-semibold-font-weight)] text-[#ea690c] text-[length:var(--body-lg-semibold-font-size)] tracking-[var(--body-lg-semibold-letter-spacing)] leading-[var(--body-lg-semibold-line-height)] [font-style:var(--body-lg-semibold-font-style)]">
-              Driver Information
+              Driver Informationsss
             </h1>
           </header>
-
           <div className="flex flex-col items-start gap-4 w-full">
             <section className="flex flex-col items-start gap-4 w-full">
               <h2 className="font-body-lg-semibold font-[number:var(--body-lg-semibold-font-weight)] text-[#5d5d5d] text-[length:var(--body-lg-semibold-font-size)] tracking-[var(--body-lg-semibold-letter-spacing)] leading-[var(--body-lg-semibold-line-height)] [font-style:var(--body-lg-semibold-font-style)]">
                 Enter Driver Details
               </h2>
-
               <div className="grid w-full gap-4 sm:grid-cols-2 sm:gap-6">
                 <div className="flex flex-col flex-1 items-start gap-2">
                   <div className="flex items-center gap-1.5">
@@ -156,7 +246,6 @@ export const InfoSection = ({
               </div>
             </section>
           </div>
-
           <nav className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
             <Button
               onClick={handleContinueDriverSelection}

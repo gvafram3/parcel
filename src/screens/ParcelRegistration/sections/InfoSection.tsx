@@ -264,20 +264,32 @@ export const InfoSection = ({
         // Note: Fields are cleared by parent component on successful save
         // Do not clear fields here to preserve data on error
         onSaveAll(parcelData);
+        setRecipientName("");
+        setPhoneNumber("");
+        setReceiverAddress("");
+        setSenderName("");
+        setSenderPhone("");
+        setItemDescription("");
+        setShelf("");
+        setItemValue("");
+        setHomeDelivery(false);
+        setDeliveryCost("");
+        setSpecialNotes("");
+        setPhoneError("");
     };
 
     // Check if driver fields are filled (considering locked state)
     const currentDriverName = isDriverLocked ? sessionDriver?.driverName : driverName.trim();
     const currentDriverPhone = isDriverLocked ? sessionDriver?.driverPhone : driverPhone.trim();
     const currentVehicleNumber = isDriverLocked ? sessionDriver?.vehicleNumber : vehicleNumber.trim();
-    const isFormValid = 
-        currentDriverName && 
-        currentDriverPhone && 
-        currentVehicleNumber && 
-        recipientName.trim() && 
-        phoneNumber.trim() && 
-        shelf.trim() && 
-        !phoneError && 
+    const isFormValid =
+        currentDriverName &&
+        currentDriverPhone &&
+        currentVehicleNumber &&
+        recipientName.trim() &&
+        phoneNumber.trim() &&
+        shelf.trim() &&
+        !phoneError &&
         (!homeDelivery || (deliveryCost && parseFloat(deliveryCost) > 0));
 
     return (

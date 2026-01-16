@@ -622,6 +622,7 @@ export const ParcelRegistration = (): JSX.Element => {
       setParcels([]);
       setSessionDriver(null);
       setIsSaved(true);
+
       localStorage.removeItem(STORAGE_KEY_PARCELS);
       localStorage.removeItem(STORAGE_KEY_SESSION_DRIVER);
     } catch (error: any) {
