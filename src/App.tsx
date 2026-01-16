@@ -176,7 +176,7 @@ export const App = (): JSX.Element => {
                       <Route
                         path="/reconciliation-history"
                         element={
-                          <ProtectedRoute allowedRoles={["MANAGER",]}>
+                          <ProtectedRoute allowedRoles={["MANAGER"]}>
                             <MainLayout>
                               <ReconciliationHistory />
                             </MainLayout>
