@@ -27,6 +27,7 @@ interface StationContextType {
     userRole: UserRole | null;
     isAuthenticated: boolean;
     isAdmin: boolean;
+    isLoading: boolean; // Add loading state
 }
 
 const StationContext = createContext<StationContextType | undefined>(undefined);
@@ -73,6 +74,7 @@ const normalizeRole = (role: string): UserRole => {
 export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [currentStation, setCurrentStation] = useState<Station | null>(null);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
 
     // Initialize from auth service on mount
     useEffect(() => {
@@ -84,6 +86,8 @@ export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 role: normalizeRole(userData.role),
             });
         }
+        // Mark loading as complete after checking auth
+        setIsLoading(false);
     }, []);
 
     const handleSetStation = (station: Station | null) => {
@@ -127,6 +131,7 @@ export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 userRole: currentUser?.role || null,
                 isAuthenticated: currentUser !== null,
                 isAdmin,
+                isLoading,
             }}
         >
             {children}

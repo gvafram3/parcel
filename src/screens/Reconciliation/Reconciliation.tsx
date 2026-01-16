@@ -13,7 +13,7 @@ import {
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
-import { formatPhoneNumber, formatCurrency } from "../../utils/dataHelpers";
+import { formatPhoneNumber, formatCurrency, formatDateTime } from "../../utils/dataHelpers";
 import frontdeskService from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
 
@@ -23,9 +23,14 @@ interface ReconciliationParcel {
   receiverName?: string;
   receiverPhoneNumber?: string;
   receiverAddress?: string;
+  senderName?: string | null;
+  senderPhoneNumber?: string;
   parcelAmount: number;
+  deliveryCost?: number;
+  inboundCost?: number;
   delivered: boolean;
   cancelled: boolean;
+  returned?: boolean;
   paymentMethod?: string | null;
 }
 
@@ -35,14 +40,18 @@ interface AssignmentData {
 }
 
 interface RiderGroup {
+  assignmentId: string; // Use assignmentId as unique key instead of riderId
   riderId: string;
   riderName: string;
   riderPhoneNumber?: string;
+  assignedAt?: number; // Timestamp for the assignment date
+  amount: number; // Total amount from assignment (for payedAmount in reconciliation)
+  deliveryCost: number; // Total delivery cost (driver's money)
+  inboundCost: number; // Total inbound cost (driver's money)
   deliveredParcels: ReconciliationParcel[];
   totalDeliveredAmount: number;
   totalDeliveredCount: number;
   totalParcelsCount: number; // Total parcels (delivered + not delivered)
-  assignmentIds: string[]; // All assignment IDs for this rider
   assignments: Map<string, AssignmentData>; // Map of assignmentId to assignment data with amounts
 }
 
@@ -54,6 +63,8 @@ export const Reconciliation = (): JSX.Element => {
   const [loading, setLoading] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [selectedParcel, setSelectedParcel] = useState<ReconciliationParcel | null>(null);
+  const [showParcelDetailsModal, setShowParcelDetailsModal] = useState(false);
   const [pagination, setPagination] = useState({
     page: 0,
     size: 200, // Fetch at least 200 items
@@ -96,41 +107,52 @@ export const Reconciliation = (): JSX.Element => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.size]);
 
-  // Group assignments by rider and filter only delivered parcels
+  // Group assignments by assignmentId (don't merge same rider's assignments)
   const riderGroups = useMemo(() => {
     const groupsMap = new Map<string, RiderGroup>();
 
     rawAssignments.forEach((assignment: any) => {
+      const assignmentId = assignment.assignmentId;
+      if (!assignmentId) return; // Skip if no assignmentId
+
       const riderId = assignment.riderInfo?.riderId || assignment.riderId || 'unknown';
       const riderName = assignment.riderInfo?.riderName || assignment.riderName || 'Unknown Rider';
       const riderPhoneNumber = assignment.riderInfo?.riderPhoneNumber || assignment.riderPhoneNumber;
+      const assignedAt = assignment.assignedAt;
+      const assignmentAmount = assignment.amount || 0;
+      const assignmentDeliveryCost = assignment.deliveryCost || 0;
+      const assignmentInboundCost = assignment.inboundCost || 0;
 
-      if (!groupsMap.has(riderId)) {
-        groupsMap.set(riderId, {
+      // Create a unique group for each assignment (not merged by rider)
+      if (!groupsMap.has(assignmentId)) {
+        groupsMap.set(assignmentId, {
+          assignmentId,
           riderId,
           riderName,
           riderPhoneNumber,
+          assignedAt,
+          amount: assignmentAmount,
+          deliveryCost: assignmentDeliveryCost,
+          inboundCost: assignmentInboundCost,
           deliveredParcels: [],
           totalDeliveredAmount: 0,
           totalDeliveredCount: 0,
           totalParcelsCount: 0,
-          assignmentIds: [],
           assignments: new Map<string, AssignmentData>(),
         });
       }
 
-      const group = groupsMap.get(riderId)!;
+      const group = groupsMap.get(assignmentId)!;
 
       // Initialize assignment data if not exists
-      if (!group.assignments.has(assignment.assignmentId)) {
-        group.assignments.set(assignment.assignmentId, {
-          assignmentId: assignment.assignmentId,
+      if (!group.assignments.has(assignmentId)) {
+        group.assignments.set(assignmentId, {
+          assignmentId: assignmentId,
           totalAmount: 0,
         });
-        group.assignmentIds.push(assignment.assignmentId);
       }
 
-      const assignmentData = group.assignments.get(assignment.assignmentId)!;
+      const assignmentData = group.assignments.get(assignmentId)!;
 
       // Process parcels array
       if (assignment.parcels && Array.isArray(assignment.parcels)) {
@@ -146,9 +168,14 @@ export const Reconciliation = (): JSX.Element => {
               receiverName: parcel.receiverName,
               receiverPhoneNumber: parcel.receiverPhoneNumber,
               receiverAddress: parcel.receiverAddress,
+              senderName: parcel.senderName,
+              senderPhoneNumber: parcel.senderPhoneNumber,
               parcelAmount,
+              deliveryCost: parcel.deliveryCost,
+              inboundCost: parcel.inboundCost,
               delivered: true,
               cancelled: false,
+              returned: parcel.returned || false,
               paymentMethod: parcel.paymentMethod,
             });
             group.totalDeliveredAmount += parcelAmount;
@@ -159,15 +186,23 @@ export const Reconciliation = (): JSX.Element => {
       }
     });
 
-    // Filter out riders with no delivered parcels and sort by rider name
+    // Filter out assignments with no delivered parcels and sort by rider name, then by assigned date (newest first)
     return Array.from(groupsMap.values())
       .filter(group => group.deliveredParcels.length > 0)
-      .sort((a, b) => a.riderName.localeCompare(b.riderName));
+      .sort((a, b) => {
+        // Sort by rider name first, then by assigned date (newest first)
+        if (a.riderName !== b.riderName) {
+          return a.riderName.localeCompare(b.riderName);
+        }
+        const dateA = a.assignedAt || 0;
+        const dateB = b.assignedAt || 0;
+        return dateB - dateA; // Newest first
+      });
   }, [rawAssignments]);
 
-  // Calculate totals for selected riders
+  // Calculate totals for selected assignments
   const selectedRidersData = useMemo(() => {
-    return riderGroups.filter(group => selectedRiders.has(group.riderId));
+    return riderGroups.filter(group => selectedRiders.has(group.assignmentId));
   }, [riderGroups, selectedRiders]);
 
   const totalAmount = useMemo(() => {
@@ -194,7 +229,7 @@ export const Reconciliation = (): JSX.Element => {
     if (selectedRiders.size === riderGroups.length) {
       setSelectedRiders(new Set());
     } else {
-      setSelectedRiders(new Set(riderGroups.map(g => g.riderId)));
+      setSelectedRiders(new Set(riderGroups.map(g => g.assignmentId)));
     }
   };
 
@@ -226,17 +261,14 @@ export const Reconciliation = (): JSX.Element => {
       }> = [];
 
       selectedRidersData.forEach(group => {
-        // For each assignment in the selected rider group
-        group.assignments.forEach((assignmentData) => {
-          // Only include assignments that have delivered parcels (amount > 0)
-          if (assignmentData.totalAmount > 0) {
-            reconciliationPayload.push({
-              assignmentId: assignmentData.assignmentId,
-              reconciledAt: Date.now(), // Current timestamp in milliseconds
-              payedAmount: assignmentData.totalAmount,
-            });
-          }
-        });
+        // Use assignmentId and amount from the group (assignment level)
+        if (group.amount > 0) {
+          reconciliationPayload.push({
+            assignmentId: group.assignmentId,
+            reconciledAt: Date.now(), // Current timestamp in milliseconds
+            payedAmount: group.amount, // Use assignment.amount
+          });
+        }
       });
 
       console.log('Reconciling assignments with payload:', reconciliationPayload);
@@ -348,33 +380,34 @@ export const Reconciliation = (): JSX.Element => {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Rider</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivered Parcels</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Total Amount</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Stats</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivery Cost</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Inbound Cost</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
                       {riderGroups.map((group, groupIndex) => {
-                        const isSelected = selectedRiders.has(group.riderId);
-                        const isExpanded = expandedRiders.has(group.riderId);
+                        const isSelected = selectedRiders.has(group.assignmentId);
+                        const isExpanded = expandedRiders.has(group.assignmentId);
 
                         return (
                           <>
                             {/* Rider Group Header Row */}
                             <tr
-                              key={group.riderId}
+                              key={group.assignmentId}
                               className={`hover:bg-gray-50 transition-colors ${groupIndex !== riderGroups.length - 1 ? 'border-b border-gray-200' : ''} ${isSelected ? 'bg-orange-50' : ''}`}
                             >
                               <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
-                                  onChange={() => handleToggleRiderSelection(group.riderId)}
+                                  onChange={() => handleToggleRiderSelection(group.assignmentId)}
                                   className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
                                 />
                               </td>
                               <td className="px-4 py-4 border-r border-gray-100">
                                 <div className="flex items-center gap-2">
                                   <button
-                                    onClick={() => handleToggleRiderExpansion(group.riderId)}
+                                    onClick={() => handleToggleRiderExpansion(group.assignmentId)}
                                     className="text-gray-500 hover:text-gray-700"
                                   >
                                     {isExpanded ? (
@@ -389,9 +422,9 @@ export const Reconciliation = (): JSX.Element => {
                                       <div className="text-sm font-semibold text-neutral-800">
                                         {group.riderName}
                                       </div>
-                                      {group.riderPhoneNumber && (
+                                      {group.assignedAt && (
                                         <div className="text-xs text-gray-500">
-                                          {formatPhoneNumber(group.riderPhoneNumber)}
+                                          {formatDateTime(new Date(group.assignedAt).toISOString())}
                                         </div>
                                       )}
                                     </div>
@@ -409,16 +442,21 @@ export const Reconciliation = (): JSX.Element => {
                                   {formatCurrency(group.totalDeliveredAmount)}
                                 </div>
                               </td>
+                              <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                <div className="text-sm font-bold text-green-600">
+                                  {formatCurrency(group.deliveryCost)}
+                                </div>
+                              </td>
                               <td className="px-4 py-4 whitespace-nowrap">
-                                <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
-                                  {group.totalDeliveredCount} Delivered
-                                </Badge>
+                                <div className="text-sm font-bold text-blue-600">
+                                  {formatCurrency(group.inboundCost)}
+                                </div>
                               </td>
                             </tr>
                             {/* Expanded Parcels Rows */}
                             {isExpanded && (
                               <tr>
-                                <td colSpan={5} className="px-0 py-0">
+                                <td colSpan={6} className="px-0 py-0">
                                   <div className="bg-gray-50 border-t border-gray-200">
                                     <table className="w-full">
                                       <thead className="bg-gray-100">
@@ -429,6 +467,7 @@ export const Reconciliation = (): JSX.Element => {
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Amount</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Payment</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Actions</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Details</th>
                                         </tr>
                                       </thead>
                                       <tbody>
@@ -484,16 +523,31 @@ export const Reconciliation = (): JSX.Element => {
                                               </Badge>
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap">
-                                              {parcel.receiverPhoneNumber && (
-                                                <Button
-                                                  onClick={() => window.location.href = `tel:${parcel.receiverPhoneNumber}`}
-                                                  variant="outline"
-                                                  className="border-green-300 text-green-600 hover:bg-green-50 text-xs px-2.5 py-1.5"
-                                                  title={`Call ${parcel.receiverName || 'recipient'}`}
-                                                >
-                                                  <Phone className="w-3.5 h-3.5" />
-                                                </Button>
-                                              )}
+                                              <div className="flex items-center gap-2">
+                                                {parcel.receiverPhoneNumber && (
+                                                  <Button
+                                                    onClick={() => window.location.href = `tel:${parcel.receiverPhoneNumber}`}
+                                                    variant="outline"
+                                                    className="border-green-300 text-green-600 hover:bg-green-50 text-xs px-2.5 py-1.5"
+                                                    title={`Call ${parcel.receiverName || 'recipient'}`}
+                                                  >
+                                                    <Phone className="w-3.5 h-3.5" />
+                                                  </Button>
+                                                )}
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                              <Button
+                                                onClick={() => {
+                                                  setSelectedParcel(parcel);
+                                                  setShowParcelDetailsModal(true);
+                                                }}
+                                                variant="outline"
+                                                className="border-blue-300 text-blue-600 hover:bg-blue-50 text-xs px-2.5 py-1.5"
+                                                title="View parcel details"
+                                              >
+                                                View Details
+                                              </Button>
                                             </td>
                                           </tr>
                                         ))}
@@ -599,7 +653,7 @@ export const Reconciliation = (): JSX.Element => {
                     </thead>
                     <tbody>
                       {selectedRidersData.map((group) => (
-                        <tr key={group.riderId} className="border-b border-gray-100">
+                        <tr key={group.assignmentId} className="border-b border-gray-100">
                           <td className="px-3 py-2 font-semibold">{group.riderName}</td>
                           <td className="px-3 py-2">{group.totalDeliveredCount} delivered</td>
                           <td className="px-3 py-2 text-right font-semibold">{formatCurrency(group.totalDeliveredAmount)}</td>
@@ -631,6 +685,181 @@ export const Reconciliation = (): JSX.Element => {
                       "Confirm Reconciliation"
                     )}
                   </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Parcel Details Modal */}
+      {showParcelDetailsModal && selectedParcel && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl border border-[#d1d1d1] bg-white shadow-lg max-h-[90vh] overflow-y-auto">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-bold text-neutral-800">Parcel Details</h3>
+                <button
+                  onClick={() => {
+                    setShowParcelDetailsModal(false);
+                    setSelectedParcel(null);
+                  }}
+                  className="text-[#9a9a9a] hover:text-neutral-800"
+                >
+                  <XIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="flex items-center gap-3 pb-4 border-b border-gray-200">
+                  <Badge className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 text-sm font-semibold px-3 py-1 shadow-sm">
+                    {selectedParcel.parcelId}
+                  </Badge>
+                  <Badge className={`${selectedParcel.delivered ? 'bg-green-100 text-green-800' : selectedParcel.cancelled ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'} border text-xs`}>
+                    {selectedParcel.delivered ? 'Delivered' : selectedParcel.cancelled ? 'Cancelled' : 'Pending'}
+                  </Badge>
+                  {selectedParcel.returned && (
+                    <Badge className="bg-orange-100 text-orange-800 border text-xs">
+                      Returned
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Recipient Information */}
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
+                    <UserIcon className="w-4 h-4" />
+                    Recipient Information
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Name</p>
+                      <p className="text-sm font-semibold text-neutral-800">{selectedParcel.receiverName || "N/A"}</p>
+                    </div>
+                    {selectedParcel.receiverPhoneNumber && (
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Phone</p>
+                        <a
+                          href={`tel:${selectedParcel.receiverPhoneNumber}`}
+                          className="text-sm font-semibold text-[#ea690c] hover:underline"
+                        >
+                          {formatPhoneNumber(selectedParcel.receiverPhoneNumber)}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Delivery Address */}
+                {selectedParcel.receiverAddress && (
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <h4 className="text-sm font-bold text-green-900 mb-3 flex items-center gap-2">
+                      <MapPinIcon className="w-4 h-4" />
+                      Delivery Address
+                    </h4>
+                    <p className="text-sm text-neutral-800">
+                      {selectedParcel.receiverAddress}
+                    </p>
+                  </div>
+                )}
+
+                {/* Sender Information */}
+                {(selectedParcel.senderName || selectedParcel.senderPhoneNumber) && (
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h4 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      <UserIcon className="w-4 h-4" />
+                      Sender Information
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {selectedParcel.senderName && (
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Name</p>
+                          <p className="text-sm font-semibold text-neutral-800">{selectedParcel.senderName}</p>
+                        </div>
+                      )}
+                      {selectedParcel.senderPhoneNumber && (
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Phone</p>
+                          <a
+                            href={`tel:${selectedParcel.senderPhoneNumber}`}
+                            className="text-sm font-semibold text-[#ea690c] hover:underline"
+                          >
+                            {formatPhoneNumber(selectedParcel.senderPhoneNumber)}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Item Description */}
+                {selectedParcel.parcelDescription && (
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <h4 className="text-sm font-bold text-gray-900 mb-2">Item Description</h4>
+                    <p className="text-sm text-neutral-800">{selectedParcel.parcelDescription}</p>
+                  </div>
+                )}
+
+                {/* Amount Breakdown */}
+                <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
+                  <h4 className="text-sm font-bold text-orange-900 mb-3 flex items-center gap-2">
+                    <PackageIcon className="w-4 h-4" />
+                    Amount Breakdown
+                  </h4>
+                  <div className="space-y-3 bg-white/60 rounded-lg p-4">
+                    {/* Inbound Cost - Always shown */}
+                    <div className="flex justify-between items-center py-2 border-b border-orange-100">
+                      <div>
+                        <span className="text-sm font-semibold text-gray-700 block">Inbound Cost</span>
+                        <span className="text-xs text-gray-500">(Driver's money)</span>
+                      </div>
+                      <span className="text-base font-bold text-blue-600">
+                        {formatCurrency(selectedParcel.inboundCost || 0)}
+                      </span>
+                    </div>
+                    {/* Delivery Cost - Always shown */}
+                    <div className="flex justify-between items-center py-2 border-b border-orange-100">
+                      <div>
+                        <span className="text-sm font-semibold text-gray-700 block">Delivery Cost</span>
+                        <span className="text-xs text-gray-500">(Driver's money)</span>
+                      </div>
+                      <span className="text-base font-bold text-green-600">
+                        {formatCurrency(selectedParcel.deliveryCost || 0)}
+                      </span>
+                    </div>
+                    {/* Total Amount */}
+                    <div className="flex justify-between items-center pt-2">
+                      <span className="text-base font-bold text-orange-900">Total Parcel Amount:</span>
+                      <span className="text-xl font-bold text-[#ea690c]">
+                        {formatCurrency(selectedParcel.parcelAmount)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Information */}
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h4 className="text-sm font-bold text-gray-900 mb-3">Payment Information</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-600">Payment Method:</span>
+                      <Badge className={`${selectedParcel.paymentMethod === 'cash' ? 'bg-green-100 text-green-800' : selectedParcel.paymentMethod === 'momo' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'} border text-xs`}>
+                        {selectedParcel.paymentMethod || 'N/A'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-600">Status:</span>
+                      <Badge className={`${selectedParcel.delivered ? 'bg-green-100 text-green-800' : selectedParcel.cancelled ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'} border text-xs`}>
+                        {selectedParcel.delivered ? 'Delivered' : selectedParcel.cancelled ? 'Cancelled' : 'Pending'}
+                      </Badge>
+                      {selectedParcel.returned && (
+                        <Badge className="bg-orange-100 text-orange-800 border text-xs">
+                          Returned
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>

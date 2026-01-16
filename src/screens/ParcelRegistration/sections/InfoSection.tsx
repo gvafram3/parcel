@@ -91,6 +91,29 @@ export const InfoSection = ({
         }
     }, [sessionDriver]);
 
+    // Clear form fields after successful save (when parcels and sessionDriver are cleared)
+    useEffect(() => {
+        if (parcels.length === 0 && !sessionDriver) {
+            // Successful save completed - clear all form fields
+            setRecipientName("");
+            setPhoneNumber("");
+            setReceiverAddress("");
+            setSenderName("");
+            setSenderPhone("");
+            setItemDescription("");
+            setShelf("");
+            setItemValue("");
+            setHomeDelivery(false);
+            setDeliveryCost("");
+            setSpecialNotes("");
+            setPhoneError("");
+            setDriverName("");
+            setDriverPhone("");
+            setVehicleNumber("");
+            setIsDriverLocked(false);
+        }
+    }, [parcels.length, sessionDriver]);
+
     const handlePhoneChange = (input: string) => {
         // Allow digits only, up to 10 digits (can start with 0)
         const digits = input.replace(/\D/g, "").substring(0, 10);
@@ -105,16 +128,31 @@ export const InfoSection = ({
     };
 
     const validateForm = (): boolean => {
+        // Validate required driver fields
+        const currentDriverName = isDriverLocked ? sessionDriver?.driverName : driverName.trim();
+        const currentDriverPhone = isDriverLocked ? sessionDriver?.driverPhone : driverPhone.trim();
+        const currentVehicleNumber = isDriverLocked ? sessionDriver?.vehicleNumber : vehicleNumber.trim();
+
+        if (!currentDriverName || !currentVehicleNumber) {
+            setPhoneError("Driver Name and Vehicle Number are required");
+            return false;
+        }
+        if (!currentDriverPhone) {
+            setPhoneError("Driver Phone is required");
+            return false;
+        }
+        if (!validatePhoneNumber(currentDriverPhone)) {
+            setPhoneError("Invalid driver phone number format. Use 0XXXXXXXXX or XXXXXXXXX");
+            return false;
+        }
+
+        // Validate recipient fields
         if (!recipientName.trim() || !phoneNumber.trim() || !shelf.trim()) {
+            setPhoneError("Recipient Name, Phone, and Shelf Location are required");
             return false;
         }
         if (!validatePhoneNumber(phoneNumber)) {
             setPhoneError("Invalid phone number format. Use 0XXXXXXXXX or XXXXXXXXX");
-            return false;
-        }
-        // Validate driver phone format if provided
-        if (driverPhone.trim() && !validatePhoneNumber(driverPhone)) {
-            setPhoneError("Invalid driver phone number format. Use 0XXXXXXXXX or XXXXXXXXX");
             return false;
         }
         // Validate sender phone if sender name is provided
@@ -223,29 +261,24 @@ export const InfoSection = ({
         };
 
         // Save all parcels (including current form data)
+        // Note: Fields are cleared by parent component on successful save
+        // Do not clear fields here to preserve data on error
         onSaveAll(parcelData);
-
-        // Clear form after saving
-        setRecipientName("");
-        setPhoneNumber("");
-        setReceiverAddress("");
-        setSenderName("");
-        setSenderPhone("");
-        setItemDescription("");
-        setShelf("");
-        setItemValue("");
-        setHomeDelivery(false);
-        setDeliveryCost("");
-        setSpecialNotes("");
-        setPhoneError("");
-
-        // If driver was locked, unlock it after saving
-        if (isDriverLocked) {
-            setIsDriverLocked(false);
-        }
     };
 
-    const isFormValid = recipientName.trim() && phoneNumber.trim() && shelf.trim() && !phoneError && (!homeDelivery || (deliveryCost && parseFloat(deliveryCost) > 0));
+    // Check if driver fields are filled (considering locked state)
+    const currentDriverName = isDriverLocked ? sessionDriver?.driverName : driverName.trim();
+    const currentDriverPhone = isDriverLocked ? sessionDriver?.driverPhone : driverPhone.trim();
+    const currentVehicleNumber = isDriverLocked ? sessionDriver?.vehicleNumber : vehicleNumber.trim();
+    const isFormValid = 
+        currentDriverName && 
+        currentDriverPhone && 
+        currentVehicleNumber && 
+        recipientName.trim() && 
+        phoneNumber.trim() && 
+        shelf.trim() && 
+        !phoneError && 
+        (!homeDelivery || (deliveryCost && parseFloat(deliveryCost) > 0));
 
     return (
         <div className="space-y-4 pb-6">
@@ -350,9 +383,12 @@ export const InfoSection = ({
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="flex flex-col gap-2">
-                                    <Label className="text-sm font-semibold text-neutral-800">
-                                        Driver Name
-                                    </Label>
+                                    <div className="flex items-center gap-1">
+                                        <Label className="text-sm font-semibold text-neutral-800">
+                                            Driver Name
+                                        </Label>
+                                        <span className="text-sm font-semibold text-[#e22420]">*</span>
+                                    </div>
                                     <Input
                                         type="text"
                                         value={driverName}
@@ -360,6 +396,7 @@ export const InfoSection = ({
                                         placeholder="Enter driver name"
                                         className="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
                                         disabled={isDriverLocked}
+                                        required
                                     />
                                     {isDriverLocked && (
                                         <p className="text-xs text-blue-600">
@@ -369,9 +406,12 @@ export const InfoSection = ({
                                 </div>
 
                                 <div className="flex flex-col gap-2">
-                                    <Label className="text-sm font-semibold text-neutral-800">
-                                        Driver Phone
-                                    </Label>
+                                    <div className="flex items-center gap-1">
+                                        <Label className="text-sm font-semibold text-neutral-800">
+                                            Driver Phone
+                                        </Label>
+                                        <span className="text-sm font-semibold text-[#e22420]">*</span>
+                                    </div>
                                     <div className="relative">
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
                                             +233
@@ -391,14 +431,18 @@ export const InfoSection = ({
                                             className="pl-14 pr-3 w-full rounded-lg border border-[#d1d1d1] bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c] disabled:opacity-50 disabled:cursor-not-allowed"
                                             maxLength={10}
                                             disabled={isDriverLocked}
+                                            required
                                         />
                                     </div>
                                 </div>
 
                                 <div className="flex flex-col gap-2">
-                                    <Label className="text-sm font-semibold text-neutral-800">
-                                        Vehicle Number
-                                    </Label>
+                                    <div className="flex items-center gap-1">
+                                        <Label className="text-sm font-semibold text-neutral-800">
+                                            Vehicle Number
+                                        </Label>
+                                        <span className="text-sm font-semibold text-[#e22420]">*</span>
+                                    </div>
                                     <Input
                                         type="text"
                                         value={vehicleNumber}
@@ -406,6 +450,7 @@ export const InfoSection = ({
                                         placeholder="GR-123-24"
                                         className="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
                                         disabled={isDriverLocked}
+                                        required
                                     />
                                 </div>
                             </div>

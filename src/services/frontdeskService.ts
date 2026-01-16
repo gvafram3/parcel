@@ -507,6 +507,7 @@ class FrontdeskService {
             const response = await this.apiClient.get(`/reconciliations/by-date?date=${dateInMillis}`);
             return {
                 success: true,
+                message: 'Reconciliations retrieved successfully',
                 data: response.data,
             };
         } catch (error: any) {
@@ -521,20 +522,35 @@ class FrontdeskService {
     /**
      * Reconcile rider payments (manual payment)
      * Expects array of objects with: { assignmentId, reconciledAt, payedAmount }
+     * Note: API expects strings for payedAmount and reconciledAt (as shown in Postman)
+     * If array has one item, sends as single object; if multiple, sends as array
      */
     async reconcileRiderPayments(reconciliationData: Array<{
         assignmentId: string;
-        reconciledAt: number;
-        payedAmount: number;
+        reconciledAt: number | string;
+        payedAmount: number | string;
     }>): Promise<ApiResponse> {
         try {
-            const response = await this.apiClient.post<{ message: string }>('/reconcilation-parcels', reconciliationData);
+            // Convert to format expected by API (strings for payedAmount and reconciledAt)
+            const formattedData = reconciliationData.map(item => ({
+                assignmentId: item.assignmentId,
+                reconciledAt: String(item.reconciledAt),
+                payedAmount: String(item.payedAmount),
+            }));
+
+            // If only one item, send as single object (matching Postman format)
+            // Otherwise send as array
+            const payload = formattedData.length === 1 ? formattedData[0] : formattedData;
+
+            console.log('Sending reconciliation payload:', payload);
+            const response = await this.apiClient.post<{ message: string }>('/reconcilation-parcels', payload);
             return {
                 success: true,
                 message: response.data.message || 'Reconciliation completed successfully',
             };
         } catch (error: any) {
             console.error('Reconcile payments error:', error);
+            console.error('Error details:', error.response?.data);
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to reconcile payments. Please try again.',

@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useStation } from "../contexts/StationContext";
+import { Loader } from "lucide-react";
 
 interface ProtectedRouteProps {
     children: React.ReactNode;
@@ -7,7 +8,16 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-    const { isAuthenticated, userRole } = useStation();
+    const { isAuthenticated, userRole, isLoading } = useStation();
+
+    // Wait for auth check to complete before redirecting
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <Loader className="w-8 h-8 text-[#ea690c] animate-spin" />
+            </div>
+        );
+    }
 
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;

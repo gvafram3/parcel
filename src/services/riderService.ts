@@ -41,6 +41,7 @@ interface RiderParcelResponse {
     pod?: boolean;
     delivered?: boolean;
     cancelled?: boolean;
+    returned?: boolean;
     parcelAssigned?: boolean;
     fragile?: boolean;
 }
@@ -69,8 +70,9 @@ interface UpdateAssignmentStatusRequest {
     status: AssignmentStatus;
     confirmationCode?: string;
     cancelationReason?: string;
+    returnReason?: string; // For ASSIGNED status when marking as failed
     payementMethod?: string; // For DELIVERED status: "cash" or "momo"
-    parcelId?: string; // For DELIVERED status: the parcel ID
+    parcelId?: string; // For DELIVERED and ASSIGNED (failed) status: the parcel ID
 }
 
 interface ApiResponse {
@@ -196,6 +198,7 @@ class RiderService {
                     pod: parcelItem.POD || parcelItem.pod,
                     delivered: parcelItem.delivered || parcelItem.payed || false,
                     cancelled: parcelItem.cancelled || false,
+                    returned: parcelItem.returned || false,
                     parcelAssigned: parcelItem.parcelAssigned,
                     fragile: parcelItem.fragile,
                     inboudPayed: parcelItem.inboudPayed || parcelItem.payed,
@@ -347,7 +350,7 @@ class RiderService {
             // Include fields for RETURNED status
             if (status === "RETURNED") {
                 if (reason) {
-                    requestBody.cancelationReason = reason;
+                    requestBody.returnReason = reason; // Use returnReason instead of cancelationReason
                 }
                 if (parcelId) {
                     requestBody.parcelId = parcelId;

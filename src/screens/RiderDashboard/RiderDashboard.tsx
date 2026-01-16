@@ -282,21 +282,25 @@ export const RiderDashboard = (): JSX.Element => {
 
         setUpdatingAssignment(selectedAssignment.assignmentId);
         try {
-            console.log(">>>>>>>>>>>>>>>>>>>>>");
-            console.log(finalReason);
-            // console.log(parcelId);
-            console.log(">>>>>>>>>>>.>>>>>>>>>>");
+            const assignmentId = selectedAssignment.assignmentId;
+            const parcelId = selectedAssignment.parcel.parcelId;
+
+            // Log the payload for debugging
+            console.log('=== Marking Parcel as Failed ===');
+            console.log('Assignment ID:', assignmentId);
+            console.log('Parcel ID:', parcelId);
+            console.log('Return Reason:', finalReason);
+            console.log('Status: RETURNED');
+
             const response = await riderService.updateAssignmentStatus(
-                selectedAssignment.assignmentId,
-                "RETURNED",
-                undefined, // confirmationCode not needed for CANCELLED
-                finalReason, // reason is required for RETURNED
-                // parcelId
+                assignmentId,
+                "RETURNED", // Status should be RETURNED when marking as failed
+                undefined, // confirmationCode not needed
+                finalReason, // returnReason is required
+                undefined, // paymentMethod not needed
+                parcelId // parcelId is required
             );
 
-            console.log(">>>>>>>>>>>.>>>>>>>>>>");
-            console.log(response);
-            console.log(">>>>>>>>>>>.>>>>>>>>>>");
             if (response.success) {
                 showToast("Delivery failure recorded", "success");
                 setShowFailedModal(false);
@@ -323,9 +327,10 @@ export const RiderDashboard = (): JSX.Element => {
         const filtered = assignments.filter(a => {
             const isDelivered = !!a.parcel?.delivered;
             const isCancelled = !!a.parcel?.cancelled;
-            const isActive = !isDelivered && !isCancelled;
+            const isReturned = !!a.parcel?.returned;
+            const isActive = !isDelivered && !isCancelled && !isReturned;
             if (!isActive) {
-                console.log('Filtered out assignment:', a.assignmentId, 'parcel delivered:', a.parcel?.delivered, 'parcel cancelled:', a.parcel?.cancelled);
+                console.log('Filtered out assignment:', a.assignmentId, 'parcel delivered:', a.parcel?.delivered, 'parcel cancelled:', a.parcel?.cancelled, 'parcel returned:', a.parcel?.returned);
             }
             return isActive;
         });

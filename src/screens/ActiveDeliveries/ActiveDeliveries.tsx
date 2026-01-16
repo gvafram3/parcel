@@ -95,8 +95,8 @@ export const ActiveDeliveries = (): JSX.Element => {
           // Process parcels array
           if (assignment.parcels && Array.isArray(assignment.parcels)) {
             assignment.parcels.forEach((parcel: any) => {
-              // Only include parcels where delivered === false AND cancelled === false
-              if (parcel.delivered === false && parcel.cancelled === false) {
+              // Only include parcels where delivered === false AND returned === false
+              if (parcel.delivered === false && parcel.returned === false) {
                 // Initialize rider if not exists
                 if (!ridersMap.has(assignmentRiderId)) {
                   ridersMap.set(assignmentRiderId, {
@@ -720,7 +720,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                                         )}
 
                                         {/* Show Mark Delivered and Mark Failed for all active deliveries */}
-                                        <div className="flex flex-col gap-2 w-full">
+                                        {/* <div className="flex flex-col gap-2 w-full">
                                           <Button
                                             onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivered", riderData.rider.userId)}
                                             disabled={updatingStatus === delivery.assignmentId}
@@ -747,7 +747,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                                             <XCircleIcon className="w-4 h-4 mr-2" />
                                             Mark Failed
                                           </Button>
-                                        </div>
+                                        </div> */}
 
                                         {delivery.delivered && (
                                           <Badge className="bg-green-100 text-green-800">
