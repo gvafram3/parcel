@@ -44,7 +44,7 @@ export const Login = (): JSX.Element => {
           navigate("/admin/stations", { replace: true });
           return;
         } else if (userRole === "RIDER") {
-          navigate("/active-deliveries", { replace: true });
+          navigate("/rider/dashboard", { replace: true });
         } else if (userRole === "CALLER") {
           navigate("/call-center", { replace: true });
         } else {
@@ -138,7 +138,7 @@ export const Login = (): JSX.Element => {
             console.log("Navigate to admin dashboard");
             navigate("/admin/stations", { replace: true });
           } else if (normalizedRole === "RIDER") {
-            navigate("/active-deliveries", { replace: true });
+            navigate("/rider/dashboard", { replace: true });
           } else if (normalizedRole === "CALLER") {
             navigate("/call-center", { replace: true });
           } else {
