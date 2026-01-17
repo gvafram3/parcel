@@ -16,12 +16,12 @@ export const ParcelSearch = (): JSX.Element => {
     const { currentStation, currentUser, userRole } = useStation();
     const { shelves, loadShelves } = useShelf();
     const { showToast } = useToast();
-    const { 
-        parcels, 
-        loading, 
-        pagination, 
-        loadParcelsIfNeeded, 
-        refreshParcels 
+    const {
+        parcels,
+        loading,
+        pagination,
+        loadParcelsIfNeeded,
+        refreshParcels
     } = useFrontdeskParcel();
     const [searchParams, setSearchParams] = useState({
         recipientName: "",
@@ -38,6 +38,19 @@ export const ParcelSearch = (): JSX.Element => {
     const [selectedParcel, setSelectedParcel] = useState<ParcelResponse | null>(null);
     const [editingShelf, setEditingShelf] = useState(false);
     const [newShelfLocation, setNewShelfLocation] = useState("");
+    const [markPickupLoading, setMarkPickupLoading] = useState(false);
+
+    // NEW helper: determine human status label including pickup/hasCalled
+    const getStatusLabel = (p: ParcelResponse): string => {
+        // Priority: Delivered > Picked Up > POD > Assigned > Called > Registered
+        if (p.delivered) return "Delivered";
+        if (p.pickedUp) return "Picked Up";
+        if (p.pod) return "POD";
+        if (p.parcelAssigned) return "Assigned";
+        if (p.hasCalled) return "Called";
+        return "Registered";
+    };
+
     // Load parcels on mount - only show loading UI if no cache exists
     useEffect(() => {
         const hasCache = parcels.length > 0;
@@ -49,7 +62,7 @@ export const ParcelSearch = (): JSX.Element => {
     useEffect(() => {
         const userData = authService.getUser();
         const officeId = (userData as any)?.office?.id;
-        
+
         if (officeId) {
             loadShelves(officeId);
         } else if (currentStation && userRole === "ADMIN") {
@@ -68,24 +81,24 @@ export const ParcelSearch = (): JSX.Element => {
             filtered = filtered.filter((p) => {
                 // Check parcel ID
                 if (p.parcelId?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 // Check recipient name
                 if (p.receiverName?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 // Check sender name
                 if (p.senderName?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 // Check phone numbers (handles various formats)
                 if (phoneMatchesSearch(p.recieverPhoneNumber, searchTerm)) return true;
                 if (phoneMatchesSearch(p.senderPhoneNumber, searchTerm)) return true;
                 if (phoneMatchesSearch(p.driverPhoneNumber, searchTerm)) return true;
-                
+
                 // Check driver name
                 if (p.driverName?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 // Check parcel description
                 if (p.parcelDescription?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 return false;
             });
         }
@@ -167,7 +180,7 @@ export const ParcelSearch = (): JSX.Element => {
             // Find shelf ID from shelves list if we're using shelf name
             const selectedShelf = shelves.find(s => s.name === newShelfLocation);
             const shelfIdToUpdate = selectedShelf?.id || newShelfLocation;
-            
+
             const response = await frontdeskService.updateParcel(selectedParcel.parcelId, {
                 shelfNumber: shelfIdToUpdate,
             });
@@ -187,6 +200,34 @@ export const ParcelSearch = (): JSX.Element => {
         }
     };
 
+    const handleMarkPickedUp = async () => {
+        if (!selectedParcel) return;
+        setMarkPickupLoading(true);
+        try {
+            const parcelId = selectedParcel.parcelId;
+            const response = await frontdeskService.updateParcel(parcelId, {
+                hasCalled: true,
+                pickedUp: true,
+            });
+
+            if (response.success) {
+                showToast("Parcel marked as picked up", "success");
+
+                // Refresh parcels and update selectedParcel with fresh data if available
+                await refreshParcels({}, pagination.page, pagination.size);
+                const refreshed = parcels.find((p) => p.parcelId === parcelId) || null;
+                setSelectedParcel(refreshed);
+            } else {
+                showToast(response.message || "Failed to update parcel status", "error");
+            }
+        } catch (error) {
+            console.error("Failed to mark parcel picked up:", error);
+            showToast("Failed to update parcel. Please try again.", "error");
+        } finally {
+            setMarkPickupLoading(false);
+        }
+    };
+
     const handleExport = () => {
         const headers = [
             "Parcel ID",
@@ -199,15 +240,8 @@ export const ParcelSearch = (): JSX.Element => {
             "Pick Up Cost",
         ];
         const rows = filteredParcels.map((p) => {
-            // Determine status from API fields
-            let statusLabel = "Registered";
-            if (p.delivered) {
-                statusLabel = "Delivered";
-            } else if (p.parcelAssigned) {
-                statusLabel = "Assigned";
-            } else if (p.pod) {
-                statusLabel = "POD";
-            }
+            // Use new helper to determine status
+            const statusLabel = getStatusLabel(p);
 
             return [
                 p.parcelId,
@@ -274,21 +308,20 @@ export const ParcelSearch = (): JSX.Element => {
                                 <Button
                                     onClick={() => setShowFilters(!showFilters)}
                                     variant={showFilters ? "default" : "outline"}
-                                    className={`flex items-center gap-2 ${
-                                        showFilters ? "bg-[#ea690c] text-white" : "border border-[#d1d1d1]"
-                                    }`}
+                                    className={`flex items-center gap-2 ${showFilters ? "bg-[#ea690c] text-white" : "border border-[#d1d1d1]"
+                                        }`}
                                 >
                                     <FilterIcon size={18} />
                                     <span className="hidden sm:inline">{showFilters ? "Hide" : "Show"} Filters</span>
                                 </Button>
                                 <Button
-                            onClick={handleExport}
-                            size="sm"
-                            className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2 h-8 text-xs"
-                        >
-                            <Download size={14} />
-                            Export
-                        </Button>
+                                    onClick={handleExport}
+                                    size="sm"
+                                    className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2 h-8 text-xs"
+                                >
+                                    <Download size={14} />
+                                    Export
+                                </Button>
                             </div>
 
                             {/* Advanced Filters */}
@@ -421,10 +454,10 @@ export const ParcelSearch = (): JSX.Element => {
                                         </Button>
                                     </div>
                                 </div>
-                                
+
                             )}
                         </CardContent>
-                        
+
                     </Card>
 
                     {/* Results Summary */}
@@ -432,7 +465,7 @@ export const ParcelSearch = (): JSX.Element => {
                         <div className="text-center py-8">
                             <Loader className="w-8 h-8 text-[#ea690c] mx-auto mb-4 animate-spin" />
                             <p className="text-sm text-neutral-700">Loading parcels...</p>
-                    </div>
+                        </div>
                     ) : (
                         <>
                             <div className="flex items-center justify-between text-xs text-[#5d5d5d] mb-2">
@@ -453,7 +486,7 @@ export const ParcelSearch = (): JSX.Element => {
                                         <option value={500}>500</option>
                                     </select>
                                 </div>
-                                                </div>
+                            </div>
 
                             {/* Parcels Table */}
                             <Card className="border border-[#d1d1d1] bg-white overflow-hidden">
@@ -494,18 +527,19 @@ export const ParcelSearch = (): JSX.Element => {
                                                     </tr>
                                                 ) : (
                                                     filteredParcels.map((parcel, index) => {
-                                                        // Determine status from API fields
-                                                        let statusLabel = "Registered";
+                                                        // Use new helper to determine status
+                                                        const statusLabel = getStatusLabel(parcel);
                                                         let statusColor = "bg-gray-100 text-gray-800";
-                                                        if (parcel.delivered) {
-                                                            statusLabel = "Delivered";
+                                                        if (statusLabel === "Delivered") {
                                                             statusColor = "bg-green-100 text-green-800";
-                                                        } else if (parcel.parcelAssigned) {
-                                                            statusLabel = "Assigned";
+                                                        } else if (statusLabel === "Assigned") {
                                                             statusColor = "bg-blue-100 text-blue-800";
-                                                        } else if (parcel.pod) {
-                                                            statusLabel = "POD";
+                                                        } else if (statusLabel === "POD") {
                                                             statusColor = "bg-purple-100 text-purple-800";
+                                                        } else if (statusLabel === "Picked Up") {
+                                                            statusColor = "bg-orange-100 text-orange-800";
+                                                        } else if (statusLabel === "Called") {
+                                                            statusColor = "bg-yellow-100 text-yellow-800";
                                                         }
 
                                                         return (
@@ -519,17 +553,17 @@ export const ParcelSearch = (): JSX.Element => {
                                                                         {parcel.senderName && (
                                                                             <p className="text-[#5d5d5d] text-[10px] mt-0.5">From: {parcel.senderName}</p>
                                                                         )}
-                                                    </div>
+                                                                    </div>
                                                                 </td>
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
                                                                     <div className="text-neutral-700 text-xs">
                                                                         {parcel.recieverPhoneNumber ? formatPhoneNumber(parcel.recieverPhoneNumber) : "N/A"}
-                                                    </div>
+                                                                    </div>
                                                                 </td>
                                                                 <td className="py-1.5 px-2">
                                                                     <div className="text-neutral-700 text-xs max-w-[180px] truncate">
                                                                         {parcel.receiverAddress || "—"}
-                                                    </div>
+                                                                    </div>
                                                                 </td>
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
                                                                     <Badge className={`${statusColor} text-[10px] px-1.5 py-0.5`}>
@@ -553,8 +587,8 @@ export const ParcelSearch = (): JSX.Element => {
                                                                             </>
                                                                         ) : (
                                                                             <span className="text-neutral-500 text-xs">—</span>
-                                                    )}
-                                                </div>
+                                                                        )}
+                                                                    </div>
                                                                 </td>
                                                                 <td className="py-1.5 px-2 whitespace-nowrap text-center">
                                                                     <Button
@@ -578,7 +612,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                 )}
                                             </tbody>
                                         </table>
-                                        </div>
+                                    </div>
                                 </CardContent>
                             </Card>
 
@@ -741,37 +775,37 @@ export const ParcelSearch = (): JSX.Element => {
                                 {/* Basic Information */}
                                 <div>
                                     <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Basic Information</h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Parcel ID</p>
                                             <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.parcelId}</p>
-                                    </div>
-                                    <div>
+                                        </div>
+                                        <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Status</p>
                                             <Badge className={
-                                                selectedParcel.delivered 
+                                                selectedParcel.delivered
                                                     ? "bg-green-100 text-green-800"
                                                     : selectedParcel.parcelAssigned
-                                                    ? "bg-blue-100 text-blue-800"
-                                                    : selectedParcel.pod
-                                                    ? "bg-purple-100 text-purple-800"
-                                                    : "bg-gray-100 text-gray-800"
+                                                        ? "bg-blue-100 text-blue-800"
+                                                        : selectedParcel.pod
+                                                            ? "bg-purple-100 text-purple-800"
+                                                            : "bg-gray-100 text-gray-800"
                                             }>
-                                                {selectedParcel.delivered 
+                                                {selectedParcel.delivered
                                                     ? "Delivered"
                                                     : selectedParcel.parcelAssigned
-                                                    ? "Assigned"
-                                                    : selectedParcel.pod
-                                                    ? "POD"
-                                                    : "Registered"}
-                                        </Badge>
-                                    </div>
-                                    <div>
+                                                        ? "Assigned"
+                                                        : selectedParcel.pod
+                                                            ? "POD"
+                                                            : "Registered"}
+                                            </Badge>
+                                        </div>
+                                        <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Shelf Location</p>
                                             <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.shelfName || selectedParcel.shelfNumber || "Not set"}</p>
-                                    </div>
+                                        </div>
                                         {selectedParcel.fragile !== undefined && (
-                                    <div>
+                                            <div>
                                                 <p className="text-xs text-[#5d5d5d] mb-1">Fragile</p>
                                                 <Badge className={selectedParcel.fragile ? "bg-orange-100 text-orange-800" : "bg-gray-100 text-gray-800"}>
                                                     {selectedParcel.fragile ? "Yes" : "No"}
@@ -785,10 +819,10 @@ export const ParcelSearch = (): JSX.Element => {
                                 <div>
                                     <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Recipient Information</h4>
                                     <div className="grid grid-cols-2 gap-4">
-                                    <div>
+                                        <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Recipient Name</p>
                                             <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.receiverName || "N/A"}</p>
-                                    </div>
+                                        </div>
                                         <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Phone Number</p>
                                             <p className="font-semibold text-neutral-800 text-sm">
@@ -799,8 +833,8 @@ export const ParcelSearch = (): JSX.Element => {
                                             <div className="col-span-2">
                                                 <p className="text-xs text-[#5d5d5d] mb-1">Delivery Address</p>
                                                 <p className="text-sm text-neutral-700">{selectedParcel.receiverAddress}</p>
-                                        </div>
-                                    )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -949,6 +983,32 @@ export const ParcelSearch = (): JSX.Element => {
                                             </div>
                                         ) : null}
                                     </div>
+                                </div>
+
+                                {/* Pickup Status and Action */}
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        {selectedParcel.pickedUp ? (
+                                            <Badge className="bg-green-100 text-green-800">Picked Up</Badge>
+                                        ) : (
+                                            <Badge className="bg-yellow-100 text-yellow-800">Not Picked Up</Badge>
+                                        )}
+                                        <span className="text-sm text-[#5d5d5d]">
+                                            Has Called: {selectedParcel.hasCalled ? "Yes" : "No"}
+                                        </span>
+                                    </div>
+
+                                    {!selectedParcel.pickedUp && (
+                                        <div>
+                                            <Button
+                                                onClick={handleMarkPickedUp}
+                                                disabled={markPickupLoading}
+                                                className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
+                                            >
+                                                {markPickupLoading ? "Updating..." : "Mark Picked Up"}
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="pt-4 border-t border-[#d1d1d1] flex gap-3">

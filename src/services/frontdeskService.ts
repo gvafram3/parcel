@@ -22,6 +22,7 @@ interface ParcelRequest {
     vehicleNumber: string;
     officeId?: string;
     pod?: boolean;
+    pickedUp?: boolean;
     delivered?: boolean;
     parcelAssigned?: boolean;
     fragile?: boolean;
@@ -42,6 +43,7 @@ interface ParcelUpdateRequest {
     shelfNumber?: string;
     pod?: boolean;
     delivered?: boolean;
+    pickedUp?: boolean;
     parcelAssigned?: boolean;
     fragile?: boolean;
     hasCalled?: boolean;
@@ -66,6 +68,7 @@ interface ParcelResponse {
     storageCost?: number;
     shelfNumber?: string;
     shelfId?: string;
+    pickedUp?: boolean;
     shelfName?: string;
     officeId?: string | {
         id: string;
