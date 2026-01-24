@@ -51,6 +51,14 @@ export const ParcelSearch = (): JSX.Element => {
         return "Registered";
     };
 
+    // Helper: parse YYYY-MM-DD (input[type="date"]) to local Date (midnight)
+    const parseDateInput = (dateStr: string | undefined) => {
+        if (!dateStr) return null;
+        const [y, m, d] = dateStr.split("-").map(Number);
+        if (!y || !m || !d) return null;
+        return new Date(y, m - 1, d);
+    };
+
     // Load parcels on mount - only show loading UI if no cache exists
     useEffect(() => {
         const hasCache = parcels.length > 0;
@@ -154,6 +162,29 @@ export const ParcelSearch = (): JSX.Element => {
                 if (searchParams.status === "registered") return !p.delivered && !p.parcelAssigned && !p.pod;
                 return true;
             });
+        }
+
+        // NEW: Filter by createdAt using startDate and endDate (YYYY-MM-DD inputs)
+        if (searchParams.startDate) {
+            const start = parseDateInput(searchParams.startDate);
+            if (start) {
+                const startMs = new Date(start).setHours(0, 0, 0, 0);
+                filtered = filtered.filter((p) => {
+                    const created = typeof p.createdAt === "number" ? p.createdAt : Number(p.createdAt || 0);
+                    return created && created >= startMs;
+                });
+            }
+        }
+
+        if (searchParams.endDate) {
+            const end = parseDateInput(searchParams.endDate);
+            if (end) {
+                const endMs = new Date(end).setHours(23, 59, 59, 999);
+                filtered = filtered.filter((p) => {
+                    const created = typeof p.createdAt === "number" ? p.createdAt : Number(p.createdAt || 0);
+                    return created && created <= endMs;
+                });
+            }
         }
 
         return filtered;
@@ -504,6 +535,12 @@ export const ParcelSearch = (): JSX.Element => {
                                                     <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
                                                         Address
                                                     </th>
+
+                                                    {/* NEW: Date column */}
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                        Date
+                                                    </th>
+
                                                     <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
                                                         Status
                                                     </th>
@@ -521,7 +558,8 @@ export const ParcelSearch = (): JSX.Element => {
                                             <tbody className="bg-white divide-y divide-[#d1d1d1]">
                                                 {filteredParcels.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan={7} className="py-8 px-4 text-center">
+                                                        {/* UPDATED colSpan to account for Date column */}
+                                                        <td colSpan={8} className="py-8 px-4 text-center">
                                                             <p className="text-xs text-neutral-700">No parcels found matching your search criteria.</p>
                                                         </td>
                                                     </tr>
@@ -565,6 +603,14 @@ export const ParcelSearch = (): JSX.Element => {
                                                                         {parcel.receiverAddress || "—"}
                                                                     </div>
                                                                 </td>
+
+                                                                {/* NEW: createdAt/date cell */}
+                                                                <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                    <div className="text-neutral-700 text-xs">
+                                                                        {parcel.createdAt ? new Date(parcel.createdAt).toLocaleString() : "—"}
+                                                                    </div>
+                                                                </td>
+
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
                                                                     <Badge className={`${statusColor} text-[10px] px-1.5 py-0.5`}>
                                                                         {statusLabel}
