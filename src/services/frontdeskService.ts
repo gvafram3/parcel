@@ -86,6 +86,12 @@ interface ParcelResponse {
     registeredDate?: number;
     createdAt?: number | null;
     updatedAt?: number | null;
+    // NEW: optional rider info when parcel is assigned to a rider
+    riderInfo?: {
+        riderId: string;
+        riderName: string;
+        riderPhoneNumber?: string;
+    } | null;
 }
 
 interface PageParcelResponse {

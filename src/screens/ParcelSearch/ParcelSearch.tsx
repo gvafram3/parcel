@@ -583,7 +583,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                         return (
                                                             <tr
                                                                 key={parcel.parcelId}
-                                                                className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                                                                className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} align-middle`}
                                                             >
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
                                                                     <div>
@@ -633,6 +633,16 @@ export const ParcelSearch = (): JSX.Element => {
                                                                             </>
                                                                         ) : (
                                                                             <span className="text-neutral-500 text-xs">—</span>
+                                                                        )}
+
+                                                                        {/* NEW: show rider info if present */}
+                                                                        {parcel.riderInfo && (
+                                                                            <div className="mt-1">
+                                                                                <p className="text-neutral-800 font-medium text-xs">Rider: {parcel.riderInfo.riderName}</p>
+                                                                                {parcel.riderInfo.riderPhoneNumber && (
+                                                                                    <p className="text-[#5d5d5d] text-[10px]">{formatPhoneNumber(parcel.riderInfo.riderPhoneNumber)}</p>
+                                                                                )}
+                                                                            </div>
                                                                         )}
                                                                     </div>
                                                                 </td>
@@ -928,6 +938,25 @@ export const ParcelSearch = (): JSX.Element => {
                                                 <div>
                                                     <p className="text-xs text-[#5d5d5d] mb-1">Vehicle Number</p>
                                                     <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.vehicleNumber}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* NEW: Rider Information */}
+                                {selectedParcel.riderInfo && (
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Rider Information</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-xs text-[#5d5d5d] mb-1">Rider Name</p>
+                                                <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.riderInfo.riderName}</p>
+                                            </div>
+                                            {selectedParcel.riderInfo.riderPhoneNumber && (
+                                                <div>
+                                                    <p className="text-xs text-[#5d5d5d] mb-1">Rider Phone</p>
+                                                    <p className="font-semibold text-neutral-800 text-sm">{formatPhoneNumber(selectedParcel.riderInfo.riderPhoneNumber)}</p>
                                                 </div>
                                             )}
                                         </div>

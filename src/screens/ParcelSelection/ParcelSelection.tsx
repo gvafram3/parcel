@@ -118,6 +118,23 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
                             </div>
                         )}
 
+                        {/* NEW: Rider information when parcel assigned to a rider */}
+                        {parcel.riderInfo && (
+                            <div className="flex items-center gap-2">
+                                <UserIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                <div className="[font-family:'Lato',Helvetica] font-normal text-sm">
+                                    <div className="text-[#ea690c]">
+                                        Rider: <strong className="font-semibold text-[#ea690c]">{parcel.riderInfo.riderName}</strong>
+                                    </div>
+                                    {parcel.riderInfo.riderPhoneNumber && (
+                                        <div className="text-[12px] text-[#ea690c]">
+                                            {formatPhoneNumber(parcel.riderInfo.riderPhoneNumber)}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex items-center gap-2 mt-1">
                             <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
                                 Amount to collect: <span className="text-[#ea690c]">{formatCurrency(totalAmount)}</span>
