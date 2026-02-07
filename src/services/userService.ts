@@ -137,7 +137,7 @@ class UserService {
             const params = new URLSearchParams();
             params.append('page', (pageable.page || 0).toString());
             params.append('size', (pageable.size || 50).toString());
-            
+
             if (pageable.sort && pageable.sort.length > 0) {
                 pageable.sort.forEach(sort => {
                     params.append('sort', sort);
@@ -181,6 +181,27 @@ class UserService {
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to delete user. Please try again.',
+            };
+        }
+    }
+
+    /**
+     * Add existing user (by phone) to an office/station using Admin API
+     * Expects payload: { officeId: string, userPhoneNumber: string }
+     */
+    async addUserToOffice(payload: { officeId: string; userPhoneNumber: string }): Promise<UserResponse> {
+        try {
+            const response = await this.apiClientAdmin.post<UserResponse>('/api-user/add-user-office', payload);
+            return {
+                success: true,
+                message: response.data?.message || 'User added to office successfully',
+                data: response.data?.data || response.data,
+            };
+        } catch (error: any) {
+            console.error('Add user to office error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to add user to office. Please try again.',
             };
         }
     }

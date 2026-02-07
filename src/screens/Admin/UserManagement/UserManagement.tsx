@@ -46,6 +46,12 @@ export const UserManagement = (): JSX.Element => {
         officeId: "",
     });
 
+    // NEW: State for adding user to station
+    const [showAddToStationModal, setShowAddToStationModal] = useState(false);
+    const [userToAddToStation, setUserToAddToStation] = useState<{ userId: string; name: string; phoneNumber?: string } | null>(null);
+    const [selectedOfficeForAdd, setSelectedOfficeForAdd] = useState<string>("");
+    const [isAddingToStation, setIsAddingToStation] = useState(false);
+
     // Load users when component mounts
     useEffect(() => {
         refreshUsers(pagination.page, pagination.size);
@@ -215,6 +221,52 @@ export const UserManagement = (): JSX.Element => {
             showToast("Failed to create user. Please try again.", "error");
         } finally {
             setIsCreating(false);
+        }
+    };
+
+    // NEW: Open modal to add user to station
+    const handleInitiateAddToStation = (user: { userId: string; name: string; phoneNumber?: string }) => {
+        setUserToAddToStation(user);
+        // default to first station if available
+        setSelectedOfficeForAdd(stations.length > 0 ? stations[0].id : "");
+        setShowAddToStationModal(true);
+    };
+
+    // NEW: Confirm add user to station - POST /api-user/add-user-office
+    const handleConfirmAddToStation = async () => {
+        if (!userToAddToStation) return;
+        if (!selectedOfficeForAdd) {
+            showToast("Please select an office/station", "warning");
+            return;
+        }
+        if (!userToAddToStation.phoneNumber) {
+            showToast("User has no phone number on file", "error");
+            return;
+        }
+
+        setIsAddingToStation(true);
+        try {
+            const payload = {
+                officeId: selectedOfficeForAdd,
+                userPhoneNumber: userToAddToStation.phoneNumber,
+            };
+
+            const response = await userService.addUserToOffice(payload);
+
+            if (response.success) {
+                showToast(response.message || `User ${userToAddToStation.name} added to station successfully`, "success");
+                // refresh users list to reflect new office assignment
+                await refreshUsers(pagination.page, pagination.size);
+                setShowAddToStationModal(false);
+                setUserToAddToStation(null);
+            } else {
+                showToast(response.message || "Failed to add user to station", "error");
+            }
+        } catch (error) {
+            console.error("Add user to station error:", error);
+            showToast("Failed to add user to station. Please try again.", "error");
+        } finally {
+            setIsAddingToStation(false);
         }
     };
 
@@ -586,11 +638,20 @@ export const UserManagement = (): JSX.Element => {
                                                                 <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
                                                                     <button
                                                                         onClick={() => handleInitiateDelete({ userId: user.userId, name: user.name })}
-                                                                        className="text-[#e22420] hover:bg-red-50 p-2 rounded transition-colors"
+                                                                        className="text-[#e22420] hover:bg-red-50 p-2 rounded transition-colors mr-2"
                                                                         title="Delete user"
                                                                     >
                                                                         <Trash2 size={16} />
                                                                     </button>
+                                                                    {!user.office && (
+                                                                        <button
+                                                                            onClick={() => handleInitiateAddToStation({ userId: user.userId, name: user.name, phoneNumber: user.phoneNumber })}
+                                                                            className="text-[#ea690c] hover:bg-orange-50 p-2 rounded transition-colors"
+                                                                            title="Add user to station"
+                                                                        >
+                                                                            <Building2 size={16} />
+                                                                        </button>
+                                                                    )}
                                                                 </td>
                                                             </tr>
                                                         ))
@@ -601,7 +662,6 @@ export const UserManagement = (): JSX.Element => {
                                     </div>
                                 </div>
                             )}
-                            {/* Pagination */}
                             {!loadingUsers && pagination.totalPages > 1 && (
                                 <div className="px-6 py-4 border-t border-[#d1d1d1] flex items-center justify-between">
                                     <div className="text-sm text-neutral-700">
@@ -633,6 +693,64 @@ export const UserManagement = (): JSX.Element => {
                     </Card>
                 </main>
             </div>
+
+            {/* NEW: Add to Station Modal */}
+            {showAddToStationModal && userToAddToStation && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <Card className="w-full max-w-md rounded-lg border border-[#d1d1d1] bg-white shadow-lg">
+                        <CardContent className="p-6">
+                            <div className="flex items-start gap-4 mb-4">
+                                <div className="flex-1">
+                                    <h2 className="text-lg font-bold text-neutral-800 mb-2">Add User to Station</h2>
+                                    <p className="text-sm text-neutral-700 mb-3">Add <span className="font-semibold">{userToAddToStation.name}</span> to an office/station.</p>
+
+                                    <div>
+                                        <label className="block text-sm font-semibold text-neutral-800 mb-2">Select Office/Station</label>
+                                        <select
+                                            value={selectedOfficeForAdd}
+                                            onChange={(e) => setSelectedOfficeForAdd(e.target.value)}
+                                            className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                                        >
+                                            <option value="">Select an office/station</option>
+                                            {stations.map((station) => (
+                                                <option key={station.id} value={station.id}>
+                                                    {station.name} {station.locationName && `- ${station.locationName}`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {!userToAddToStation.phoneNumber && (
+                                        <p className="text-xs text-red-600 mt-2">This user has no phone number on file and cannot be added.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3">
+                                <Button
+                                    onClick={() => {
+                                        setShowAddToStationModal(false);
+                                        setUserToAddToStation(null);
+                                        setSelectedOfficeForAdd("");
+                                    }}
+                                    variant="outline"
+                                    className="flex-1 border border-[#d1d1d1] text-neutral-700 hover:bg-gray-50"
+                                    disabled={isAddingToStation}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleConfirmAddToStation}
+                                    className="flex-1 bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
+                                    disabled={isAddingToStation || !selectedOfficeForAdd || !userToAddToStation.phoneNumber}
+                                >
+                                    {isAddingToStation ? "Adding..." : "Add to Station"}
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 };

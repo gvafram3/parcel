@@ -296,10 +296,10 @@ export const Reconciliation = (): JSX.Element => {
         <main className="flex-1 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
-            <div>
+            {/* <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">Reconciliation</h1>
               <p className="text-sm text-gray-600">Approve and reconcile delivered assignments</p>
-            </div>
+            </div> */}
             {selectedRiders.size > 0 && (
               <Badge className="bg-orange-100 text-orange-700 border-orange-200 px-4 py-2 text-base font-semibold">
                 {selectedRiders.size} Rider{selectedRiders.size !== 1 ? 's' : ''} Selected

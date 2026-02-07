@@ -166,12 +166,12 @@ export const CallCenter = (): JSX.Element => {
                 <main className="flex-1 space-y-6">
                     {/* Header */}
                     <div className="flex items-center justify-between">
-                        <div>
+                        {/* <div>
                             <h1 className="text-xl font-bold text-neutral-800">Call Center</h1>
                             <p className="text-xs text-[#5d5d5d] mt-0.5">
                                 Contact customers and manage delivery preferences
                             </p>
-                        </div>
+                        </div> */}
                     </div>
 
                     {/* Statistics Card */}
