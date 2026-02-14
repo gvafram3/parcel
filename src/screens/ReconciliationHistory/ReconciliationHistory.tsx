@@ -39,7 +39,11 @@ interface RiderGroup {
   assignmentIds: string[];
 }
 
-export const ReconciliationHistory = (): JSX.Element => {
+interface ReconciliationHistoryProps {
+  embedded?: boolean;
+}
+
+export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistoryProps): JSX.Element => {
   const { showToast } = useToast();
   const [rawAssignments, setRawAssignments] = useState<any[]>([]);
   const [expandedRiders, setExpandedRiders] = useState<Set<string>>(new Set());
@@ -164,17 +168,16 @@ export const ReconciliationHistory = (): JSX.Element => {
     });
   };
 
-  return (
-    <div className="w-full">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        <main className="flex-1 space-y-6">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">Reconciliation History</h1>
-              <p className="text-sm text-gray-600">View historical reconciliation data by date</p>
-            </div>
+  const content = (
+    <main className="flex-1 space-y-6">
+      {!embedded && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">Reconciliation History</h1>
+            <p className="text-sm text-gray-600">View historical reconciliation data by date</p>
           </div>
+        </div>
+      )}
 
           {/* Date Filter */}
           <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
@@ -443,6 +446,16 @@ export const ReconciliationHistory = (): JSX.Element => {
             </CardContent>
           </Card>
         </main>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <div className="w-full">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        {content}
       </div>
     </div>
   );

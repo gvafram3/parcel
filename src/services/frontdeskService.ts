@@ -201,6 +201,45 @@ class FrontdeskService {
     }
 
     /**
+     * Create a pickup request (parcel to be collected from one location and delivered to another)
+     * Endpoint: POST /pickup-request
+     * Note: Backend may need to implement this endpoint. Payload structure is provided for integration.
+     */
+    async createPickupRequest(pickupData: {
+        officeId: string;
+        pickupAddress: string;
+        pickupContactName: string;
+        pickupContactPhone: string;
+        deliveryAddress: string;
+        recipientName: string;
+        recipientPhone: string;
+        parcelDescription: string;
+        itemValue?: number;
+        specialInstructions?: string;
+        pickupCost?: number;
+        deliveryCost?: number;
+        preferredPickupDate?: string;
+        preferredPickupTime?: string;
+    }): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.post('/pickup-request', pickupData);
+            return {
+                success: true,
+                message: 'Pickup request created successfully',
+                data: response.data,
+            };
+        } catch (error: any) {
+            console.error('Create pickup request error:', error);
+            return {
+                success: false,
+                message:
+                    error.response?.data?.message ||
+                    'Failed to create pickup request. Please try again.',
+            };
+        }
+    }
+
+    /**
      * Add a new parcel
      */
     async addParcel(parcelData: ParcelRequest): Promise<ApiResponse> {
