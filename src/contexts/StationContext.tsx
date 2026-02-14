@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState } from "react";
 import authService from "../services/authService";
 
 export type UserRole = "ADMIN" | "MANAGER" | "FRONTDESK" | "RIDER" | "CALLER";
@@ -70,21 +70,25 @@ const normalizeRole = (role: string): UserRole => {
     return "FRONTDESK";
 };
 
-export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [currentStation, setCurrentStation] = useState<Station | null>(null);
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
-
-    // Initialize from auth service on mount
-    useEffect(() => {
+// Initialize user from storage synchronously so route persists on refresh
+const getInitialUser = (): User | null => {
+    try {
         const userData = authService.getUser();
         if (userData) {
-            console.log("Initializing user from storage:", userData);
-            setCurrentUser({
+            return {
                 ...userData,
                 role: normalizeRole(userData.role),
-            });
+            };
         }
-    }, []);
+    } catch {
+        // ignore parse errors
+    }
+    return null;
+};
+
+export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [currentStation, setCurrentStation] = useState<Station | null>(null);
+    const [currentUser, setCurrentUser] = useState<User | null>(getInitialUser);
 
     const handleSetStation = (station: Station | null) => {
         setCurrentStation(station);

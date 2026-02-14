@@ -9,6 +9,8 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   UserIcon,
+  History,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -16,6 +18,7 @@ import { Badge } from "../../components/ui/badge";
 import { formatPhoneNumber, formatCurrency, formatDateTime } from "../../utils/dataHelpers";
 import frontdeskService from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
+import { ReconciliationHistory } from "../ReconciliationHistory/ReconciliationHistory";
 
 interface ReconciliationParcel {
   parcelId: string;
@@ -71,6 +74,7 @@ export const Reconciliation = (): JSX.Element => {
     totalElements: 0,
     totalPages: 0,
   });
+  const [view, setView] = useState<"reconcile" | "history">("reconcile");
 
   // Fetch all parcel assignments with pagination (fetch at least 200)
   const fetchAssignments = async (page: number = 0, size: number = 200) => {
@@ -293,6 +297,35 @@ export const Reconciliation = (): JSX.Element => {
   return (
     <div className={`w-full ${showConfirmModal ? "overflow-hidden" : ""}`}>
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        {/* View toggle: Reconcile | View History */}
+        <div className="flex gap-2 border-b border-gray-200 pb-4">
+          <button
+            onClick={() => setView("reconcile")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              view === "reconcile"
+                ? "bg-[#ea690c] text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4" />
+            Reconcile
+          </button>
+          <button
+            onClick={() => setView("history")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              view === "history"
+                ? "bg-[#ea690c] text-white"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            <History className="w-4 h-4" />
+            View History
+          </button>
+        </div>
+
+        {view === "history" ? (
+          <ReconciliationHistory embedded />
+        ) : (
         <main className="flex-1 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -611,6 +644,7 @@ export const Reconciliation = (): JSX.Element => {
             </CardContent>
           </Card>
         </main>
+        )}
       </div>
 
       {/* Confirm Reconciliation Modal */}

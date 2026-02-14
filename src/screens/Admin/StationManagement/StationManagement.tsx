@@ -293,11 +293,7 @@ export const StationManagement = (): JSX.Element => {
             <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <main className="flex-1 space-y-6">
                     {/* Header */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-3xl font-bold text-neutral-800">Station Management</h1>
-                            <p className="text-sm text-[#5d5d5d] mt-2">Manage locations and their stations (offices)</p>
-                        </div>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-end gap-4">
                         <div className="flex flex-col sm:flex-row gap-3">
                             <Button
                                 onClick={() => setShowAddStationModal(true)}

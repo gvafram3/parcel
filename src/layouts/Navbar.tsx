@@ -20,6 +20,10 @@ const routeTitles: Record<string, { title: string; description: string }> = {
         title: "Parcel Intake",
         description: "Manage parcel intake, assignments, and payments",
     },
+    "/pickup-request": {
+        title: "Pickup Request",
+        description: "Request pickup of parcels from one location for delivery to another",
+    },
     "/call-center": {
         title: "Call Center",
         description: "Contact customers and record delivery preferences",

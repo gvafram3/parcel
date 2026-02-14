@@ -293,7 +293,7 @@ export const InfoSection = ({
         (!homeDelivery || (deliveryCost && parseFloat(deliveryCost) > 0));
 
     return (
-        <div className="space-y-4 pb-6">
+        <div className="space-y-4">
             {/* Parcels List - Show if parcels exist */}
             {parcels.length > 0 && (
                 <Card className="border border-[#d1d1d1] bg-white shadow-sm">

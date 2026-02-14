@@ -14,6 +14,7 @@ import { ForgotPassword } from "./screens/ForgotPassword";
 import { PasswordRequestSent } from "./screens/PasswordRequestSent";
 import { ResetPassword } from "./screens/ResetPassword";
 import { ParcelRegistration } from "./screens/ParcelRegistration";
+import { PickupRequest } from "./screens/PickupRequest";
 import { ParcelCostsAndPOD } from "./screens/ParcelCostsAndPOD";
 import { ParcelReview } from "./screens/ParcelReview";
 import { ParcelSMSSuccess } from "./screens/ParcelSMSSuccess";
@@ -23,7 +24,6 @@ import { ActiveDeliveries } from "./screens/ActiveDeliveries";
 import { RiderDashboard } from "./screens/RiderDashboard";
 import { RiderHistory } from "./screens/RiderHistory";
 import { Reconciliation } from "./screens/Reconciliation";
-import { ReconciliationHistory } from "./screens/ReconciliationHistory";
 import { ReconciliationConfirmation } from "./screens/ReconciliationConfirmation";
 import { FinancialDashboard } from "./screens/FinancialDashboard/FinancialDashboard";
 import { ShelfManagement } from "./screens/ShelfManagement/ShelfManagement";
@@ -35,6 +35,7 @@ import { StationManagement } from "./screens/Admin/StationManagement/StationMana
 import { UserManagement } from "./screens/Admin/UserManagement/UserManagement";
 import { SystemParcelOverview } from "./screens/Admin/SystemParcelOverview/SystemParcelOverview";
 import { FinancialReports } from "./screens/Admin/FinancialReports/FinancialReports";
+import { AdminReconciliation } from "./screens/Admin/AdminReconciliation/AdminReconciliation";
 import { Preferences } from "./screens/Preferences/Preferences";
 import { Help } from "./screens/Help/Help";
 
@@ -75,6 +76,16 @@ export const App = (): JSX.Element => {
                           <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", "ADMIN"]}>
                             <MainLayout>
                               <ParcelRegistration />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/pickup-request"
+                        element={
+                          <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", ]}>
+                            <MainLayout>
+                              <PickupRequest />
                             </MainLayout>
                           </ProtectedRoute>
                         }
@@ -163,22 +174,13 @@ export const App = (): JSX.Element => {
                           </ProtectedRoute>
                         }
                       />
+                      <Route path="/reconciliation-history" element={<Navigate to="/reconciliation" replace />} />
                       <Route
                         path="/reconciliation"
                         element={
                           <ProtectedRoute allowedRoles={["CALLER", "MANAGER", "ADMIN", "FRONTDESK"]}>
                             <MainLayout>
                               <Reconciliation />
-                            </MainLayout>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/reconciliation-history"
-                        element={
-                          <ProtectedRoute allowedRoles={["MANAGER"]}>
-                            <MainLayout>
-                              <ReconciliationHistory />
                             </MainLayout>
                           </ProtectedRoute>
                         }
@@ -264,6 +266,17 @@ export const App = (): JSX.Element => {
                           <ProtectedRoute allowedRoles={["ADMIN"]}>
                             <MainLayout>
                               <SystemParcelOverview />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+
+                      <Route
+                        path="/admin/reconciliation"
+                        element={
+                          <ProtectedRoute allowedRoles={["ADMIN"]}>
+                            <MainLayout>
+                              <AdminReconciliation />
                             </MainLayout>
                           </ProtectedRoute>
                         }

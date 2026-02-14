@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Download, Loader } from "lucide-react";
+import { Download, Loader, CalendarIcon } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -18,6 +18,8 @@ export const SystemParcelOverview = (): JSX.Element => {
         isPOD: undefined as boolean | undefined,
         searchQuery: "",
     });
+    const [statusFilter, setStatusFilter] = useState<"" | "delivered" | "assigned" | "pod">("");
+    const [selectedDate, setSelectedDate] = useState<string>("");
 
     // Fetch parcels when filters change (loadParcelsIfNeeded will check cache internally)
     useEffect(() => {
@@ -42,21 +44,48 @@ export const SystemParcelOverview = (): JSX.Element => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filters.officeId, filters.isDelivered, filters.isParcelAssigned, filters.isPOD]);
 
-    // Client-side search filtering (since API doesn't support search query)
+    // Client-side search + date filtering (API doesn't support free-text search)
     const filteredParcels = useMemo(() => {
-        if (!filters.searchQuery) {
-            return parcels;
+        let result = parcels;
+
+        if (filters.searchQuery) {
+            const searchTerm = filters.searchQuery.toLowerCase();
+            result = result.filter((p) =>
+                p.parcelId?.toLowerCase().includes(searchTerm) ||
+                p.receiverName?.toLowerCase().includes(searchTerm) ||
+                p.recieverPhoneNumber?.includes(searchTerm) ||
+                p.senderName?.toLowerCase().includes(searchTerm) ||
+                p.senderPhoneNumber?.includes(searchTerm)
+            );
         }
-        
-        const searchTerm = filters.searchQuery.toLowerCase();
-        return parcels.filter((p) =>
-            p.parcelId?.toLowerCase().includes(searchTerm) ||
-            p.receiverName?.toLowerCase().includes(searchTerm) ||
-            p.recieverPhoneNumber?.includes(searchTerm) ||
-            p.senderName?.toLowerCase().includes(searchTerm) ||
-            p.senderPhoneNumber?.includes(searchTerm)
-        );
-    }, [parcels, filters.searchQuery]);
+
+        if (selectedDate) {
+            const target = new Date(selectedDate);
+            target.setHours(0, 0, 0, 0);
+            const targetMs = target.getTime();
+
+            result = result.filter((p: any) => {
+                const createdAt = p.createdAt as number | undefined;
+                if (!createdAt) return false;
+                const d = new Date(createdAt);
+                d.setHours(0, 0, 0, 0);
+                return d.getTime() === targetMs;
+            });
+        }
+
+        return result;
+    }, [parcels, filters.searchQuery, selectedDate]);
+
+    const handleStatusChange = (value: string) => {
+        const v = value as "" | "delivered" | "assigned" | "pod";
+        setStatusFilter(v);
+        setFilters((prev) => ({
+            ...prev,
+            isDelivered: v === "delivered" ? true : undefined,
+            isParcelAssigned: v === "assigned" ? true : undefined,
+            isPOD: v === "pod" ? true : undefined,
+        }));
+    };
 
     const handleExport = () => {
         const headers = [
@@ -130,7 +159,7 @@ export const SystemParcelOverview = (): JSX.Element => {
                     {/* Filters */}
                     <Card className="border border-[#d1d1d1] bg-white shadow-sm">
                         <CardContent className="p-6">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                 <div className="lg:col-span-2">
                                     <label className="block text-sm font-semibold text-neutral-800 mb-2">
                                         Search
@@ -164,47 +193,33 @@ export const SystemParcelOverview = (): JSX.Element => {
 
                                 <div>
                                     <label className="block text-sm font-semibold text-neutral-800 mb-2">
-                                        Delivered
+                                        Status
                                     </label>
                                     <select
-                                        value={filters.isDelivered === undefined ? "" : filters.isDelivered ? "true" : "false"}
-                                        onChange={(e) => setFilters({ ...filters, isDelivered: e.target.value === "" ? undefined : e.target.value === "true" })}
+                                        value={statusFilter}
+                                        onChange={(e) => handleStatusChange(e.target.value)}
                                         className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
                                     >
                                         <option value="">All</option>
-                                        <option value="true">Delivered</option>
-                                        <option value="false">Not Delivered</option>
+                                        <option value="delivered">Delivered</option>
+                                        <option value="assigned">Assigned</option>
+                                        <option value="pod">POD</option>
                                     </select>
                                 </div>
 
                                 <div>
                                     <label className="block text-sm font-semibold text-neutral-800 mb-2">
-                                        Assigned
+                                        Date
                                     </label>
-                                    <select
-                                        value={filters.isParcelAssigned === undefined ? "" : filters.isParcelAssigned ? "true" : "false"}
-                                        onChange={(e) => setFilters({ ...filters, isParcelAssigned: e.target.value === "" ? undefined : e.target.value === "true" })}
-                                        className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
-                                    >
-                                        <option value="">All</option>
-                                        <option value="true">Assigned</option>
-                                        <option value="false">Not Assigned</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-semibold text-neutral-800 mb-2">
-                                        POD
-                                    </label>
-                                    <select
-                                        value={filters.isPOD === undefined ? "" : filters.isPOD ? "true" : "false"}
-                                        onChange={(e) => setFilters({ ...filters, isPOD: e.target.value === "" ? undefined : e.target.value === "true" })}
-                                        className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
-                                    >
-                                        <option value="">All</option>
-                                        <option value="true">With POD</option>
-                                        <option value="false">Without POD</option>
-                                    </select>
+                                    <div className="relative">
+                                        <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9a9a9a]" />
+                                        <Input
+                                            type="date"
+                                            value={selectedDate}
+                                            onChange={(e) => setSelectedDate(e.target.value)}
+                                            className="pl-9 pr-3 w-full border border-[#d1d1d1]"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </CardContent>
@@ -225,9 +240,6 @@ export const SystemParcelOverview = (): JSX.Element => {
                                             <table className="min-w-full divide-y divide-[#d1d1d1] text-sm">
                                                 <thead>
                                                     <tr className="bg-gray-50 border-b border-[#d1d1d1]">
-                                                        <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
-                                                            Parcel ID
-                                                        </th>
                                                         <th className="text-left py-3 px-3 sm:py-4 sm:px-6 text-xs font-semibold text-neutral-700 uppercase tracking-wider">
                                                             Sender
                                                         </th>
@@ -251,7 +263,7 @@ export const SystemParcelOverview = (): JSX.Element => {
                                                 <tbody className="bg-white divide-y divide-[#d1d1d1]">
                                                     {filteredParcels.length === 0 ? (
                                                         <tr>
-                                                            <td colSpan={7} className="py-12 text-center">
+                                                            <td colSpan={6} className="py-12 text-center">
                                                                 <p className="text-sm text-neutral-500">
                                                                     {parcels.length === 0 ? "No parcels found" : "No parcels found matching search"}
                                                                 </p>
@@ -270,9 +282,6 @@ export const SystemParcelOverview = (): JSX.Element => {
                                                                     key={parcel.parcelId}
                                                                     className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
                                                                 >
-                                                                    <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap">
-                                                                        <span className="text-xs sm:text-sm font-medium text-neutral-800">{parcel.parcelId}</span>
-                                                                    </td>
                                                                     <td className="py-3 px-3 sm:py-4 sm:px-6 whitespace-nowrap text-xs sm:text-sm text-neutral-700">
                                                                         <div>
                                                                             <p className="font-medium">{parcel.senderName || "—"}</p>
