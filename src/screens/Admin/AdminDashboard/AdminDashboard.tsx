@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Building2, Package, DollarSign, TrendingUp, Users, MapPin } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
@@ -7,7 +7,6 @@ import {
     getSystemMetrics,
     getStationPerformance,
     getParcelStatusCounts,
-    SystemMetrics,
     StationPerformance,
     ParcelStatusCount,
 } from "../../../data/mockData";
@@ -15,31 +14,11 @@ import { formatCurrency } from "../../../utils/dataHelpers";
 
 export const AdminDashboard = (): JSX.Element => {
     const navigate = useNavigate();
-    const [systemMetrics, setSystemMetrics] = useState<SystemMetrics | null>(null);
-    const [stationPerformance, setStationPerformance] = useState<StationPerformance[]>([]);
-    const [parcelsByStatus, setParcelsByStatus] = useState<ParcelStatusCount[]>([]);
 
-    useEffect(() => {
-        const metrics = getSystemMetrics();
-        const performance = getStationPerformance();
-        const statusCounts = getParcelStatusCounts();
-        
-        setSystemMetrics(metrics);
-        setStationPerformance(performance);
-        setParcelsByStatus(statusCounts);
-    }, []);
-
-    if (!systemMetrics) {
-        return (
-            <div className="w-full">
-                <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                    <div className="text-center py-12">
-                        <p className="text-neutral-700">Loading system metrics...</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
+    // Compute data on first render so it's available immediately (avoids empty state on first load)
+    const systemMetrics = useMemo(() => getSystemMetrics(), []);
+    const stationPerformance = useMemo<StationPerformance[]>(() => getStationPerformance(), []);
+    const parcelsByStatus = useMemo<ParcelStatusCount[]>(() => getParcelStatusCounts(), []);
 
     return (
         <div className="w-full">

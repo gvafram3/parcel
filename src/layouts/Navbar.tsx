@@ -11,7 +11,7 @@ interface NavbarProps {
 }
 
 const routeTitles: Record<string, { title: string; description: string }> = {
-   
+
     "/parcel-search": {
         title: "Parcel Search",
         description: "Find parcels by recipient, phone, ID, or date range",
@@ -19,6 +19,10 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     "/parcel-intake": {
         title: "Parcel Intake",
         description: "Manage parcel intake, assignments, and payments",
+    },
+    "/pickup-request": {
+        title: "Pickup Request",
+        description: "Request pickup of parcels from one location for delivery to another",
     },
     "/call-center": {
         title: "Call Center",
@@ -63,6 +67,10 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     "/shelf-management": {
         title: "Shelf Management",
         description: "Manage shelf locations and assignments",
+    },
+    "/parcel-edit": {
+        title: "Edit Parcels",
+        description: "Edit parcel information and properties (Manager Only)",
     },
     "/admin/dashboard": {
         title: "Admin Dashboard",
@@ -133,7 +141,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     }, []);
 
     return (
-        <nav className="border-b border-[#d1d1d1] bg-white">
+        <nav className="sticky top-0 z-10 border-b border-[#d1d1d1] bg-white">
             <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
                 {/* Left Section - Menu and Title */}
                 <div className="flex items-center gap-4 flex-1">
@@ -228,14 +236,14 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                 </Avatar>
                             </div>
 
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="w-5 h-5 p-0 hover:opacity-70 transition-opacity"
-                            onClick={() => setShowAccountMenu(!showAccountMenu)}
-                        >
-                            <ChevronDownIcon className={`w-4 h-4 text-[#5d5d5d] transition-transform duration-200 ${showAccountMenu ? 'rotate-180' : ''}`} />
-                        </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="w-5 h-5 p-0 hover:opacity-70 transition-opacity"
+                                onClick={() => setShowAccountMenu(!showAccountMenu)}
+                            >
+                                <ChevronDownIcon className={`w-4 h-4 text-[#5d5d5d] transition-transform duration-200 ${showAccountMenu ? 'rotate-180' : ''}`} />
+                            </Button>
 
                             {/* Account Dropdown Menu */}
                             {showAccountMenu && (
@@ -280,11 +288,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                                         navigate(item.path);
                                                         setShowAccountMenu(false);
                                                     }}
-                                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
-                                                        isActive
+                                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${isActive
                                                             ? "bg-[#ea690c] text-white shadow-sm"
                                                             : "text-neutral-700 hover:bg-gray-50"
-                                                    }`}
+                                                        }`}
                                                 >
                                                     <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-white" : "text-[#5d5d5d]"}`} />
                                                     <span className="text-sm font-medium text-left flex-1">

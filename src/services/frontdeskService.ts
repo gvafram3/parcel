@@ -22,6 +22,7 @@ interface ParcelRequest {
     vehicleNumber: string;
     officeId?: string;
     pod?: boolean;
+    pickedUp?: boolean;
     delivered?: boolean;
     parcelAssigned?: boolean;
     fragile?: boolean;
@@ -42,6 +43,7 @@ interface ParcelUpdateRequest {
     shelfNumber?: string;
     pod?: boolean;
     delivered?: boolean;
+    pickedUp?: boolean;
     parcelAssigned?: boolean;
     fragile?: boolean;
     hasCalled?: boolean;
@@ -66,6 +68,7 @@ interface ParcelResponse {
     storageCost?: number;
     shelfNumber?: string;
     shelfId?: string;
+    pickedUp?: boolean;
     shelfName?: string;
     officeId?: string | {
         id: string;
@@ -81,6 +84,14 @@ interface ParcelResponse {
     inboudPayed?: boolean | null;
     homeDelivery?: boolean;
     registeredDate?: number;
+    createdAt?: number | null;
+    updatedAt?: number | null;
+    // NEW: optional rider info when parcel is assigned to a rider
+    riderInfo?: {
+        riderId: string;
+        riderName: string;
+        riderPhoneNumber?: string;
+    } | null;
 }
 
 interface PageParcelResponse {
@@ -108,6 +119,7 @@ interface DeliveryAssignmentResponse {
     assignedAt?: number;
     acceptedAt?: number;
     completedAt?: number;
+    payed?: boolean;
 }
 
 interface ReconcilationRiderRequest {
@@ -189,6 +201,45 @@ class FrontdeskService {
     }
 
     /**
+     * Create a pickup request (parcel to be collected from one location and delivered to another)
+     * Endpoint: POST /pickup-request
+     * Note: Backend may need to implement this endpoint. Payload structure is provided for integration.
+     */
+    async createPickupRequest(pickupData: {
+        officeId: string;
+        pickupAddress: string;
+        pickupContactName: string;
+        pickupContactPhone: string;
+        deliveryAddress: string;
+        recipientName: string;
+        recipientPhone: string;
+        parcelDescription: string;
+        itemValue?: number;
+        specialInstructions?: string;
+        pickupCost?: number;
+        deliveryCost?: number;
+        preferredPickupDate?: string;
+        preferredPickupTime?: string;
+    }): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.post('/pickup-request', pickupData);
+            return {
+                success: true,
+                message: 'Pickup request created successfully',
+                data: response.data,
+            };
+        } catch (error: any) {
+            console.error('Create pickup request error:', error);
+            return {
+                success: false,
+                message:
+                    error.response?.data?.message ||
+                    'Failed to create pickup request. Please try again.',
+            };
+        }
+    }
+
+    /**
      * Add a new parcel
      */
     async addParcel(parcelData: ParcelRequest): Promise<ApiResponse> {
@@ -237,11 +288,11 @@ class FrontdeskService {
     ): Promise<ApiResponse> {
         try {
             const params = new URLSearchParams();
-            
+
             // Add pagination
             params.append('page', (pageable.page || 0).toString());
             params.append('size', (pageable.size || 50).toString());
-            
+
             if (pageable.sort && pageable.sort.length > 0) {
                 pageable.sort.forEach(sort => {
                     params.append('sort', sort);
@@ -285,6 +336,81 @@ class FrontdeskService {
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to retrieve parcels. Please try again.',
+            };
+        }
+    }
+
+    /**
+     * Get home delivery parcels for assignment
+     * Endpoint: GET /parcels/home-delivery
+     */
+    async getHomeDeliveryParcels(): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.get<ParcelResponse[] | PageParcelResponse>('/parcels/home-delivery');
+
+            // Handle both array and paginated response formats
+            let parcels: ParcelResponse[] = [];
+            if (Array.isArray(response.data)) {
+                parcels = response.data;
+            } else if (response.data && typeof response.data === 'object' && 'content' in response.data) {
+                // Paginated response
+                parcels = (response.data as PageParcelResponse).content || [];
+            }
+
+            return {
+                success: true,
+                message: 'Home delivery parcels retrieved successfully',
+                data: parcels,
+            };
+        } catch (error: any) {
+            console.error('Get home delivery parcels error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to retrieve home delivery parcels. Please try again.',
+                data: [],
+            };
+        }
+    }
+
+    /**
+     * Get uncalled parcels for call center
+     * Endpoint: GET /parcels-uncalled
+     * Supports pagination with page and size parameters
+     */
+    async getUncalledParcels(page: number = 0, size: number = 20): Promise<ApiResponse> {
+        try {
+            const params = new URLSearchParams();
+            params.append('page', page.toString());
+            params.append('size', size.toString());
+
+            const response = await this.apiClient.get<PageParcelResponse>(`/parcels-uncalled?${params.toString()}`);
+
+            // Extract parcels from paginated response
+            const parcels: ParcelResponse[] = response.data?.content || [];
+
+            return {
+                success: true,
+                message: 'Uncalled parcels retrieved successfully',
+                data: {
+                    content: parcels,
+                    totalElements: response.data?.totalElements || 0,
+                    totalPages: response.data?.totalPages || 0,
+                    number: response.data?.number || 0,
+                    size: response.data?.size || size,
+                },
+            };
+        } catch (error: any) {
+            console.error('Get uncalled parcels error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to retrieve uncalled parcels. Please try again.',
+                data: {
+                    content: [],
+                    totalElements: 0,
+                    totalPages: 0,
+                    number: 0,
+                    size: size,
+                },
             };
         }
     }
@@ -373,39 +499,106 @@ class FrontdeskService {
     }
 
     /**
-     * Get all parcel assignments
+     * Get all parcel assignments (paginated)
+     * Endpoint: GET /parcel-assignment
+     * Now returns assignments with parcels array
      */
-    async getParcelAssignments(): Promise<ApiResponse> {
+    async getParcelAssignments(page: number = 0, size: number = 200): Promise<ApiResponse> {
         try {
-            const response = await this.apiClient.get<DeliveryAssignmentResponse[]>('/parcel-assignment');
+            const params = new URLSearchParams();
+            params.append('page', page.toString());
+            params.append('size', size.toString());
+
+            const response = await this.apiClient.get<any>(`/parcel-assignment?${params.toString()}`);
+
+            // Return raw data - the Reconciliation component will handle grouping
+            // The API now returns assignments with parcels array
+            const rawContent = response.data?.content || [];
+
             return {
                 success: true,
                 message: 'Assignments retrieved successfully',
-                data: response.data,
+                data: {
+                    content: rawContent, // Return raw data for processing in component
+                    totalElements: response.data?.totalElements || 0,
+                    totalPages: response.data?.totalPages || 0,
+                    number: response.data?.number || 0,
+                    size: response.data?.size || size,
+                    first: response.data?.first || false,
+                    last: response.data?.last || false,
+                },
             };
         } catch (error: any) {
             console.error('Get parcel assignments error:', error);
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to retrieve assignments. Please try again.',
+                data: {
+                    content: [],
+                    totalElements: 0,
+                    totalPages: 0,
+                    number: 0,
+                    size: size,
+                    first: true,
+                    last: true,
+                },
+            };
+        }
+    }
+
+    /**
+     * Get reconciliations by date
+     * Date should be in milliseconds (start of day)
+     */
+    async getReconciliationsByDate(dateInMillis: number): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.get(`/reconciliations/by-date?date=${dateInMillis}`);
+            return {
+                success: true,
+                message: 'Reconciliations retrieved successfully',
+                data: response.data,
+            };
+        } catch (error: any) {
+            console.error('Failed to fetch reconciliations by date:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to fetch reconciliations',
             };
         }
     }
 
     /**
      * Reconcile rider payments (manual payment)
+     * Expects array of objects with: { assignmentId, reconciledAt, payedAmount }
+     * Note: API expects strings for payedAmount and reconciledAt (as shown in Postman)
+     * If array has one item, sends as single object; if multiple, sends as array
      */
-    async reconcileRiderPayments(assignmentIds: string[]): Promise<ApiResponse> {
+    async reconcileRiderPayments(reconciliationData: Array<{
+        assignmentId: string;
+        reconciledAt: number | string;
+        payedAmount: number | string;
+    }>): Promise<ApiResponse> {
         try {
-            const response = await this.apiClient.post<{ message: string }>('/reconcilation-parcels', {
-                assignmentIds,
-            });
+            // Convert to format expected by API (strings for payedAmount and reconciledAt)
+            const formattedData = reconciliationData.map(item => ({
+                assignmentId: item.assignmentId,
+                reconciledAt: String(item.reconciledAt),
+                payedAmount: String(item.payedAmount),
+            }));
+
+            // If only one item, send as single object (matching Postman format)
+            // Otherwise send as array
+            const payload = formattedData.length === 1 ? formattedData[0] : formattedData;
+
+            console.log('Sending reconciliation payload:', payload);
+            const response = await this.apiClient.post<{ message: string }>('/reconcilation-parcels', payload);
             return {
                 success: true,
                 message: response.data.message || 'Reconciliation completed successfully',
             };
         } catch (error: any) {
             console.error('Reconcile payments error:', error);
+            console.error('Error details:', error.response?.data);
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to reconcile payments. Please try again.',

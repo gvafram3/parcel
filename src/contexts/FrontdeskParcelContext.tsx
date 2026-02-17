@@ -32,17 +32,17 @@ export const FrontdeskParcelProvider: React.FC<{ children: React.ReactNode }> = 
     const [lastFetchTime, setLastFetchTime] = useState<number | null>(null);
     const [pagination, setPagination] = useState({
         page: 0,
-        size: 100,
+        size: 1000,
         totalElements: 0,
         totalPages: 0,
     });
     const [currentFilters, setCurrentFilters] = useState<ParcelSearchFilters>({});
-    const [currentPageable, setCurrentPageable] = useState<PageableRequest>({ page: 0, size: 100 });
+    const [currentPageable, setCurrentPageable] = useState<PageableRequest>({ page: 0, size: 1000 });
 
     const loadParcels = useCallback(async (
         filters: ParcelSearchFilters = {},
         page: number = 0,
-        size: number = 100,
+        size: number = 1000,
         forceRefresh = false,
         showLoading = true
     ) => {
@@ -111,7 +111,7 @@ export const FrontdeskParcelProvider: React.FC<{ children: React.ReactNode }> = 
     const loadParcelsIfNeeded = useCallback(async (
         filters: ParcelSearchFilters = {},
         page: number = 0,
-        size: number = 100,
+        size: number = 1000,
         showLoading = true
     ) => {
         await loadParcels(filters, page, size, false, showLoading);
@@ -120,7 +120,7 @@ export const FrontdeskParcelProvider: React.FC<{ children: React.ReactNode }> = 
     const refreshParcels = useCallback(async (
         filters: ParcelSearchFilters = {},
         page: number = 0,
-        size: number = 100
+        size: number = 1000
     ) => {
         await loadParcels(filters, page, size, true, true);
     }, [loadParcels]);
@@ -140,7 +140,7 @@ export const FrontdeskParcelProvider: React.FC<{ children: React.ReactNode }> = 
             }, 1000); // Small delay to not interfere with initial render
         } else if (!lastFetchTime || (now - lastFetchTime) >= CACHE_DURATION) {
             // No cache or expired - load with loading UI
-            loadParcels({}, 0, 100, false, true);
+            loadParcels({}, 0, 1000, false, true);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

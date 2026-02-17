@@ -16,12 +16,13 @@ export const ParcelSearch = (): JSX.Element => {
     const { currentStation, currentUser, userRole } = useStation();
     const { shelves, loadShelves } = useShelf();
     const { showToast } = useToast();
-    const { 
-        parcels, 
-        loading, 
-        pagination, 
-        loadParcelsIfNeeded, 
-        refreshParcels 
+    const {
+        parcels,
+        loading,
+        backgroundLoading,
+        pagination,
+        loadParcelsIfNeeded,
+        refreshParcels
     } = useFrontdeskParcel();
     const [searchParams, setSearchParams] = useState({
         recipientName: "",
@@ -38,6 +39,27 @@ export const ParcelSearch = (): JSX.Element => {
     const [selectedParcel, setSelectedParcel] = useState<ParcelResponse | null>(null);
     const [editingShelf, setEditingShelf] = useState(false);
     const [newShelfLocation, setNewShelfLocation] = useState("");
+    const [markPickupLoading, setMarkPickupLoading] = useState(false);
+
+    // NEW helper: determine human status label including pickup/hasCalled
+    const getStatusLabel = (p: ParcelResponse): string => {
+        // Priority: Delivered > Picked Up > POD > Assigned > Called > Registered
+        if (p.delivered) return "Delivered";
+        if (p.pickedUp) return "Picked Up";
+        if (p.pod) return "POD";
+        if (p.parcelAssigned) return "Assigned";
+        if (p.hasCalled) return "Called";
+        return "Registered";
+    };
+
+    // Helper: parse YYYY-MM-DD (input[type="date"]) to local Date (midnight)
+    const parseDateInput = (dateStr: string | undefined) => {
+        if (!dateStr) return null;
+        const [y, m, d] = dateStr.split("-").map(Number);
+        if (!y || !m || !d) return null;
+        return new Date(y, m - 1, d);
+    };
+
     // Load parcels on mount - only show loading UI if no cache exists
     useEffect(() => {
         const hasCache = parcels.length > 0;
@@ -49,7 +71,7 @@ export const ParcelSearch = (): JSX.Element => {
     useEffect(() => {
         const userData = authService.getUser();
         const officeId = (userData as any)?.office?.id;
-        
+
         if (officeId) {
             loadShelves(officeId);
         } else if (currentStation && userRole === "ADMIN") {
@@ -68,24 +90,24 @@ export const ParcelSearch = (): JSX.Element => {
             filtered = filtered.filter((p) => {
                 // Check parcel ID
                 if (p.parcelId?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 // Check recipient name
                 if (p.receiverName?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 // Check sender name
                 if (p.senderName?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 // Check phone numbers (handles various formats)
                 if (phoneMatchesSearch(p.recieverPhoneNumber, searchTerm)) return true;
                 if (phoneMatchesSearch(p.senderPhoneNumber, searchTerm)) return true;
                 if (phoneMatchesSearch(p.driverPhoneNumber, searchTerm)) return true;
-                
+
                 // Check driver name
                 if (p.driverName?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 // Check parcel description
                 if (p.parcelDescription?.toLowerCase().includes(searchTerm)) return true;
-                
+
                 return false;
             });
         }
@@ -143,6 +165,29 @@ export const ParcelSearch = (): JSX.Element => {
             });
         }
 
+        // NEW: Filter by createdAt using startDate and endDate (YYYY-MM-DD inputs)
+        if (searchParams.startDate) {
+            const start = parseDateInput(searchParams.startDate);
+            if (start) {
+                const startMs = new Date(start).setHours(0, 0, 0, 0);
+                filtered = filtered.filter((p) => {
+                    const created = typeof p.createdAt === "number" ? p.createdAt : Number(p.createdAt || 0);
+                    return created && created >= startMs;
+                });
+            }
+        }
+
+        if (searchParams.endDate) {
+            const end = parseDateInput(searchParams.endDate);
+            if (end) {
+                const endMs = new Date(end).setHours(23, 59, 59, 999);
+                filtered = filtered.filter((p) => {
+                    const created = typeof p.createdAt === "number" ? p.createdAt : Number(p.createdAt || 0);
+                    return created && created <= endMs;
+                });
+            }
+        }
+
         return filtered;
     }, [parcels, searchParams, generalSearch]);
 
@@ -167,7 +212,7 @@ export const ParcelSearch = (): JSX.Element => {
             // Find shelf ID from shelves list if we're using shelf name
             const selectedShelf = shelves.find(s => s.name === newShelfLocation);
             const shelfIdToUpdate = selectedShelf?.id || newShelfLocation;
-            
+
             const response = await frontdeskService.updateParcel(selectedParcel.parcelId, {
                 shelfNumber: shelfIdToUpdate,
             });
@@ -187,6 +232,34 @@ export const ParcelSearch = (): JSX.Element => {
         }
     };
 
+    const handleMarkPickedUp = async () => {
+        if (!selectedParcel) return;
+        setMarkPickupLoading(true);
+        try {
+            const parcelId = selectedParcel.parcelId;
+            const response = await frontdeskService.updateParcel(parcelId, {
+                hasCalled: true,
+                pickedUp: true,
+            });
+
+            if (response.success) {
+                showToast("Parcel marked as picked up", "success");
+
+                // Refresh parcels and update selectedParcel with fresh data if available
+                await refreshParcels({}, pagination.page, pagination.size);
+                const refreshed = parcels.find((p) => p.parcelId === parcelId) || null;
+                setSelectedParcel(refreshed);
+            } else {
+                showToast(response.message || "Failed to update parcel status", "error");
+            }
+        } catch (error) {
+            console.error("Failed to mark parcel picked up:", error);
+            showToast("Failed to update parcel. Please try again.", "error");
+        } finally {
+            setMarkPickupLoading(false);
+        }
+    };
+
     const handleExport = () => {
         const headers = [
             "Parcel ID",
@@ -199,15 +272,8 @@ export const ParcelSearch = (): JSX.Element => {
             "Pick Up Cost",
         ];
         const rows = filteredParcels.map((p) => {
-            // Determine status from API fields
-            let statusLabel = "Registered";
-            if (p.delivered) {
-                statusLabel = "Delivered";
-            } else if (p.parcelAssigned) {
-                statusLabel = "Assigned";
-            } else if (p.pod) {
-                statusLabel = "POD";
-            }
+            // Use new helper to determine status
+            const statusLabel = getStatusLabel(p);
 
             return [
                 p.parcelId,
@@ -239,7 +305,7 @@ export const ParcelSearch = (): JSX.Element => {
             <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <main className="flex-1 space-y-6">
                     {/* Header */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    {/* <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                         <div>
                             <h1 className="text-xl font-bold text-neutral-800">Parcel Search</h1>
                             <p className="text-xs text-[#5d5d5d] mt-0.5">
@@ -254,7 +320,7 @@ export const ParcelSearch = (): JSX.Element => {
                             <Download size={14} />
                             Export
                         </Button>
-                    </div>
+                    </div> */}
 
                     {/* Quick Search Bar */}
                     <Card className="border border-[#d1d1d1] bg-white">
@@ -274,12 +340,19 @@ export const ParcelSearch = (): JSX.Element => {
                                 <Button
                                     onClick={() => setShowFilters(!showFilters)}
                                     variant={showFilters ? "default" : "outline"}
-                                    className={`flex items-center gap-2 ${
-                                        showFilters ? "bg-[#ea690c] text-white" : "border border-[#d1d1d1]"
-                                    }`}
+                                    className={`flex items-center gap-2 ${showFilters ? "bg-[#ea690c] text-white" : "border border-[#d1d1d1]"
+                                        }`}
                                 >
                                     <FilterIcon size={18} />
                                     <span className="hidden sm:inline">{showFilters ? "Hide" : "Show"} Filters</span>
+                                </Button>
+                                <Button
+                                    onClick={handleExport}
+                                    size="sm"
+                                    className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2 h-8 text-xs"
+                                >
+                                    <Download size={14} />
+                                    Export
                                 </Button>
                             </div>
 
@@ -413,8 +486,10 @@ export const ParcelSearch = (): JSX.Element => {
                                         </Button>
                                     </div>
                                 </div>
+
                             )}
                         </CardContent>
+
                     </Card>
 
                     {/* Results Summary */}
@@ -422,33 +497,40 @@ export const ParcelSearch = (): JSX.Element => {
                         <div className="text-center py-8">
                             <Loader className="w-8 h-8 text-[#ea690c] mx-auto mb-4 animate-spin" />
                             <p className="text-sm text-neutral-700">Loading parcels...</p>
-                    </div>
+                        </div>
                     ) : (
                         <>
                             <div className="flex items-center justify-between text-xs text-[#5d5d5d] mb-2">
-                                <span>Showing {filteredParcels.length} of {pagination.totalElements} parcel(s)</span>
+                                <span className="flex items-center gap-2">
+                                    Showing {filteredParcels.length} of {pagination.totalElements} parcel(s)
+                                    {backgroundLoading && (
+                                        <span className="inline-flex items-center gap-1.5 text-[#ea690c]">
+                                            <Loader className="w-4 h-4 animate-spin" />
+                                            Loading next page...
+                                        </span>
+                                    )}
+                                </span>
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs">Rows per page:</span>
                                     <select
                                         value={pagination.size}
                                         onChange={(e) => {
                                             const newSize = parseInt(e.target.value);
-                                            loadParcelsIfNeeded({}, 0, newSize, false);
+                                            loadParcelsIfNeeded({}, 0, newSize, true);
                                         }}
                                         className="text-xs border border-[#d1d1d1] rounded px-2 py-1"
                                     >
-                                        <option value={50}>50</option>
-                                        <option value={100}>100</option>
-                                        <option value={200}>200</option>
-                                        <option value={500}>500</option>
+                                        <option value={1000}>1000</option>
+                                        <option value={2000}>2000</option>
+                                        <option value={5000}>5000</option>
                                     </select>
                                 </div>
-                                                </div>
+                            </div>
 
                             {/* Parcels Table */}
                             <Card className="border border-[#d1d1d1] bg-white overflow-hidden">
                                 <CardContent className="p-0">
-                                    <div className="overflow-x-auto max-h-[calc(100vh-350px)] overflow-y-auto">
+                                    <div className="overflow-x-auto max-h-[calc(100vh-200px)] overflow-y-auto">
                                         <table className="w-full divide-y divide-[#d1d1d1] text-xs">
                                             <thead className="bg-gray-50 sticky top-0 z-10">
                                                 <tr>
@@ -461,6 +543,12 @@ export const ParcelSearch = (): JSX.Element => {
                                                     <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
                                                         Address
                                                     </th>
+
+                                                    {/* NEW: Date column */}
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                        Date
+                                                    </th>
+
                                                     <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
                                                         Status
                                                     </th>
@@ -478,30 +566,32 @@ export const ParcelSearch = (): JSX.Element => {
                                             <tbody className="bg-white divide-y divide-[#d1d1d1]">
                                                 {filteredParcels.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan={7} className="py-8 px-4 text-center">
+                                                        {/* UPDATED colSpan to account for Date column */}
+                                                        <td colSpan={8} className="py-8 px-4 text-center">
                                                             <p className="text-xs text-neutral-700">No parcels found matching your search criteria.</p>
                                                         </td>
                                                     </tr>
                                                 ) : (
                                                     filteredParcels.map((parcel, index) => {
-                                                        // Determine status from API fields
-                                                        let statusLabel = "Registered";
+                                                        // Use new helper to determine status
+                                                        const statusLabel = getStatusLabel(parcel);
                                                         let statusColor = "bg-gray-100 text-gray-800";
-                                                        if (parcel.delivered) {
-                                                            statusLabel = "Delivered";
+                                                        if (statusLabel === "Delivered") {
                                                             statusColor = "bg-green-100 text-green-800";
-                                                        } else if (parcel.parcelAssigned) {
-                                                            statusLabel = "Assigned";
+                                                        } else if (statusLabel === "Assigned") {
                                                             statusColor = "bg-blue-100 text-blue-800";
-                                                        } else if (parcel.pod) {
-                                                            statusLabel = "POD";
+                                                        } else if (statusLabel === "POD") {
                                                             statusColor = "bg-purple-100 text-purple-800";
+                                                        } else if (statusLabel === "Picked Up") {
+                                                            statusColor = "bg-orange-100 text-orange-800";
+                                                        } else if (statusLabel === "Called") {
+                                                            statusColor = "bg-yellow-100 text-yellow-800";
                                                         }
 
                                                         return (
                                                             <tr
                                                                 key={parcel.parcelId}
-                                                                className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
+                                                                className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} align-middle`}
                                                             >
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
                                                                     <div>
@@ -509,18 +599,26 @@ export const ParcelSearch = (): JSX.Element => {
                                                                         {parcel.senderName && (
                                                                             <p className="text-[#5d5d5d] text-[10px] mt-0.5">From: {parcel.senderName}</p>
                                                                         )}
-                                                    </div>
+                                                                    </div>
                                                                 </td>
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
                                                                     <div className="text-neutral-700 text-xs">
                                                                         {parcel.recieverPhoneNumber ? formatPhoneNumber(parcel.recieverPhoneNumber) : "N/A"}
-                                                    </div>
+                                                                    </div>
                                                                 </td>
                                                                 <td className="py-1.5 px-2">
                                                                     <div className="text-neutral-700 text-xs max-w-[180px] truncate">
                                                                         {parcel.receiverAddress || "—"}
-                                                    </div>
+                                                                    </div>
                                                                 </td>
+
+                                                                {/* NEW: createdAt/date cell */}
+                                                                <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                    <div className="text-neutral-700 text-xs">
+                                                                        {parcel.createdAt ? new Date(parcel.createdAt).toLocaleString() : "—"}
+                                                                    </div>
+                                                                </td>
+
                                                                 <td className="py-1.5 px-2 whitespace-nowrap">
                                                                     <Badge className={`${statusColor} text-[10px] px-1.5 py-0.5`}>
                                                                         {statusLabel}
@@ -543,8 +641,18 @@ export const ParcelSearch = (): JSX.Element => {
                                                                             </>
                                                                         ) : (
                                                                             <span className="text-neutral-500 text-xs">—</span>
-                                                    )}
-                                                </div>
+                                                                        )}
+
+                                                                        {/* NEW: show rider info if present */}
+                                                                        {parcel.riderInfo && (
+                                                                            <div className="mt-1">
+                                                                                <p className="text-neutral-800 font-medium text-xs">Rider: {parcel.riderInfo.riderName}</p>
+                                                                                {parcel.riderInfo.riderPhoneNumber && (
+                                                                                    <p className="text-[#5d5d5d] text-[10px]">{formatPhoneNumber(parcel.riderInfo.riderPhoneNumber)}</p>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
                                                                 </td>
                                                                 <td className="py-1.5 px-2 whitespace-nowrap text-center">
                                                                     <Button
@@ -568,7 +676,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                 )}
                                             </tbody>
                                         </table>
-                                        </div>
+                                    </div>
                                 </CardContent>
                             </Card>
 
@@ -581,7 +689,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                 const newPage = pagination.page - 1;
                                                 loadParcelsIfNeeded({}, newPage, pagination.size, false);
                                             }}
-                                            disabled={pagination.page === 0}
+                                            disabled={pagination.page === 0 || backgroundLoading}
                                             variant="outline"
                                             className="border border-[#d1d1d1]"
                                         >
@@ -592,7 +700,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                 const newPage = pagination.page + 1;
                                                 loadParcelsIfNeeded({}, newPage, pagination.size, false);
                                             }}
-                                            disabled={pagination.page >= pagination.totalPages - 1}
+                                            disabled={pagination.page >= pagination.totalPages - 1 || backgroundLoading}
                                             variant="outline"
                                             className="border border-[#d1d1d1]"
                                         >
@@ -615,10 +723,13 @@ export const ParcelSearch = (): JSX.Element => {
                                                     const newPage = pagination.page - 1;
                                                     loadParcelsIfNeeded({}, newPage, pagination.size, false);
                                                 }}
-                                                disabled={pagination.page === 0}
+                                                disabled={pagination.page === 0 || backgroundLoading}
                                                 variant="outline"
                                                 className="border border-[#d1d1d1]"
                                             >
+                                                {backgroundLoading ? (
+                                                    <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                ) : null}
                                                 Previous
                                             </Button>
                                             <Button
@@ -626,10 +737,13 @@ export const ParcelSearch = (): JSX.Element => {
                                                     const newPage = pagination.page + 1;
                                                     loadParcelsIfNeeded({}, newPage, pagination.size, false);
                                                 }}
-                                                disabled={pagination.page >= pagination.totalPages - 1}
+                                                disabled={pagination.page >= pagination.totalPages - 1 || backgroundLoading}
                                                 variant="outline"
                                                 className="border border-[#d1d1d1]"
                                             >
+                                                {backgroundLoading ? (
+                                                    <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                ) : null}
                                                 Next
                                             </Button>
                                         </div>
@@ -731,37 +845,37 @@ export const ParcelSearch = (): JSX.Element => {
                                 {/* Basic Information */}
                                 <div>
                                     <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Basic Information</h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Parcel ID</p>
                                             <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.parcelId}</p>
-                                    </div>
-                                    <div>
+                                        </div>
+                                        <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Status</p>
                                             <Badge className={
-                                                selectedParcel.delivered 
+                                                selectedParcel.delivered
                                                     ? "bg-green-100 text-green-800"
                                                     : selectedParcel.parcelAssigned
-                                                    ? "bg-blue-100 text-blue-800"
-                                                    : selectedParcel.pod
-                                                    ? "bg-purple-100 text-purple-800"
-                                                    : "bg-gray-100 text-gray-800"
+                                                        ? "bg-blue-100 text-blue-800"
+                                                        : selectedParcel.pod
+                                                            ? "bg-purple-100 text-purple-800"
+                                                            : "bg-gray-100 text-gray-800"
                                             }>
-                                                {selectedParcel.delivered 
+                                                {selectedParcel.delivered
                                                     ? "Delivered"
                                                     : selectedParcel.parcelAssigned
-                                                    ? "Assigned"
-                                                    : selectedParcel.pod
-                                                    ? "POD"
-                                                    : "Registered"}
-                                        </Badge>
-                                    </div>
-                                    <div>
+                                                        ? "Assigned"
+                                                        : selectedParcel.pod
+                                                            ? "POD"
+                                                            : "Registered"}
+                                            </Badge>
+                                        </div>
+                                        <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Shelf Location</p>
                                             <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.shelfName || selectedParcel.shelfNumber || "Not set"}</p>
-                                    </div>
+                                        </div>
                                         {selectedParcel.fragile !== undefined && (
-                                    <div>
+                                            <div>
                                                 <p className="text-xs text-[#5d5d5d] mb-1">Fragile</p>
                                                 <Badge className={selectedParcel.fragile ? "bg-orange-100 text-orange-800" : "bg-gray-100 text-gray-800"}>
                                                     {selectedParcel.fragile ? "Yes" : "No"}
@@ -775,10 +889,10 @@ export const ParcelSearch = (): JSX.Element => {
                                 <div>
                                     <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Recipient Information</h4>
                                     <div className="grid grid-cols-2 gap-4">
-                                    <div>
+                                        <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Recipient Name</p>
                                             <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.receiverName || "N/A"}</p>
-                                    </div>
+                                        </div>
                                         <div>
                                             <p className="text-xs text-[#5d5d5d] mb-1">Phone Number</p>
                                             <p className="font-semibold text-neutral-800 text-sm">
@@ -789,8 +903,8 @@ export const ParcelSearch = (): JSX.Element => {
                                             <div className="col-span-2">
                                                 <p className="text-xs text-[#5d5d5d] mb-1">Delivery Address</p>
                                                 <p className="text-sm text-neutral-700">{selectedParcel.receiverAddress}</p>
-                                        </div>
-                                    )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -838,6 +952,25 @@ export const ParcelSearch = (): JSX.Element => {
                                                 <div>
                                                     <p className="text-xs text-[#5d5d5d] mb-1">Vehicle Number</p>
                                                     <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.vehicleNumber}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* NEW: Rider Information */}
+                                {selectedParcel.riderInfo && (
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Rider Information</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-xs text-[#5d5d5d] mb-1">Rider Name</p>
+                                                <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.riderInfo.riderName}</p>
+                                            </div>
+                                            {selectedParcel.riderInfo.riderPhoneNumber && (
+                                                <div>
+                                                    <p className="text-xs text-[#5d5d5d] mb-1">Rider Phone</p>
+                                                    <p className="font-semibold text-neutral-800 text-sm">{formatPhoneNumber(selectedParcel.riderInfo.riderPhoneNumber)}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -939,6 +1072,32 @@ export const ParcelSearch = (): JSX.Element => {
                                             </div>
                                         ) : null}
                                     </div>
+                                </div>
+
+                                {/* Pickup Status and Action */}
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        {selectedParcel.pickedUp ? (
+                                            <Badge className="bg-green-100 text-green-800">Picked Up</Badge>
+                                        ) : (
+                                            <Badge className="bg-yellow-100 text-yellow-800">Not Picked Up</Badge>
+                                        )}
+                                        <span className="text-sm text-[#5d5d5d]">
+                                            Has Called: {selectedParcel.hasCalled ? "Yes" : "No"}
+                                        </span>
+                                    </div>
+
+                                    {!selectedParcel.pickedUp && (
+                                        <div>
+                                            <Button
+                                                onClick={handleMarkPickedUp}
+                                                disabled={markPickupLoading}
+                                                className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
+                                            >
+                                                {markPickupLoading ? "Updating..." : "Mark Picked Up"}
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="pt-4 border-t border-[#d1d1d1] flex gap-3">

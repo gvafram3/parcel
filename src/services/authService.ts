@@ -330,13 +330,12 @@ class AuthService {
     }
 
     /**
-     * Reset password using verification ID, verification code (OTP), and new password
+     * Reset password using verification ID (OTP) and new password
      */
-    async resetPassword(verificationId: string, verificationCode: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    async resetPassword(verificationId: string, newPassword: string): Promise<{ success: boolean; message: string }> {
         try {
             const response = await this.apiClient.post<{ message: string }>('/reset-password', {
                 verificationId: verificationId.trim(),
-                verificationCode: verificationCode.trim(),
                 newPassword: newPassword.trim(),
             });
 

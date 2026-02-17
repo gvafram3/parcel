@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Plus, MapPin,  X, Loader, Building2, ChevronDown, ChevronUp, Edit2, Trash2, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Plus, MapPin, X, Loader, Building2, Edit2, Trash2, AlertTriangle, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -37,7 +37,6 @@ interface DeleteConfirmation {
 export const StationManagement = (): JSX.Element => {
     const { locations, stations, loading: loadingLocations, refreshLocations } = useLocation();
     const { showToast } = useToast();
-    const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
     const [showAddLocationModal, setShowAddLocationModal] = useState(false);
     const [showAddStationModal, setShowAddStationModal] = useState(false);
     const [showEditStationModal, setShowEditStationModal] = useState(false);
@@ -60,6 +59,70 @@ export const StationManagement = (): JSX.Element => {
     const [selectedCountry, setSelectedCountry] = useState<string>("");
     const [availableRegions, setAvailableRegions] = useState<string[]>([]);
     const [loadingStations, setLoadingStations] = useState(false);
+
+    // Search, filter, and sort
+    const [searchQuery, setSearchQuery] = useState("");
+    const [locationFilter, setLocationFilter] = useState<string>("");
+    const [sortBy, setSortBy] = useState<keyof Station | "">("");
+    const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+    // Filtered and sorted stations
+    const filteredStations = useMemo(() => {
+        let result = [...stations];
+
+        // Search
+        if (searchQuery.trim()) {
+            const q = searchQuery.trim().toLowerCase();
+            result = result.filter(
+                (s) =>
+                    s.name?.toLowerCase().includes(q) ||
+                    s.code?.toLowerCase().includes(q) ||
+                    s.address?.toLowerCase().includes(q) ||
+                    s.managerName?.toLowerCase().includes(q) ||
+                    s.locationName?.toLowerCase().includes(q)
+            );
+        }
+
+        // Location filter
+        if (locationFilter) {
+            const loc = locations.find((l) => l.id === locationFilter);
+            if (loc?.offices) {
+                const stationIds = new Set(loc.offices.map((o) => o.id));
+                result = result.filter((s) => stationIds.has(s.id));
+            }
+        }
+
+        // Sort
+        if (sortBy) {
+            result.sort((a, b) => {
+                const aVal = a[sortBy];
+                const bVal = b[sortBy];
+                const cmp =
+                    typeof aVal === "string" && typeof bVal === "string"
+                        ? aVal.localeCompare(bVal)
+                        : typeof aVal === "number" && typeof bVal === "number"
+                            ? aVal - bVal
+                            : String(aVal ?? "").localeCompare(String(bVal ?? ""));
+                return sortDirection === "asc" ? cmp : -cmp;
+            });
+        }
+
+        return result;
+    }, [stations, locations, searchQuery, locationFilter, sortBy, sortDirection]);
+
+    const handleSort = (column: keyof Station) => {
+        if (sortBy === column) {
+            setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+        } else {
+            setSortBy(column);
+            setSortDirection("asc");
+        }
+    };
+
+    const SortIcon = ({ column }: { column: keyof Station }) => {
+        if (sortBy !== column) return <ArrowUpDown className="w-4 h-4 text-[#9a9a9a]" />;
+        return sortDirection === "asc" ? <ArrowUp className="w-4 h-4 text-[#ea690c]" /> : <ArrowDown className="w-4 h-4 text-[#ea690c]" />;
+    };
 
     // Update available regions when country changes
     useEffect(() => {
@@ -230,11 +293,7 @@ export const StationManagement = (): JSX.Element => {
             <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <main className="flex-1 space-y-6">
                     {/* Header */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                        <div>
-                            <h1 className="text-3xl font-bold text-neutral-800">Station Management</h1>
-                            <p className="text-sm text-[#5d5d5d] mt-2">Manage locations and their stations (offices)</p>
-                        </div>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-end gap-4">
                         <div className="flex flex-col sm:flex-row gap-3">
                             <Button
                                 onClick={() => setShowAddStationModal(true)}
@@ -599,9 +658,8 @@ export const StationManagement = (): JSX.Element => {
                         </div>
                     )}
 
-                    {/* Locations Section */}
-                    <div className="mt-8">
-                        <h2 className="text-2xl font-bold text-neutral-800 mb-4">Locations & Stations</h2>
+                    {/* Search, Filters & Stations Table */}
+                    <div className="mt-6">
                         {loadingLocations ? (
                             <Card className="border border-[#d1d1d1] bg-white">
                                 <CardContent className="p-12 text-center">
@@ -620,211 +678,184 @@ export const StationManagement = (): JSX.Element => {
                                 </CardContent>
                             </Card>
                         ) : (
-                            <div className="space-y-6">
-                                {locations.map((location) => (
-                                    <div key={location.id} className="border border-[#d1d1d1] rounded-lg bg-white overflow-hidden">
-                                        {/* Location Header */}
-                                        <div
-                                            className="bg-gradient-to-r from-orange-50 to-orange-100 p-6 cursor-pointer hover:from-orange-100 hover:to-orange-200 transition-colors"
-                                            onClick={() => setSelectedLocation(selectedLocation?.id === location.id ? null : location)}
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="p-3 bg-orange-200 rounded-lg">
-                                                        <MapPin className="w-6 h-6 text-[#ea690c]" />
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-bold text-lg text-neutral-800">{location.name}</h3>
-                                                        <p className="text-sm text-[#5d5d5d]">{location.region}, {location.country}</p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-4">
-                                                    <Badge className="bg-orange-100 text-orange-800">
-                                                        {location.offices?.length || 0} Station{location.offices?.length !== 1 ? 's' : ''}
-                                                    </Badge>
-                                                    {selectedLocation?.id === location.id ? (
-                                                        <ChevronUp className="w-6 h-6 text-[#ea690c]" />
-                                                    ) : (
-                                                        <ChevronDown className="w-6 h-6 text-[#ea690c]" />
-                                                    )}
-                                                </div>
-                                            </div>
+                            <>
+                                {/* Search & Filters */}
+                                <Card className="border border-[#d1d1d1] bg-white mb-4">
+                                    <CardContent className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-4">
+                                        <div className="flex-1 relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5d5d5d]" />
+                                            <Input
+                                                type="text"
+                                                placeholder="Search by name, code, address, manager, or location..."
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                                className="pl-10 border border-[#d1d1d1]"
+                                            />
                                         </div>
+                                        <div className="flex items-center gap-2">
+                                            <Filter className="w-5 h-5 text-[#5d5d5d] flex-shrink-0" />
+                                            <select
+                                                value={locationFilter}
+                                                onChange={(e) => setLocationFilter(e.target.value)}
+                                                className="rounded border border-[#d1d1d1] bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ea690c] min-w-[180px]"
+                                            >
+                                                <option value="">All Locations</option>
+                                                {locations.map((loc) => (
+                                                    <option key={loc.id} value={loc.id}>
+                                                        {loc.name} {loc.region && `- ${loc.region}`}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {(searchQuery || locationFilter) && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSearchQuery("");
+                                                    setLocationFilter("");
+                                                }}
+                                                className="border border-[#d1d1d1]"
+                                            >
+                                                Clear
+                                            </Button>
+                                        )}
+                                    </CardContent>
+                                </Card>
 
-                                        {/* Stations Table */}
-                                        {selectedLocation?.id === location.id && location.offices && location.offices.length > 0 && (
-                                            <div className="border-t border-[#d1d1d1] overflow-x-auto">
-                                                <table className="w-full">
-                                                    <thead>
-                                                        <tr className="bg-gray-50 border-b border-[#d1d1d1]">
-                                                            <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Station Name</th>
-                                                            <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Code</th>
-                                                            <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Address</th>
-                                                            <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Manager</th>
-                                                            <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Created</th>
-                                                            <th className="text-center px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Status</th>
-                                                            <th className="text-center px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Actions</th>
+                                {/* Stations Table */}
+                                <Card className="border border-[#d1d1d1] bg-white overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-gray-50 border-b border-[#d1d1d1]">
+                                                    <th className="text-left px-4 py-3">
+                                                        <button
+                                                            onClick={() => handleSort("name")}
+                                                            className="flex items-center gap-1.5 text-xs font-semibold text-neutral-700 uppercase hover:text-[#ea690c] transition-colors"
+                                                        >
+                                                            Station Name
+                                                            <SortIcon column="name" />
+                                                        </button>
+                                                    </th>
+                                                    <th className="text-left px-4 py-3">
+                                                        <button
+                                                            onClick={() => handleSort("code")}
+                                                            className="flex items-center gap-1.5 text-xs font-semibold text-neutral-700 uppercase hover:text-[#ea690c] transition-colors"
+                                                        >
+                                                            Code
+                                                            <SortIcon column="code" />
+                                                        </button>
+                                                    </th>
+                                                    <th className="text-left px-4 py-3">
+                                                        <button
+                                                            onClick={() => handleSort("locationName")}
+                                                            className="flex items-center gap-1.5 text-xs font-semibold text-neutral-700 uppercase hover:text-[#ea690c] transition-colors"
+                                                        >
+                                                            Location
+                                                            <SortIcon column="locationName" />
+                                                        </button>
+                                                    </th>
+                                                    <th className="text-left px-4 py-3 text-xs font-semibold text-neutral-700 uppercase">Address</th>
+                                                    <th className="text-left px-4 py-3">
+                                                        <button
+                                                            onClick={() => handleSort("managerName")}
+                                                            className="flex items-center gap-1.5 text-xs font-semibold text-neutral-700 uppercase hover:text-[#ea690c] transition-colors"
+                                                        >
+                                                            Manager
+                                                            <SortIcon column="managerName" />
+                                                        </button>
+                                                    </th>
+                                                    <th className="text-left px-4 py-3">
+                                                        <button
+                                                            onClick={() => handleSort("createdAt")}
+                                                            className="flex items-center gap-1.5 text-xs font-semibold text-neutral-700 uppercase hover:text-[#ea690c] transition-colors"
+                                                        >
+                                                            Created
+                                                            <SortIcon column="createdAt" />
+                                                        </button>
+                                                    </th>
+                                                    <th className="text-center px-4 py-3 text-xs font-semibold text-neutral-700 uppercase">Status</th>
+                                                    <th className="text-center px-4 py-3 text-xs font-semibold text-neutral-700 uppercase">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredStations.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={8} className="px-6 py-12 text-center">
+                                                            <p className="text-sm text-[#5d5d5d]">No stations match your search or filters</p>
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    filteredStations.map((station, index) => (
+                                                        <tr
+                                                            key={station.id}
+                                                            className={`border-b border-[#d1d1d1] hover:bg-gray-50 transition-colors ${index % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                                                        >
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="p-2 bg-orange-50 rounded">
+                                                                        <Building2 className="w-4 h-4 text-[#ea690c]" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="font-semibold text-neutral-800 text-sm">{station.name}</p>
+                                                                        <p className="text-xs text-[#5d5d5d]">ID: {station.id}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <Badge className="bg-gray-100 text-gray-800 font-mono text-xs">{station.code}</Badge>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <p className="text-sm text-neutral-700">{station.locationName || "—"}</p>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <p className="text-sm text-neutral-700 truncate max-w-[200px]" title={station.address}>
+                                                                    {station.address || "—"}
+                                                                </p>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <p className="text-sm text-neutral-700">{station.managerName || "—"}</p>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <p className="text-sm text-[#5d5d5d]">
+                                                                    {new Date(station.createdAt).toLocaleDateString()}
+                                                                </p>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <Badge className="bg-green-100 text-green-800 text-xs">Active</Badge>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex items-center justify-center gap-1">
+                                                                    <button
+                                                                        onClick={() => handleEditStation(station)}
+                                                                        className="text-[#ea690c] hover:bg-orange-50 p-2 rounded transition-colors"
+                                                                        title="Edit station"
+                                                                    >
+                                                                        <Edit2 size={16} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleInitiateDelete(station)}
+                                                                        className="text-[#e22420] hover:bg-red-50 p-2 rounded transition-colors"
+                                                                        title="Delete station"
+                                                                    >
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                </div>
+                                                            </td>
                                                         </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {location.offices.map((station, index) => (
-                                                            <tr
-                                                                key={station.id}
-                                                                className={`border-b border-[#d1d1d1] hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
-                                                            >
-                                                                <td className="px-6 py-4">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="p-2 bg-orange-50 rounded">
-                                                                            <Building2 className="w-4 h-4 text-[#ea690c]" />
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="font-semibold text-neutral-800 text-sm">{station.name}</p>
-                                                                            <p className="text-xs text-[#5d5d5d]">ID: {station.id}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                </td>
-                                                                <td className="px-6 py-4">
-                                                                    <Badge className="bg-gray-100 text-gray-800 font-mono text-xs">
-                                                                        {station.code}
-                                                                    </Badge>
-                                                                </td>
-                                                                <td className="px-6 py-4">
-                                                                    <p className="text-sm text-neutral-700 truncate max-w-xs">{station.address}</p>
-                                                                </td>
-                                                                <td className="px-6 py-4">
-                                                                    <p className="text-sm text-neutral-700">{station.managerName}</p>
-                                                                </td>
-                                                                <td className="px-6 py-4">
-                                                                    <p className="text-sm text-[#5d5d5d]">
-                                                                        {new Date(station.createdAt).toLocaleDateString()}
-                                                                    </p>
-                                                                </td>
-                                                                <td className="px-6 py-4 text-center">
-                                                                    <Badge className="bg-green-100 text-green-800 text-xs">Active</Badge>
-                                                                </td>
-                                                                <td className="px-6 py-4 text-center">
-                                                                    <div className="flex items-center justify-center gap-2">
-                                                                        <button
-                                                                            onClick={() => handleEditStation(station)}
-                                                                            className="text-[#ea690c] hover:bg-orange-50 p-2 rounded transition-colors"
-                                                                            title="Edit station"
-                                                                        >
-                                                                            <Edit2 size={16} />
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleInitiateDelete(station)}
-                                                                            className="text-[#e22420] hover:bg-red-50 p-2 rounded transition-colors"
-                                                                            title="Delete station"
-                                                                        >
-                                                                            <Trash2 size={16} />
-                                                                        </button>
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        )}
-
-                                        {/* No Stations Message */}
-                                        {selectedLocation?.id === location.id && (!location.offices || location.offices.length === 0) && (
-                                            <div className="border-t border-[#d1d1d1] p-6 text-center">
-                                                <p className="text-sm text-[#5d5d5d]">No stations in this location yet</p>
-                                            </div>
-                                        )}
+                                                    ))
+                                                )}
+                                            </tbody>
+                                        </table>
                                     </div>
-                                ))}
-                            </div>
+                                    <div className="px-4 py-3 bg-gray-50 border-t border-[#d1d1d1] text-xs text-[#5d5d5d]">
+                                        Showing {filteredStations.length} of {stations.length} station{stations.length !== 1 ? "s" : ""}
+                                    </div>
+                                </Card>
+                            </>
                         )}
                     </div>
-
-                    {/* All Stations Table */}
-                    {stations.length > 0 && (
-                        <div className="mt-8">
-                            <h2 className="text-2xl font-bold text-neutral-800 mb-4">All Stations ({stations.length})</h2>
-                            <Card className="border border-[#d1d1d1] bg-white overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="bg-gray-50 border-b border-[#d1d1d1]">
-                                                <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Station Name</th>
-                                                <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Code</th>
-                                                <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Location</th>
-                                                <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Address</th>
-                                                <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Manager</th>
-                                                <th className="text-left px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Created</th>
-                                                <th className="text-center px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Status</th>
-                                                <th className="text-center px-6 py-3 text-xs font-semibold text-neutral-700 uppercase">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {stations.map((station, index) => (
-                                                <tr
-                                                    key={station.id}
-                                                    className={`border-b border-[#d1d1d1] hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}
-                                                >
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="p-2 bg-orange-50 rounded">
-                                                                <Building2 className="w-4 h-4 text-[#ea690c]" />
-                                                            </div>
-                                                            <div>
-                                                                <p className="font-semibold text-neutral-800 text-sm">{station.name}</p>
-                                                                <p className="text-xs text-[#5d5d5d]">ID: {station.id}</p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <Badge className="bg-gray-100 text-gray-800 font-mono text-xs">
-                                                            {station.code}
-                                                        </Badge>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-sm text-neutral-700">{station.locationName}</p>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-sm text-neutral-700 truncate max-w-xs" title={station.address}>
-                                                            {station.address}
-                                                        </p>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-sm text-neutral-700">{station.managerName}</p>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <p className="text-sm text-[#5d5d5d]">
-                                                            {new Date(station.createdAt).toLocaleDateString()}
-                                                        </p>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <Badge className="bg-green-100 text-green-800 text-xs">Active</Badge>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <button
-                                                                onClick={() => handleEditStation(station)}
-                                                                className="text-[#ea690c] hover:bg-orange-50 p-2 rounded transition-colors"
-                                                                title="Edit station"
-                                                            >
-                                                                <Edit2 size={16} />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleInitiateDelete(station)}
-                                                                className="text-[#e22420] hover:bg-red-50 p-2 rounded transition-colors"
-                                                                title="Delete station"
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </Card>
-                        </div>
-                    )}
                 </main>
             </div>
         </div>

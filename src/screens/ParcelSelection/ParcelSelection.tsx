@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
     CheckIcon,
     MapPinIcon,
@@ -17,9 +17,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar"
 import { formatPhoneNumber, formatCurrency } from "../../utils/dataHelpers";
 import { ParcelResponse, RiderResponse } from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
-import { useFrontdeskParcel } from "../../contexts/FrontdeskParcelContext";
 import frontdeskService from "../../services/frontdeskService";
 import { useStation } from "../../contexts/StationContext";
+import { Label } from "@radix-ui/react-label";
 
 interface ParcelCardProps {
     parcel: ParcelResponse;
@@ -28,7 +28,6 @@ interface ParcelCardProps {
 }
 
 const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
-    // Determine status from API fields
     let statusLabel = "Ready";
     let statusColor = "bg-green-100 text-green-800";
     if (parcel.delivered) {
@@ -38,22 +37,18 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
         statusLabel = "Assigned";
         statusColor = "bg-blue-100 text-blue-800";
     }
-    
-    // Calculate total amount from API fields
+
     const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) + (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-    
-    // Show delivery address if home delivery, otherwise show shelf for pickup
+
     const hasDeliveryAddress = parcel.receiverAddress && parcel.homeDelivery;
 
     return (
         <Card
-            className={`rounded-lg border-2 bg-white shadow-sm hover:shadow-md transition-shadow ${
-                isSelected ? "border-[#ea690c]" : "border-[#d1d1d1]"
-            }`}
+            className={`rounded-lg border-2 bg-white shadow-sm hover:shadow-md transition-shadow ${isSelected ? "border-[#ea690c]" : "border-[#d1d1d1]"
+                }`}
         >
             <CardContent className="p-4">
                 <div className="flex flex-col gap-4">
-                    {/* Header with checkbox and package ID */}
                     <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
                             <button
@@ -61,11 +56,10 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
                                     e.stopPropagation();
                                     onToggle();
                                 }}
-                                className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${
-                                    isSelected
-                                        ? "border-[#ea690c] bg-[#ea690c]"
-                                        : "border-[#d1d1d1] bg-white"
-                                }`}
+                                className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${isSelected
+                                    ? "border-[#ea690c] bg-[#ea690c]"
+                                    : "border-[#d1d1d1] bg-white"
+                                    }`}
                             >
                                 {isSelected && <CheckIcon className="w-3 h-3 text-white" />}
                             </button>
@@ -81,7 +75,6 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
                         <Badge className={statusColor}>{statusLabel}</Badge>
                     </div>
 
-                    {/* Details */}
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <PhoneIcon className="w-4 h-4 text-[#5d5d5d]" />
@@ -118,6 +111,22 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
                             </div>
                         )}
 
+                        {parcel.riderInfo && (
+                            <div className="flex items-center gap-2">
+                                <UserIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                <div className="[font-family:'Lato',Helvetica] font-normal text-sm">
+                                    <div className="text-[#ea690c]">
+                                        Rider: <strong className="font-semibold text-[#ea690c]">{parcel.riderInfo.riderName}</strong>
+                                    </div>
+                                    {parcel.riderInfo.riderPhoneNumber && (
+                                        <div className="text-[12px] text-[#ea690c]">
+                                            {formatPhoneNumber(parcel.riderInfo.riderPhoneNumber)}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="flex items-center gap-2 mt-1">
                             <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
                                 Amount to collect: <span className="text-[#ea690c]">{formatCurrency(totalAmount)}</span>
@@ -125,7 +134,6 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
                         </div>
                     </div>
 
-                    {/* Status message */}
                     <div className="rounded-lg border p-3 bg-green-50 border-green-200">
                         <div className="flex items-center gap-2">
                             <TruckIcon className="w-4 h-4 text-green-600" />
@@ -143,37 +151,59 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
 export const ParcelSelection = (): JSX.Element => {
     const { showToast } = useToast();
     const { currentUser } = useStation();
-    const { 
-        parcels: allParcels, 
-        loading, 
-        pagination, 
-        loadParcelsIfNeeded,
-        refreshParcels
-    } = useFrontdeskParcel();
+    const [allParcels, setAllParcels] = useState<ParcelResponse[]>([]);
+    const [filteredParcels, setFilteredParcels] = useState<ParcelResponse[]>([]);
+    const [loading, setLoading] = useState(false);
     const [selectedParcels, setSelectedParcels] = useState<Set<string>>(new Set());
     const [showRiderModal, setShowRiderModal] = useState(false);
     const [riders, setRiders] = useState<RiderResponse[]>([]);
     const [loadingRiders, setLoadingRiders] = useState(false);
     const [selectedRider, setSelectedRider] = useState<string | null>(null);
     const [isAssigning, setIsAssigning] = useState(false);
+    const [filterMode, setFilterMode] = useState<'ready' | 'assigned'>('ready');
 
-    // Load parcels on mount
+    const filterParcelsByMode = (parcels: ParcelResponse[], mode: 'ready' | 'assigned') => {
+        if (mode === 'assigned') {
+            return parcels.filter(p => !!p.parcelAssigned || !!p.riderInfo);
+        }
+        return parcels.filter(p => !p.parcelAssigned && !p.riderInfo);
+    };
+
     useEffect(() => {
-        const hasCache = allParcels.length > 0;
-        // Load all parcels - we'll filter client-side for homeDelivery
-        loadParcelsIfNeeded({}, pagination.page, pagination.size, !hasCache);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        const fetchHomeDeliveryParcels = async () => {
+            setLoading(true);
+            try {
+                const response = await frontdeskService.getHomeDeliveryParcels();
 
-    // Filter parcels: only show those with homeDelivery === true, hasCalled === true, not assigned, not delivered
-    const readyParcels = useMemo(() => {
-        return allParcels.filter(p => 
-            p.homeDelivery === true &&
-            p.hasCalled === true &&
-            p.parcelAssigned !== true &&
-            p.delivered !== true
-        );
-    }, [allParcels]);
+                if (response.success && response.data) {
+                    const parcels = Array.isArray(response.data)
+                        ? response.data as ParcelResponse[]
+                        : [];
+                    const validParcels = parcels.filter(p => p.parcelId);
+                    setAllParcels(validParcels);
+                    setFilteredParcels(filterParcelsByMode(validParcels, filterMode));
+                } else {
+                    showToast(response.message || "Failed to load parcels", "error");
+                    setAllParcels([]);
+                    setFilteredParcels([]);
+                }
+            } catch (error) {
+                console.error("Failed to fetch home delivery parcels:", error);
+                showToast("Failed to load parcels. Please try again.", "error");
+                setAllParcels([]);
+                setFilteredParcels([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchHomeDeliveryParcels();
+    }, [showToast, filterMode]);
+
+    useEffect(() => {
+        setFilteredParcels(filterParcelsByMode(allParcels, filterMode));
+        setSelectedParcels(new Set());
+    }, [allParcels, filterMode]);
 
     const toggleParcel = (parcelId: string) => {
         const newSelected = new Set(selectedParcels);
@@ -192,7 +222,6 @@ export const ParcelSelection = (): JSX.Element => {
     const handleAssign = () => {
         if (selectedParcels.size > 0) {
             setShowRiderModal(true);
-            // Fetch riders when modal opens
             fetchRiders();
         }
     };
@@ -201,7 +230,7 @@ export const ParcelSelection = (): JSX.Element => {
         setLoadingRiders(true);
         try {
             const response = await frontdeskService.getRiders();
-            
+
             if (response.success && response.data) {
                 setRiders(response.data as RiderResponse[]);
             } else {
@@ -229,14 +258,22 @@ export const ParcelSelection = (): JSX.Element => {
 
             if (response.success) {
                 showToast(`Successfully assigned ${parcelIds.length} parcel(s) to rider!`, "success");
-                
-                // Clear selections and close modal
+
                 setSelectedParcels(new Set());
                 setSelectedRider(null);
                 setShowRiderModal(false);
-                
-                // Refresh parcels to update the list
-                refreshParcels();
+
+                const refreshResponse = await frontdeskService.getHomeDeliveryParcels();
+                if (refreshResponse.success && refreshResponse.data) {
+                    const parcels = Array.isArray(refreshResponse.data)
+                        ? refreshResponse.data as ParcelResponse[]
+                        : [];
+                    setAllParcels(parcels);
+                    setFilteredParcels(filterParcelsByMode(parcels, filterMode));
+                } else {
+                    setAllParcels([]);
+                    setFilteredParcels([]);
+                }
             } else {
                 showToast(response.message || "Failed to assign parcels. Please try again.", "error");
             }
@@ -254,30 +291,42 @@ export const ParcelSelection = (): JSX.Element => {
         <div className="w-full">
             <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <main className="flex-1 space-y-6">
-                    {/* Header */}
-                    <div>
-                        <h1 className="text-2xl font-bold text-neutral-800">Parcel Assignment</h1>
-                        <p className="text-sm text-[#5d5d5d] mt-1">
-                            Select parcels with home delivery requests and assign them to a rider
-                        </p>
-                    </div>
+                    <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+                        <CardContent className="p-4">
+                            <div className="flex items-center gap-4">
+                                <Label className="block text-xs font-semibold text-[#5d5d5d]">Filter</Label>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => { setFilterMode('ready'); setSelectedParcels(new Set()); }}
+                                        className={`px-3 py-1 rounded ${filterMode === 'ready' ? 'bg-[#ea690c] text-white' : 'bg-white border border-[#d1d1d1] text-neutral-700'}`}
+                                    >
+                                        Ready
+                                    </button>
+                                    <button
+                                        onClick={() => { setFilterMode('assigned'); setSelectedParcels(new Set()); }}
+                                        className={`px-3 py-1 rounded ${filterMode === 'assigned' ? 'bg-[#ea690c] text-white' : 'bg-white border border-[#d1d1d1] text-neutral-700'}`}
+                                    >
+                                        Assigned
+                                    </button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
 
-                    {/* Banner */}
                     <div className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
                         <p className="[font-family:'Lato',Helvetica] font-normal text-blue-800 text-sm">
-                            <span className="font-semibold">{selectedParcels.size} Parcel(s) Selected</span>
+                            <span className="font-semibold">{filteredParcels.length} Parcel(s)</span> ({filterMode === 'ready' ? 'Ready' : 'Assigned'})
                             {" - "}
-                            10 maximum parcels can be selected and assigned to a rider at once.
+                            <span className="font-semibold">{selectedParcels.size}</span> selected
                         </p>
                     </div>
 
-                    {/* Action Bar */}
                     <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
                         <CardContent className="flex flex-col sm:flex-row items-center gap-4 p-4">
                             <div className="flex items-center gap-2">
                                 <TruckIcon className="w-5 h-5 text-[#ea690c]" />
                                 <span className="text-sm font-medium text-neutral-700">
-                                    {readyParcels.length} parcel{readyParcels.length !== 1 ? 's' : ''} ready for home delivery
+                                    {filteredParcels.length} parcel{filteredParcels.length !== 1 ? 's' : ''} ready for assignment
                                 </span>
                             </div>
 
@@ -293,7 +342,6 @@ export const ParcelSelection = (): JSX.Element => {
                         </CardContent>
                     </Card>
 
-                    {/* Parcel Cards Grid */}
                     {loading ? (
                         <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
                             <CardContent className="p-12 text-center">
@@ -301,19 +349,25 @@ export const ParcelSelection = (): JSX.Element => {
                                 <p className="text-neutral-700 font-medium">Loading parcels...</p>
                             </CardContent>
                         </Card>
-                    ) : readyParcels.length === 0 ? (
+                    ) : filteredParcels.length === 0 ? (
                         <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
                             <CardContent className="p-12 text-center">
                                 <PackageIcon className="w-16 h-16 text-[#9a9a9a] mx-auto mb-4 opacity-50" />
-                                <p className="text-neutral-700 font-medium">No parcels ready for assignment</p>
+                                <p className="text-neutral-700 font-medium">
+                                    {allParcels.length === 0
+                                        ? "No parcels ready for assignment"
+                                        : `No parcels for the selected filter`}
+                                </p>
                                 <p className="text-sm text-[#5d5d5d] mt-2">
-                                    Parcels will appear here once customers are contacted and request home delivery
+                                    {allParcels.length === 0
+                                        ? "Parcels will appear here once customers are contacted and request home delivery"
+                                        : "Try selecting a different filter"}
                                 </p>
                             </CardContent>
                         </Card>
-                    ) : (
+                    ) : Array.isArray(filteredParcels) && filteredParcels.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {readyParcels.map((parcel) => (
+                            {filteredParcels.map((parcel) => (
                                 <ParcelCard
                                     key={parcel.parcelId}
                                     parcel={parcel}
@@ -322,11 +376,20 @@ export const ParcelSelection = (): JSX.Element => {
                                 />
                             ))}
                         </div>
+                    ) : (
+                        <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+                            <CardContent className="p-12 text-center">
+                                <PackageIcon className="w-16 h-16 text-[#9a9a9a] mx-auto mb-4 opacity-50" />
+                                <p className="text-neutral-700 font-medium">No parcels available</p>
+                                <p className="text-sm text-[#5d5d5d] mt-2">
+                                    Try selecting a different filter
+                                </p>
+                            </CardContent>
+                        </Card>
                     )}
                 </main>
             </div>
 
-            {/* Rider Selection Modal */}
             {showRiderModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <Card className="w-full max-w-4xl border border-[#d1d1d1] bg-white shadow-lg max-h-[90vh] overflow-y-auto">
@@ -347,7 +410,6 @@ export const ParcelSelection = (): JSX.Element => {
                                 </button>
                             </div>
 
-                            {/* Info Banner */}
                             {selectedParcels.size > 0 && (
                                 <div className="w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 mb-4">
                                     <p className="[font-family:'Lato',Helvetica] font-normal text-blue-800 text-sm">
@@ -385,11 +447,10 @@ export const ParcelSelection = (): JSX.Element => {
                                                     <div
                                                         key={rider.userId}
                                                         onClick={() => setSelectedRider(rider.userId)}
-                                                        className={`flex flex-col gap-4 p-4 rounded-lg border cursor-pointer transition-colors ${
-                                                            isSelected
-                                                                ? "border-[#ea690c] bg-orange-50"
-                                                                : "border-[#d1d1d1] bg-white hover:bg-gray-50"
-                                                        }`}
+                                                        className={`flex flex-col gap-4 p-4 rounded-lg border cursor-pointer transition-colors ${isSelected
+                                                            ? "border-[#ea690c] bg-orange-50"
+                                                            : "border-[#d1d1d1] bg-white hover:bg-gray-50"
+                                                            }`}
                                                     >
                                                         <div className="flex items-start justify-between">
                                                             <div className="flex items-center gap-3">
@@ -448,11 +509,10 @@ export const ParcelSelection = (): JSX.Element => {
                                                         {rider.status && (
                                                             <div className="flex items-center justify-end pt-2">
                                                                 <Badge
-                                                                    className={`${
-                                                                        rider.status === "ACTIVE"
-                                                                            ? "bg-green-100 text-green-800 hover:bg-green-100"
-                                                                            : "bg-gray-100 text-gray-800 hover:bg-gray-100"
-                                                                    }`}
+                                                                    className={`${rider.status === "ACTIVE"
+                                                                        ? "bg-green-100 text-green-800 hover:bg-green-100"
+                                                                        : "bg-gray-100 text-gray-800 hover:bg-gray-100"
+                                                                        }`}
                                                                 >
                                                                     {rider.status}
                                                                 </Badge>

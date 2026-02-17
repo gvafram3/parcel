@@ -56,6 +56,20 @@ export const Login = (): JSX.Element => {
     }
   }, [isAuthenticated, userRole, navigate]);
 
+  // Normalize phone number for backend: add +233 if user didn't include it
+  const normalizePhoneForBackend = (input: string): string => {
+    const trimmed = input.trim().replace(/\s/g, "");
+    if (!trimmed) return trimmed;
+    // Remove leading 0 (e.g., 0531656697 -> 531656697)
+    let digits = trimmed.startsWith("0") ? trimmed.slice(1) : trimmed;
+    // Remove + if present for easier handling
+    if (digits.startsWith("+")) digits = digits.slice(1);
+    // If already starts with 233, add + prefix
+    if (digits.startsWith("233")) return `+${digits}`;
+    // Otherwise prepend +233
+    return `+233${digits}`;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -77,7 +91,8 @@ export const Login = (): JSX.Element => {
           setLoading(false);
           return;
         }
-        response = await authService.loginWithPhone(phoneNumber, password);
+        const phoneForBackend = normalizePhoneForBackend(phoneNumber);
+        response = await authService.loginWithPhone(phoneForBackend, password);
       }
       console.log("Login response:", response);
 
@@ -118,7 +133,7 @@ export const Login = (): JSX.Element => {
           // Admin user - no station
           setStation(null);
         }
-
+        // why is this needed?
         // Store remember me preference
         if (rememberMe) {
           localStorage.setItem("rememberMe", "true");
@@ -273,7 +288,7 @@ export const Login = (): JSX.Element => {
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="+233550566516"
+                      placeholder="e.g. 0550123456 or 550123456"
                       value={phoneNumber}
                       onChange={(e) => {
                         setPhoneNumber(e.target.value);

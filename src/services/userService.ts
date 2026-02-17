@@ -3,6 +3,7 @@ import authService from './authService';
 import { API_ENDPOINTS } from '../config/api';
 
 const API_BASE_URL_ADMIN = API_ENDPOINTS.ADMIN;
+const API_BASE_URL_USER = API_ENDPOINTS.USER;
 
 interface CreateUserRequest {
     name: string;
@@ -69,6 +70,7 @@ interface PageUser {
 
 class UserService {
     private apiClientAdmin: AxiosInstance;
+    private apiClientUser: AxiosInstance;
 
     constructor() {
         // Admin API Client
@@ -79,29 +81,38 @@ class UserService {
             },
         });
 
-        // Add request interceptor to include token for Admin API
-        this.apiClientAdmin.interceptors.request.use(
-            (config) => {
-                const token = authService.getToken();
-                if (token) {
-                    config.headers.Authorization = `Bearer ${token}`;
-                }
-                return config;
+        // User API Client (for endpoints under /api-user)
+        this.apiClientUser = axios.create({
+            baseURL: API_BASE_URL_USER,
+            headers: {
+                'Content-Type': 'application/json',
             },
-            (error) => Promise.reject(error)
-        );
+        });
+
+        const addAuthInterceptor = (config: any) => {
+            const token = authService.getToken();
+            if (token) {
+                config.headers.Authorization = `Bearer ${token}`;
+            }
+            return config;
+        };
+        const addErrorInterceptor = (error: any) => {
+            if (error.response?.status === 401) {
+                authService.logout();
+                window.location.href = '/login';
+            }
+            return Promise.reject(error);
+        };
+
+        // Add request interceptor to include token for Admin API
+        this.apiClientAdmin.interceptors.request.use(addAuthInterceptor, (error) => Promise.reject(error));
 
         // Add response interceptor to handle errors for Admin API
-        this.apiClientAdmin.interceptors.response.use(
-            (response) => response,
-            (error) => {
-                if (error.response?.status === 401) {
-                    authService.logout();
-                    window.location.href = '/login';
-                }
-                return Promise.reject(error);
-            }
-        );
+        this.apiClientAdmin.interceptors.response.use((response) => response, addErrorInterceptor);
+
+        // Add same interceptors for User API Client
+        this.apiClientUser.interceptors.request.use(addAuthInterceptor, (error) => Promise.reject(error));
+        this.apiClientUser.interceptors.response.use((response) => response, addErrorInterceptor);
     }
 
     /**
@@ -137,7 +148,7 @@ class UserService {
             const params = new URLSearchParams();
             params.append('page', (pageable.page || 0).toString());
             params.append('size', (pageable.size || 50).toString());
-            
+
             if (pageable.sort && pageable.sort.length > 0) {
                 pageable.sort.forEach(sort => {
                     params.append('sort', sort);
@@ -181,6 +192,27 @@ class UserService {
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to delete user. Please try again.',
+            };
+        }
+    }
+
+    /**
+     * Add existing user (by phone) to an office/station using Admin API
+     * Expects payload: { officeId: string, userPhoneNumber: string }
+     */
+    async addUserToOffice(payload: { officeId: string; userPhoneNumber: string }): Promise<UserResponse> {
+        try {
+            const response = await this.apiClientUser.post<UserResponse>('/add-user-office', payload);
+            return {
+                success: true,
+                message: response.data?.message || 'User added to office successfully',
+                data: response.data?.data || response.data,
+            };
+        } catch (error: any) {
+            console.error('Add user to office error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to add user to office. Please try again.',
             };
         }
     }

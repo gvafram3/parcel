@@ -1,8 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   PackageIcon,
-  CameraIcon,
-  AlertCircleIcon,
   SearchIcon,
   XIcon,
   FilterIcon,
@@ -21,7 +19,8 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { useStation } from "../../contexts/StationContext";
 import { formatPhoneNumber, formatDateTime, formatCurrency } from "../../utils/dataHelpers";
-import frontdeskService, { DeliveryAssignmentResponse, ParcelResponse, RiderResponse } from "../../services/frontdeskService";
+import frontdeskService, { ParcelResponse, RiderResponse } from "../../services/frontdeskService";
+import riderService from "../../services/riderService";
 import { useToast } from "../../components/ui/toast";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 
@@ -38,6 +37,8 @@ interface DeliveryItem {
   acceptedAt?: number;
   completedAt?: number;
   riderName?: string;
+  delivered?: boolean;
+  cancelled?: boolean;
 }
 
 interface RiderWithAssignments {
@@ -49,21 +50,7 @@ interface RiderWithAssignments {
   completedDeliveries: number;
 }
 
-const mapAssignmentStatusToUI = (status: AssignmentStatus): UIStatus => {
-  switch (status) {
-    case "ASSIGNED":
-    case "ACCEPTED":
-      return "assigned";
-    case "PICKED_UP":
-      return "picked-up";
-    case "DELIVERED":
-      return "delivered";
-    case "CANCELLED":
-      return "delivery-failed";
-    default:
-      return "assigned";
-  }
-};
+// No longer using assignment status mapping - using parcel delivery status instead
 
 
 export const ActiveDeliveries = (): JSX.Element => {
@@ -76,7 +63,7 @@ export const ActiveDeliveries = (): JSX.Element => {
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryItem | null>(null);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
   const [showFailedModal, setShowFailedModal] = useState(false);
-  const [amountCollected, setAmountCollected] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
   const [failureReason, setFailureReason] = useState("");
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [expandedRiders, setExpandedRiders] = useState<Set<string>>(new Set());
@@ -84,152 +71,156 @@ export const ActiveDeliveries = (): JSX.Element => {
   // Get rider ID - if user is a rider, use their id
   const riderId = userRole === "RIDER" ? currentUser?.id : undefined;
 
-  // Fetch riders and their assignments
-  useEffect(() => {
-    const fetchRidersAndAssignments = async () => {
-      setLoading(true);
-      try {
-        if (userRole === "RIDER" && riderId) {
-          // For riders: fetch only their assignments
-          const response = await frontdeskService.getRiderAssignments(riderId, false);
-          
-          if (response.success && response.data) {
-            const assignments = response.data as DeliveryAssignmentResponse[];
-            const deliveryItems: DeliveryItem[] = assignments.map(assignment => ({
-              assignmentId: assignment.assignmentId,
-              parcelId: assignment.parcel.parcelId,
-              parcel: assignment.parcel,
-              status: assignment.status,
-              assignedAt: assignment.assignedAt,
-              acceptedAt: assignment.acceptedAt,
-              completedAt: assignment.completedAt,
-              riderName: assignment.riderName,
-            }));
+  // Fetch riders and their assignments using getParcelAssignments
+  const fetchRidersAndAssignments = async () => {
+    setLoading(true);
+    try {
+      console.log("[ActiveDeliveries] Fetching parcel assignments...");
+      // Use the same endpoint as Reconciliation page
+      const response = await frontdeskService.getParcelAssignments(0, 200);
 
-            // Create a single rider entry for the current rider
-            const riderData: RiderWithAssignments = {
-              rider: {
-                userId: riderId,
-                name: currentUser?.name || "You",
-                phoneNumber: (currentUser as any)?.phone || "",
-                email: currentUser?.email,
-                role: "RIDER",
-                status: "ACTIVE",
-              } as RiderResponse,
-              assignments: deliveryItems,
-              totalParcels: deliveryItems.length,
-              activeDeliveries: deliveryItems.filter(d => {
-                const uiStatus = mapAssignmentStatusToUI(d.status);
-                return uiStatus === "picked-up" || uiStatus === "out-for-delivery";
-              }).length,
-              pendingPickups: deliveryItems.filter(d => {
-                const uiStatus = mapAssignmentStatusToUI(d.status);
-                return uiStatus === "assigned";
-              }).length,
-              completedDeliveries: deliveryItems.filter(d => {
-                const uiStatus = mapAssignmentStatusToUI(d.status);
-                return uiStatus === "delivered";
-              }).length,
-            };
-            setRidersWithAssignments([riderData]);
-            setExpandedRiders(new Set([riderId]));
-          } else {
-            showToast(response.message || "Failed to load deliveries", "error");
-          }
-        } else if (userRole === "MANAGER" || userRole === "ADMIN" || userRole === "FRONTDESK") {
-          // For managers/admins: fetch all riders and their assignments
-          const ridersResponse = await frontdeskService.getRiders();
-          
-          if (!ridersResponse.success || !ridersResponse.data) {
-            showToast(ridersResponse.message || "Failed to load riders", "error");
-            setLoading(false);
-            return;
-          }
+      if (response.success && response.data) {
+        console.log(
+          "[ActiveDeliveries] Raw assignments response:",
+          response.data
+        );
+        const rawAssignments = response.data.content || [];
 
-          const riders = ridersResponse.data as RiderResponse[];
-          const ridersData: RiderWithAssignments[] = [];
+        // Group assignments by rider and filter active parcels
+        const ridersMap = new Map<string, {
+          rider: RiderResponse;
+          assignments: DeliveryItem[];
+        }>();
 
-          // Fetch assignments for each rider
-          for (const rider of riders) {
-            try {
-              const assignmentsResponse = await frontdeskService.getRiderAssignments(rider.userId, false);
-              
-              if (assignmentsResponse.success && assignmentsResponse.data) {
-                const assignments = assignmentsResponse.data as DeliveryAssignmentResponse[];
-                const deliveryItems: DeliveryItem[] = assignments
-                  .filter(assignment => assignment.status !== "DELIVERED") // Only show active assignments
-                  .map(assignment => ({
-                    assignmentId: assignment.assignmentId,
-                    parcelId: assignment.parcel.parcelId,
-                    parcel: assignment.parcel,
-                    status: assignment.status,
-                    assignedAt: assignment.assignedAt,
-                    acceptedAt: assignment.acceptedAt,
-                    completedAt: assignment.completedAt,
-                    riderName: assignment.riderName,
-                  }));
+        rawAssignments.forEach((assignment: any) => {
+          const assignmentRiderId = assignment.riderInfo?.riderId || assignment.riderId || 'unknown';
+          const riderName = assignment.riderInfo?.riderName || assignment.riderName || 'Unknown Rider';
+          const riderPhoneNumber = assignment.riderInfo?.riderPhoneNumber || assignment.riderPhoneNumber;
 
-                if (deliveryItems.length > 0) {
-                  ridersData.push({
-                    rider,
-                    assignments: deliveryItems,
-                    totalParcels: deliveryItems.length,
-                    activeDeliveries: deliveryItems.filter(d => {
-                      const uiStatus = mapAssignmentStatusToUI(d.status);
-                      return uiStatus === "picked-up" || uiStatus === "out-for-delivery";
-                    }).length,
-                    pendingPickups: deliveryItems.filter(d => {
-                      const uiStatus = mapAssignmentStatusToUI(d.status);
-                      return uiStatus === "assigned";
-                    }).length,
-                    completedDeliveries: deliveryItems.filter(d => {
-                      const uiStatus = mapAssignmentStatusToUI(d.status);
-                      return uiStatus === "delivered";
-                    }).length,
+          // Process parcels array
+          if (assignment.parcels && Array.isArray(assignment.parcels)) {
+            assignment.parcels.forEach((parcel: any) => {
+              // Only include parcels where delivered === false AND returned === false
+              if (parcel.delivered === false && parcel.returned === false) {
+                // Initialize rider if not exists
+                if (!ridersMap.has(assignmentRiderId)) {
+                  ridersMap.set(assignmentRiderId, {
+                    rider: {
+                      userId: assignmentRiderId,
+                      name: riderName,
+                      phoneNumber: riderPhoneNumber,
+                      role: "RIDER",
+                      status: "ACTIVE",
+                    } as RiderResponse,
+                    assignments: [],
                   });
                 }
-              }
-            } catch (error) {
-              console.error(`Failed to fetch assignments for rider ${rider.userId}:`, error);
-            }
-          }
 
-          setRidersWithAssignments(ridersData);
-          // Expand all riders by default
+                const riderData = ridersMap.get(assignmentRiderId)!;
+
+                // Map parcel to ParcelResponse format
+                const mappedParcel: ParcelResponse = {
+                  parcelId: parcel.parcelId,
+                  receiverName: parcel.receiverName,
+                  recieverPhoneNumber: parcel.receiverPhoneNumber,
+                  receiverAddress: parcel.receiverAddress,
+                  parcelDescription: parcel.parcelDescription,
+                  deliveryCost: parcel.parcelAmount || 0,
+                  pickUpCost: 0,
+                  inboundCost: 0,
+                  storageCost: 0,
+                  senderName: parcel.senderName,
+                  senderPhoneNumber: parcel.senderPhoneNumber,
+                };
+
+                // Create delivery item
+                const deliveryItem: DeliveryItem = {
+                  assignmentId: assignment.assignmentId,
+                  parcelId: parcel.parcelId,
+                  parcel: mappedParcel,
+                  status: assignment.status as AssignmentStatus,
+                  assignedAt: assignment.assignedAt,
+                  acceptedAt: assignment.acceptedAt,
+                  completedAt: assignment.completedAt,
+                  riderName: riderName,
+                  delivered: parcel.delivered,
+                  cancelled: parcel.cancelled,
+                };
+
+                riderData.assignments.push(deliveryItem);
+              }
+            });
+          }
+        });
+
+        // Convert map to array and filter based on user role
+        let ridersData: RiderWithAssignments[] = Array.from(ridersMap.values()).map(riderData => ({
+          rider: riderData.rider,
+          assignments: riderData.assignments,
+          totalParcels: riderData.assignments.length,
+          // All parcels in this view are active (not delivered and not cancelled)
+          activeDeliveries: riderData.assignments.length,
+          pendingPickups: riderData.assignments.length,
+          completedDeliveries: 0,
+        }));
+
+        // Filter by rider if user is a rider
+        if (userRole === "RIDER" && riderId) {
+          ridersData = ridersData.filter(r => r.rider.userId === riderId);
+          if (ridersData.length > 0) {
+            setExpandedRiders(new Set([riderId]));
+          }
+        } else {
+          // Expand all riders by default for managers/admins
           setExpandedRiders(new Set(ridersData.map(r => r.rider.userId)));
         }
-      } catch (error) {
-        console.error("Failed to fetch riders and assignments:", error);
-        showToast("Failed to load deliveries. Please try again.", "error");
-      } finally {
-        setLoading(false);
-      }
-    };
 
+        setRidersWithAssignments(ridersData);
+      } else {
+        console.warn(
+          "[ActiveDeliveries] Failed to load deliveries:",
+          response.message
+        );
+        showToast(response.message || "Failed to load deliveries", "error");
+      }
+    } catch (error) {
+      console.error("Failed to fetch riders and assignments:", error);
+      showToast("Failed to load deliveries. Please try again.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    console.log(
+      "[ActiveDeliveries] useEffect: fetching riders and assignments",
+      { userRole, riderId, currentUser }
+    );
     fetchRidersAndAssignments();
   }, [userRole, riderId, currentUser, showToast]);
 
-  // Flatten all deliveries for statistics
-  const allDeliveries = useMemo(() => {
-    return ridersWithAssignments.flatMap(riderData => riderData.assignments);
-  }, [ridersWithAssignments]);
+  // Flatten all deliveries for potential future use
+  // const allDeliveries = useMemo(() => {
+  //   return ridersWithAssignments.flatMap(riderData => riderData.assignments);
+  // }, [ridersWithAssignments]);
 
   // Filter riders and their assignments
   const filteredRidersWithAssignments = useMemo(() => {
     return ridersWithAssignments.map(riderData => {
       const filteredAssignments = riderData.assignments.filter((delivery) => {
-    const matchesSearch =
-      !searchQuery ||
+        const matchesSearch =
+          !searchQuery ||
           delivery.parcelId.toLowerCase().includes(searchQuery.toLowerCase()) ||
           delivery.parcel.receiverName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
           delivery.parcel.recieverPhoneNumber?.includes(searchQuery) ||
           riderData.rider.name?.toLowerCase().includes(searchQuery.toLowerCase());
 
-        const uiStatus = mapAssignmentStatusToUI(delivery.status);
-        const matchesStatus = statusFilter === "all" || uiStatus === statusFilter;
+        // For status filtering, since all parcels are active (not delivered, not cancelled),
+        // we only match "assigned" status filter or "all"
+        const matchesStatus = statusFilter === "all" || statusFilter === "assigned";
 
-    return matchesSearch && matchesStatus;
-  });
+        return matchesSearch && matchesStatus;
+      });
 
       return {
         ...riderData,
@@ -248,126 +239,33 @@ export const ActiveDeliveries = (): JSX.Element => {
     setExpandedRiders(newExpanded);
   };
 
-  const fetchRidersAndAssignments = async () => {
-    setLoading(true);
-    try {
-      if (userRole === "RIDER" && riderId) {
-        const response = await frontdeskService.getRiderAssignments(riderId, false);
-        
-        if (response.success && response.data) {
-          const assignments = response.data as DeliveryAssignmentResponse[];
-          const deliveryItems: DeliveryItem[] = assignments.map(assignment => ({
-            assignmentId: assignment.assignmentId,
-            parcelId: assignment.parcel.parcelId,
-            parcel: assignment.parcel,
-            status: assignment.status,
-            assignedAt: assignment.assignedAt,
-            acceptedAt: assignment.acceptedAt,
-            completedAt: assignment.completedAt,
-            riderName: assignment.riderName,
-          }));
-
-          const riderData: RiderWithAssignments = {
-            rider: {
-              userId: riderId,
-              name: currentUser?.name || "You",
-              phoneNumber: (currentUser as any)?.phone || "",
-              email: currentUser?.email,
-              role: "RIDER",
-              status: "ACTIVE",
-            } as RiderResponse,
-            assignments: deliveryItems,
-            totalParcels: deliveryItems.length,
-            activeDeliveries: deliveryItems.filter(d => {
-              const uiStatus = mapAssignmentStatusToUI(d.status);
-              return uiStatus === "picked-up" || uiStatus === "out-for-delivery";
-            }).length,
-            pendingPickups: deliveryItems.filter(d => {
-              const uiStatus = mapAssignmentStatusToUI(d.status);
-              return uiStatus === "assigned";
-            }).length,
-            completedDeliveries: deliveryItems.filter(d => {
-              const uiStatus = mapAssignmentStatusToUI(d.status);
-              return uiStatus === "delivered";
-            }).length,
-          };
-          setRidersWithAssignments([riderData]);
-        }
-      } else if (userRole === "MANAGER" || userRole === "ADMIN" || userRole === "FRONTDESK") {
-        const ridersResponse = await frontdeskService.getRiders();
-        
-        if (!ridersResponse.success || !ridersResponse.data) {
-          return;
-        }
-
-        const riders = ridersResponse.data as RiderResponse[];
-        const ridersData: RiderWithAssignments[] = [];
-
-        for (const rider of riders) {
-          try {
-            const assignmentsResponse = await frontdeskService.getRiderAssignments(rider.userId, false);
-            
-            if (assignmentsResponse.success && assignmentsResponse.data) {
-              const assignments = assignmentsResponse.data as DeliveryAssignmentResponse[];
-              const deliveryItems: DeliveryItem[] = assignments
-                .filter(assignment => assignment.status !== "DELIVERED")
-                .map(assignment => ({
-                  assignmentId: assignment.assignmentId,
-                  parcelId: assignment.parcel.parcelId,
-                  parcel: assignment.parcel,
-                  status: assignment.status,
-                  assignedAt: assignment.assignedAt,
-                  acceptedAt: assignment.acceptedAt,
-                  completedAt: assignment.completedAt,
-                  riderName: assignment.riderName,
-                }));
-
-              if (deliveryItems.length > 0) {
-                ridersData.push({
-                  rider,
-                  assignments: deliveryItems,
-                  totalParcels: deliveryItems.length,
-                  activeDeliveries: deliveryItems.filter(d => {
-                    const uiStatus = mapAssignmentStatusToUI(d.status);
-                    return uiStatus === "picked-up" || uiStatus === "out-for-delivery";
-                  }).length,
-                  pendingPickups: deliveryItems.filter(d => {
-                    const uiStatus = mapAssignmentStatusToUI(d.status);
-                    return uiStatus === "assigned";
-                  }).length,
-                  completedDeliveries: deliveryItems.filter(d => {
-                    const uiStatus = mapAssignmentStatusToUI(d.status);
-                    return uiStatus === "delivered";
-                  }).length,
-                });
-              }
-            }
-          } catch (error) {
-            console.error(`Failed to fetch assignments for rider ${rider.userId}:`, error);
-          }
-        }
-
-        setRidersWithAssignments(ridersData);
-      }
-    } catch (error) {
-      console.error("Failed to fetch riders and assignments:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // This function is now handled in useEffect above
 
   const handleStatusUpdate = async (assignmentId: string, parcelId: string, newUIStatus: UIStatus, riderUserId: string) => {
     if (!currentUser) return;
 
     if (newUIStatus === "delivered") {
+      console.log(
+        "[ActiveDeliveries] Mark delivered clicked",
+        assignmentId,
+        parcelId
+      );
       const riderData = ridersWithAssignments.find(r => r.rider.userId === riderUserId);
-      const delivery = riderData?.assignments.find((d) => d.assignmentId === assignmentId);
+      // Find delivery by parcelId to get the correct parcel
+      const delivery = riderData?.assignments.find((d) => d.parcelId === parcelId);
       setSelectedDelivery(delivery || null);
+      setPaymentMethod("");
       setShowDeliveryModal(true);
       return;
     } else if (newUIStatus === "delivery-failed") {
+      console.log(
+        "[ActiveDeliveries] Mark delivery failed clicked",
+        assignmentId,
+        parcelId
+      );
       const riderData = ridersWithAssignments.find(r => r.rider.userId === riderUserId);
-      const delivery = riderData?.assignments.find((d) => d.assignmentId === assignmentId);
+      // Find delivery by parcelId to get the correct parcel
+      const delivery = riderData?.assignments.find((d) => d.parcelId === parcelId);
       setSelectedDelivery(delivery || null);
       setShowFailedModal(true);
       return;
@@ -388,10 +286,18 @@ export const ActiveDeliveries = (): JSX.Element => {
       const response = await frontdeskService.updateParcel(parcelId, updateData);
 
       if (response.success) {
+        console.log(
+          "[ActiveDeliveries] Parcel status updated successfully",
+          { parcelId, updateData }
+        );
         showToast("Status updated successfully", "success");
         // Refresh all riders and assignments
         await fetchRidersAndAssignments();
-    } else {
+      } else {
+        console.warn(
+          "[ActiveDeliveries] Failed to update status",
+          response.message
+        );
         showToast(response.message || "Failed to update status", "error");
       }
     } catch (error) {
@@ -403,35 +309,44 @@ export const ActiveDeliveries = (): JSX.Element => {
   };
 
   const handleDeliveryComplete = async () => {
-    if (!selectedDelivery || !currentUser || !amountCollected) return;
+    if (!selectedDelivery || !currentUser || !paymentMethod) return;
+
+    console.log("[ActiveDeliveries] Completing delivery", {
+      assignmentId: selectedDelivery.assignmentId,
+      parcelId: selectedDelivery.parcelId,
+      paymentMethod,
+    });
 
     setUpdatingStatus(selectedDelivery.assignmentId);
     try {
-    const collected = parseFloat(amountCollected);
-      const parcel = selectedDelivery.parcel;
-      
-      const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) + 
-                         (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-
-      // Update parcel as delivered
-      const response = await frontdeskService.updateParcel(selectedDelivery.parcelId, {
-        delivered: true,
-        pod: true, // Proof of delivery
-      });
+      // Manager marks parcel as delivered via rider API with payment method
+      const response = await riderService.updateAssignmentStatus(
+        selectedDelivery.assignmentId,
+        "DELIVERED",
+        undefined, // confirmationCode is optional
+        undefined, // reason
+        paymentMethod,
+        selectedDelivery.parcelId
+      );
 
       if (response.success) {
+        console.log("[ActiveDeliveries] Delivery completed response:", response);
         showToast(
-          `Delivery completed! Collected GHC ${collected.toFixed(2)}${collected !== totalAmount ? ` (Expected: GHC ${totalAmount.toFixed(2)})` : ''}`,
+          `Delivery completed! Payment method: ${paymentMethod}`,
           "success"
         );
 
-    setShowDeliveryModal(false);
+        setShowDeliveryModal(false);
         setSelectedDelivery(null);
-    setAmountCollected("");
+        setPaymentMethod("");
 
         // Refresh all riders and assignments
         await fetchRidersAndAssignments();
-    } else {
+      } else {
+        console.warn(
+          "[ActiveDeliveries] Failed to complete delivery",
+          response.message
+        );
         showToast(response.message || "Failed to complete delivery", "error");
       }
     } catch (error) {
@@ -445,6 +360,12 @@ export const ActiveDeliveries = (): JSX.Element => {
   const handleDeliveryFailed = async () => {
     if (!selectedDelivery || !currentUser || !failureReason.trim()) return;
 
+    console.log("[ActiveDeliveries] Marking delivery as failed", {
+      assignmentId: selectedDelivery.assignmentId,
+      parcelId: selectedDelivery.parcelId,
+      failureReason,
+    });
+
     setUpdatingStatus(selectedDelivery.assignmentId);
     try {
       // Update parcel - mark as not delivered, but we can add failure reason in parcelDescription or create a note
@@ -454,15 +375,20 @@ export const ActiveDeliveries = (): JSX.Element => {
       });
 
       if (response.success) {
+        console.log("[ActiveDeliveries] Delivery failure recorded:", response);
         showToast("Delivery failure recorded", "success");
 
-    setShowFailedModal(false);
+        setShowFailedModal(false);
         setSelectedDelivery(null);
-    setFailureReason("");
+        setFailureReason("");
 
         // Refresh all riders and assignments
         await fetchRidersAndAssignments();
       } else {
+        console.warn(
+          "[ActiveDeliveries] Failed to record failure",
+          response.message
+        );
         showToast(response.message || "Failed to record failure", "error");
       }
     } catch (error) {
@@ -474,56 +400,29 @@ export const ActiveDeliveries = (): JSX.Element => {
   };
 
   // Calculate statistics from all deliveries
-  const activeCount = allDeliveries.filter(
-    (d) => {
-      const uiStatus = mapAssignmentStatusToUI(d.status);
-      return uiStatus === "picked-up" || uiStatus === "out-for-delivery";
-    }
-  ).length;
-  const pendingCount = allDeliveries.filter((d) => {
-    const uiStatus = mapAssignmentStatusToUI(d.status);
-    return uiStatus === "assigned";
-  }).length;
-  const expectedCollections = allDeliveries
-    .filter((d) => {
-      const uiStatus = mapAssignmentStatusToUI(d.status);
-      return uiStatus !== "delivered" && uiStatus !== "delivery-failed";
-    })
-    .reduce((sum, d) => {
-      const parcel = d.parcel;
-      return sum + (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) + 
-             (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-    }, 0);
-  const failedCount = allDeliveries.filter((d) => {
-    const uiStatus = mapAssignmentStatusToUI(d.status);
-    return uiStatus === "delivery-failed";
-  }).length;
+  // All parcels in this view are active (not delivered and not cancelled)
+  // Stats are calculated but commented out in UI
 
-  const getStatusBadge = (status: AssignmentStatus) => {
-    const uiStatus = mapAssignmentStatusToUI(status);
-    const statusConfig: Record<UIStatus, { label: string; color: string }> = {
-      "assigned": { label: "Assigned", color: "bg-blue-100 text-blue-800" },
-      "picked-up": { label: "Picked Up", color: "bg-indigo-100 text-indigo-800" },
-      "out-for-delivery": { label: "Out for Delivery", color: "bg-purple-100 text-purple-800" },
-      "delivered": { label: "Delivered", color: "bg-green-100 text-green-800" },
-      "delivery-failed": { label: "Failed", color: "bg-red-100 text-red-800" },
-    };
-    const config = statusConfig[uiStatus] || { label: status, color: "bg-gray-100 text-gray-800" };
-    return <Badge className={config.color}>{config.label}</Badge>;
+  const getStatusBadge = (delivered?: boolean, cancelled?: boolean) => {
+    // Use parcel delivery status instead of assignment status
+    if (cancelled === true) {
+      return <Badge className="bg-red-100 text-red-800">Cancelled</Badge>;
+    }
+    if (delivered === true) {
+      return <Badge className="bg-green-100 text-green-800">Delivered</Badge>;
+    }
+    // Default to "Assigned" for active parcels (not delivered and not cancelled)
+    return <Badge className="bg-blue-100 text-blue-800">Assigned</Badge>;
   };
 
   const getNextStatusAction = (delivery: DeliveryItem) => {
-    const uiStatus = mapAssignmentStatusToUI(delivery.status);
-    switch (uiStatus) {
-      case "assigned":
-        return { label: "Mark Picked Up", status: "picked-up" as UIStatus, color: "bg-blue-600" };
-      case "picked-up":
-        return { label: "Out for Delivery", status: "out-for-delivery" as UIStatus, color: "bg-indigo-600" };
-      case "out-for-delivery":
-        return { label: "Mark Delivered", status: "delivered" as UIStatus, color: "bg-green-600" };
-      default:
-        return null;
+    // Use parcel delivery status instead of assignment status
+    // For active deliveries page, all parcels shown are not delivered and not cancelled
+    // So we just show "Mark Delivered" action
+    if (delivery.delivered === false && delivery.cancelled === false) {
+      return { label: "Mark Delivered", status: "delivered" as UIStatus, color: "bg-green-600" };
     }
+    return null;
   };
 
   return (
@@ -539,23 +438,7 @@ export const ActiveDeliveries = (): JSX.Element => {
           </div> */}
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex flex-col">
-                    <span className="[font-family:'Lato',Helvetica] font-bold text-green-600 text-3xl">
-                      {activeCount}
-                    </span>
-                    <span className="[font-family:'Lato',Helvetica] font-normal text-[#5d5d5d] text-sm mt-1">
-                      Currently making deliveries
-                    </span>
-                  </div>
-                  <PackageIcon className="w-8 h-8 text-green-600" />
-                </div>
-              </CardContent>
-            </Card>
-
+          {/* <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
@@ -576,6 +459,38 @@ export const ActiveDeliveries = (): JSX.Element => {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex flex-col">
+                    <span className="[font-family:'Lato',Helvetica] font-bold text-green-600 text-3xl">
+                      {formatCurrency(totalDeliveryFee)}
+                    </span>
+                    <span className="[font-family:'Lato',Helvetica] font-normal text-[#5d5d5d] text-sm mt-1">
+                      Total Delivery Fee
+                    </span>
+                  </div>
+                  <PackageIcon className="w-8 h-8 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex flex-col">
+                    <span className="[font-family:'Lato',Helvetica] font-bold text-purple-600 text-3xl">
+                      {formatCurrency(totalPickupCost)}
+                    </span>
+                    <span className="[font-family:'Lato',Helvetica] font-normal text-[#5d5d5d] text-sm mt-1">
+                      Total Pickup Cost
+                    </span>
+                  </div>
+                  <PackageIcon className="w-8 h-8 text-purple-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex flex-col">
                     <span className="[font-family:'Lato',Helvetica] font-bold text-[#ea690c] text-3xl">
                       {formatCurrency(expectedCollections)}
                     </span>
@@ -587,23 +502,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                 </div>
               </CardContent>
             </Card>
-
-            <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex flex-col">
-                    <span className="[font-family:'Lato',Helvetica] font-bold text-red-600 text-3xl">
-                      {failedCount}
-                    </span>
-                    <span className="[font-family:'Lato',Helvetica] font-normal text-[#5d5d5d] text-sm mt-1">
-                      Requires follow-up
-                    </span>
-                  </div>
-                  <AlertCircleIcon className="w-8 h-8 text-red-600" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          </div> */}
 
           {/* Search and Filter */}
           <Card className="w-full rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
@@ -638,8 +537,6 @@ export const ActiveDeliveries = (): JSX.Element => {
                   <option value="assigned">Assigned</option>
                   <option value="picked-up">Picked Up</option>
                   <option value="out-for-delivery">Out for Delivery</option>
-                  <option value="delivered">Delivered</option>
-                  <option value="delivery-failed">Failed</option>
                 </select>
               </div>
             </CardContent>
@@ -742,87 +639,86 @@ export const ActiveDeliveries = (): JSX.Element => {
                             </p>
                           ) : (
                             riderData.assignments.map((delivery) => {
-                const nextAction = getNextStatusAction(delivery);
+                              const nextAction = getNextStatusAction(delivery);
                               const parcel = delivery.parcel;
-                              const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) + 
-                                                 (parcel.inboundCost || 0) + (parcel.storageCost || 0);
-                              const uiStatus = mapAssignmentStatusToUI(delivery.status);
+                              const totalAmount = (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0) +
+                                (parcel.inboundCost || 0) + (parcel.storageCost || 0);
 
-                return (
-                  <Card
+                              return (
+                                <Card
                                   key={delivery.assignmentId}
                                   className="rounded-lg border border-[#e5e5e5] bg-gray-50 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex flex-col lg:flex-row gap-4">
-                        {/* Left Column - Receiver and Address */}
-                        <div className="flex-1 flex flex-col gap-3">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50">
+                                >
+                                  <CardContent className="p-4">
+                                    <div className="flex flex-col lg:flex-row gap-4">
+                                      {/* Left Column - Receiver and Address */}
+                                      <div className="flex-1 flex flex-col gap-3">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <Badge className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50">
                                             {parcel.parcelId}
-                            </Badge>
-                            {getStatusBadge(delivery.status)}
-                          </div>
+                                          </Badge>
+                                          {getStatusBadge(delivery.delivered, delivery.cancelled)}
+                                        </div>
 
-                          <div className="flex items-center gap-2">
-                            <UserIcon className="w-4 h-4 text-[#5d5d5d]" />
-                            <div className="flex flex-col">
-                              <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
+                                        <div className="flex items-center gap-2">
+                                          <UserIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                          <div className="flex flex-col">
+                                            <span className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-sm">
                                               {parcel.receiverName || "N/A"}
-                              </span>
+                                            </span>
                                             {parcel.recieverPhoneNumber && (
-                              <a
+                                              <a
                                                 href={`tel:${parcel.recieverPhoneNumber}`}
-                                className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-xs hover:text-[#ea690c]"
-                              >
+                                                className="[font-family:'Lato',Helvetica] font-normal text-[#9a9a9a] text-xs hover:text-[#ea690c]"
+                                              >
                                                 {formatPhoneNumber(parcel.recieverPhoneNumber)}
-                              </a>
+                                              </a>
                                             )}
-                            </div>
-                          </div>
+                                          </div>
+                                        </div>
 
                                         {parcel.homeDelivery && parcel.receiverAddress && (
-                            <div className="flex items-center gap-2">
-                              <MapPinIcon className="w-4 h-4 text-[#5d5d5d]" />
-                              <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
+                                          <div className="flex items-center gap-2">
+                                            <MapPinIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                            <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
                                               {parcel.receiverAddress}
-                              </span>
-                            </div>
-                          )}
+                                            </span>
+                                          </div>
+                                        )}
 
                                         {!parcel.homeDelivery && (
-                            <div className="flex items-center gap-2">
-                              <MapPinIcon className="w-4 h-4 text-[#5d5d5d]" />
-                              <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
+                                          <div className="flex items-center gap-2">
+                                            <MapPinIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                            <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
                                               Shelf: <strong>{parcel.shelfName || parcel.shelfNumber || "N/A"}</strong> (Customer Pickup)
-                              </span>
-                            </div>
-                          )}
+                                            </span>
+                                          </div>
+                                        )}
 
                                         {delivery.assignedAt && (
-                            <div className="flex items-center gap-2">
-                              <ClockIcon className="w-4 h-4 text-[#5d5d5d]" />
-                              <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
+                                          <div className="flex items-center gap-2">
+                                            <ClockIcon className="w-4 h-4 text-[#5d5d5d]" />
+                                            <span className="[font-family:'Lato',Helvetica] font-normal text-neutral-700 text-sm">
                                               Assigned: {formatDateTime(new Date(delivery.assignedAt).toISOString())}
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
 
-                        {/* Middle Column - Amount Breakdown */}
-                        <div className="flex-1 flex flex-col gap-3">
+                                      {/* Middle Column - Amount Breakdown */}
+                                      <div className="flex-1 flex flex-col gap-3">
                                         <div className="bg-white rounded-lg p-3 border border-[#e5e5e5]">
-                            <p className="text-xs font-semibold text-[#5d5d5d] mb-2">Amount to Collect</p>
-                            <div className="space-y-1">
+                                          <p className="text-xs font-semibold text-[#5d5d5d] mb-2">Amount to Collect</p>
+                                          <div className="space-y-1">
                                             {(parcel.inboundCost || 0) > 0 && (
-                                <div className="flex justify-between text-xs">
-                                  <span className="text-neutral-700">Item Value:</span>
+                                              <div className="flex justify-between text-xs">
+                                                <span className="text-neutral-700">Item Value:</span>
                                                 <span className="font-semibold">GHC {(parcel.inboundCost || 0).toFixed(2)}</span>
-                                </div>
-                              )}
+                                              </div>
+                                            )}
                                             {(parcel.deliveryCost || 0) > 0 && (
-                                <div className="flex justify-between text-xs">
-                                  <span className="text-neutral-700">Delivery Fee:</span>
+                                              <div className="flex justify-between text-xs">
+                                                <span className="text-neutral-700">Delivery Fee:</span>
                                                 <span className="font-semibold">GHC {(parcel.deliveryCost || 0).toFixed(2)}</span>
                                               </div>
                                             )}
@@ -836,28 +732,28 @@ export const ActiveDeliveries = (): JSX.Element => {
                                               <div className="flex justify-between text-xs">
                                                 <span className="text-neutral-700">Storage Cost:</span>
                                                 <span className="font-semibold">GHC {(parcel.storageCost || 0).toFixed(2)}</span>
-                                </div>
-                              )}
-                              <div className="flex justify-between pt-1 border-t border-[#d1d1d1]">
-                                <span className="text-sm font-bold text-neutral-800">Total:</span>
-                                <span className="text-lg font-bold text-[#ea690c]">
-                                  {formatCurrency(totalAmount)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
+                                              </div>
+                                            )}
+                                            <div className="flex justify-between pt-1 border-t border-[#d1d1d1]">
+                                              <span className="text-sm font-bold text-neutral-800">Total:</span>
+                                              <span className="text-lg font-bold text-[#ea690c]">
+                                                {formatCurrency(totalAmount)}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
 
                                         {parcel.parcelDescription && (
-                            <p className="text-xs text-neutral-700">
+                                          <p className="text-xs text-neutral-700">
                                             <strong>Item:</strong> {parcel.parcelDescription}
-                            </p>
-                          )}
-                        </div>
+                                          </p>
+                                        )}
+                                      </div>
 
-                        {/* Right Column - Actions */}
-                        <div className="flex flex-col items-end gap-3">
-                          {nextAction && (
-                            <Button
+                                      {/* Right Column - Actions */}
+                                      <div className="flex flex-col items-end gap-3">
+                                        {nextAction && (
+                                          <Button
                                             onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, nextAction.status, riderData.rider.userId)}
                                             disabled={updatingStatus === delivery.assignmentId}
                                             className={`${nextAction.color} text-white hover:opacity-90 disabled:opacity-50`}
@@ -869,41 +765,58 @@ export const ActiveDeliveries = (): JSX.Element => {
                                               </>
                                             ) : (
                                               <>
-                              {nextAction.label}
-                              <ArrowRightIcon className="w-4 h-4 ml-2" />
+                                                {nextAction.label}
+                                                <ArrowRightIcon className="w-4 h-4 ml-2" />
                                               </>
                                             )}
-                            </Button>
-                          )}
+                                          </Button>
+                                        )}
 
-                                        {uiStatus === "out-for-delivery" && (
-                            <div className="flex gap-2">
-                              <Button
-                                              onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivery-failed", riderData.rider.userId)}
-                                variant="outline"
-                                className="border-red-300 text-red-600 hover:bg-red-50"
-                              >
-                                <XCircleIcon className="w-4 h-4 mr-2" />
-                                Mark Failed
-                              </Button>
-                            </div>
-                          )}
+                                        {/* Show Mark Delivered and Mark Failed for all active deliveries */}
+                                        {/* <div className="flex flex-col gap-2 w-full">
+                                          <Button
+                                            onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivered", riderData.rider.userId)}
+                                            disabled={updatingStatus === delivery.assignmentId}
+                                            className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 w-full"
+                                          >
+                                            {updatingStatus === delivery.assignmentId ? (
+                                              <>
+                                                <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                Processing...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <CheckCircleIcon className="w-4 h-4 mr-2" />
+                                                Mark Delivered
+                                              </>
+                                            )}
+                                          </Button>
+                                          <Button
+                                            onClick={() => handleStatusUpdate(delivery.assignmentId, delivery.parcelId, "delivery-failed", riderData.rider.userId)}
+                                            disabled={updatingStatus === delivery.assignmentId}
+                                            variant="outline"
+                                            className="border-red-300 text-red-600 hover:bg-red-50 w-full"
+                                          >
+                                            <XCircleIcon className="w-4 h-4 mr-2" />
+                                            Mark Failed
+                                          </Button>
+                                        </div> */}
 
-                                        {uiStatus === "delivered" && (
-                            <Badge className="bg-green-100 text-green-800">
-                              <CheckCircleIcon className="w-3 h-3 mr-1" />
-                              Delivered
-                            </Badge>
-                          )}
+                                        {delivery.delivered && (
+                                          <Badge className="bg-green-100 text-green-800">
+                                            <CheckCircleIcon className="w-3 h-3 mr-1" />
+                                            Delivered
+                                          </Badge>
+                                        )}
 
-                                        {uiStatus === "delivery-failed" && (
-                            <Badge className="bg-red-100 text-red-800">
-                              <XCircleIcon className="w-3 h-3 mr-1" />
-                              Failed
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
+                                        {delivery.cancelled && (
+                                          <Badge className="bg-red-100 text-red-800">
+                                            <XCircleIcon className="w-3 h-3 mr-1" />
+                                            Failed
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
                                   </CardContent>
                                 </Card>
                               );
@@ -931,7 +844,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                   onClick={() => {
                     setShowDeliveryModal(false);
                     setSelectedDelivery(null);
-                    setAmountCollected("");
+                    setPaymentMethod("");
                   }}
                   className="text-[#9a9a9a] hover:text-neutral-800"
                 >
@@ -954,7 +867,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                   <p className="text-xs font-semibold text-[#5d5d5d] mb-2">Expected Amount</p>
                   <p className="text-2xl font-bold text-[#ea690c]">
                     {formatCurrency(
-                      (selectedDelivery.parcel.deliveryCost || 0) + (selectedDelivery.parcel.pickUpCost || 0) + 
+                      (selectedDelivery.parcel.deliveryCost || 0) + (selectedDelivery.parcel.pickUpCost || 0) +
                       (selectedDelivery.parcel.inboundCost || 0) + (selectedDelivery.parcel.storageCost || 0)
                     )}
                   </p>
@@ -962,15 +875,17 @@ export const ActiveDeliveries = (): JSX.Element => {
 
                 <div>
                   <Label className="text-sm font-semibold text-neutral-800 mb-2">
-                    Amount Collected (GHC) <span className="text-[#e22420]">*</span>
+                    Payment Method <span className="text-[#e22420]">*</span>
                   </Label>
-                  <Input
-                    type="number"
-                    value={amountCollected}
-                    onChange={(e) => setAmountCollected(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full"
-                  />
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                  >
+                    <option value="">Select payment method</option>
+                    <option value="cash">Cash</option>
+                    <option value="momo">Mobile Money (MoMo)</option>
+                  </select>
                 </div>
 
                 <div className="flex gap-3 pt-4">
@@ -978,7 +893,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                     onClick={() => {
                       setShowDeliveryModal(false);
                       setSelectedDelivery(null);
-                      setAmountCollected("");
+                      setPaymentMethod("");
                     }}
                     variant="outline"
                     className="flex-1 border border-[#d1d1d1]"
@@ -987,7 +902,7 @@ export const ActiveDeliveries = (): JSX.Element => {
                   </Button>
                   <Button
                     onClick={handleDeliveryComplete}
-                    disabled={!amountCollected || updatingStatus === selectedDelivery.assignmentId}
+                    disabled={!paymentMethod || updatingStatus === selectedDelivery.assignmentId}
                     className="flex-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                   >
                     {updatingStatus === selectedDelivery.assignmentId ? (
@@ -997,8 +912,8 @@ export const ActiveDeliveries = (): JSX.Element => {
                       </>
                     ) : (
                       <>
-                    <CheckCircleIcon className="w-4 h-4 mr-2" />
-                    Confirm Delivery
+                        <CheckCircleIcon className="w-4 h-4 mr-2" />
+                        Confirm Delivery
                       </>
                     )}
                   </Button>
@@ -1076,8 +991,8 @@ export const ActiveDeliveries = (): JSX.Element => {
                       </>
                     ) : (
                       <>
-                    <XCircleIcon className="w-4 h-4 mr-2" />
-                    Mark as Failed
+                        <XCircleIcon className="w-4 h-4 mr-2" />
+                        Mark as Failed
                       </>
                     )}
                   </Button>
