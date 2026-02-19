@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, ClockIcon, LayoutDashboard, Layers, PhoneIcon, SearchIcon, Package, Users, Building2, BarChart3, LogOut, Edit, MapPin } from "lucide-react";
+import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, MapPin } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 
 interface SidebarProps {
@@ -18,13 +18,13 @@ const navItems = [
     // { label: "Financial Reports", path: "/admin/financial-reports", icon: BarChart3, roles: ["ADMIN"] },
 
     // Station Manager & Front Desk - Core Operations
-    { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["FRONTDESK", "MANAGER", "CALLER"] },
+    { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Parcel Intake", path: "/parcel-intake", icon: InboxIcon, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Pickup Request", path: "/pickup-request", icon: MapPin, roles: ["FRONTDESK", "MANAGER", ] },
     { label: "Package Assignments", path: "/package-assignments", icon: ClipboardListIcon, roles: ["MANAGER", "FRONTDESK"] },
-    { label: "Call Center", path: "/call-center", icon: PhoneIcon, roles: ["CALLER", "MANAGER", "FRONTDESK"] },
+    // Call Center is CALLER-only - separate entity, no station access
     { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER",] },
-    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["CALLER", "MANAGER",] },
+    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["MANAGER",] },
     // Station Manager & Front Desk - Management
     // { label: "Financial Dashboard", path: "/financial-dashboard", icon: LayoutDashboard, roles: ["MANAGER", "FRONTDESK"] },
     { label: "Shelf Management", path: "/shelf-management", icon: Layers, roles: ["MANAGER",] },

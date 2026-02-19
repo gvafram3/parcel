@@ -10,10 +10,12 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { CostInput } from "../../components/ui/CostInput";
 import { Textarea } from "../../components/ui/textarea";
 import { useToast } from "../../components/ui/toast";
+import { validatePhoneNumber, normalizePhoneNumber } from "../../utils/dataHelpers";
 import authService from "../../services/authService";
-import frontdeskService from "../../services/frontdeskService";
+import frontdeskService, { type ParcelRequest } from "../../services/frontdeskService";
 
 export interface PickupRequestFormData {
   pickupAddress: string;
@@ -60,6 +62,12 @@ export const PickupRequest = (): JSX.Element => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const updatePhoneField = (key: "pickupContactPhone" | "recipientPhone", value: string) => {
+    const digits = value.replace(/\D/g, "").substring(0, 10);
+    const normalized = normalizePhoneNumber(digits);
+    setForm((prev) => ({ ...prev, [key]: normalized }));
+  };
+
   const validate = (): boolean => {
     if (!form.pickupAddress?.trim()) {
       showToast("Pickup address is required", "error");
@@ -73,6 +81,10 @@ export const PickupRequest = (): JSX.Element => {
       showToast("Pickup contact phone is required", "error");
       return false;
     }
+    if (!validatePhoneNumber(form.pickupContactPhone)) {
+      showToast("Invalid phone number format. Use 0XXXXXXXXX or XXXXXXXXX", "error");
+      return false;
+    }
     if (!form.deliveryAddress?.trim()) {
       showToast("Delivery address is required", "error");
       return false;
@@ -83,6 +95,10 @@ export const PickupRequest = (): JSX.Element => {
     }
     if (!form.recipientPhone?.trim()) {
       showToast("Recipient phone is required", "error");
+      return false;
+    }
+    if (!validatePhoneNumber(form.recipientPhone)) {
+      showToast("Invalid phone number format. Use 0XXXXXXXXX or XXXXXXXXX", "error");
       return false;
     }
     if (!form.parcelDescription?.trim()) {
@@ -108,10 +124,49 @@ export const PickupRequest = (): JSX.Element => {
     setSubmitSuccess(false);
 
     try {
-      const response = await frontdeskService.createPickupRequest({
-        ...form,
+      // Map the pickup form into the backend parcel payload
+      // Phones are stored with +233 prefix (normalizePhoneNumber) and sent as-is
+      const payload: ParcelRequest = {
         officeId,
-      });
+        typeofParcel: "PICKUP",
+
+        // Treat pickup contact as sender
+        senderName: form.pickupContactName,
+        senderPhoneNumber: form.pickupContactPhone,
+
+        // Treat delivery contact as receiver
+        receiverName: form.recipientName,
+        receiverAddress: form.deliveryAddress,
+        recieverPhoneNumber: form.recipientPhone,
+
+        parcelDescription: form.parcelDescription,
+
+        // Pickup / delivery specific fields
+        pickupAddress: form.pickupAddress,
+        pickupContactName: form.pickupContactName,
+        pickupContactPhoneNumber: form.pickupContactPhone,
+        pickupInstructions: form.specialInstructions,
+        deliveryAddress: form.deliveryAddress,
+        deliveryContactName: form.recipientName,
+        deliveryContactPhoneNumber: form.recipientPhone,
+        specialInstructions: form.specialInstructions,
+
+        // Costs and value (optional – leave undefined when blank)
+        itemCost: form.itemValue,
+        pickUpCost: form.pickupCost,
+        deliveryCost: form.deliveryCost,
+
+        // Default flags for a new pickup request
+        homeDelivery: true,
+        pod: false,
+        delivered: false,
+        pickedUp: false,
+        parcelAssigned: false,
+        fragile: false,
+        itemOwnerPaid: false,
+      };
+
+      const response = await frontdeskService.addParcel(payload);
 
       if (response.success) {
         showToast("Pickup request submitted successfully. A rider will be assigned for collection.", "success");
@@ -176,15 +231,30 @@ export const PickupRequest = (): JSX.Element => {
                       className="mt-1 border border-[#d1d1d1]"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="pickupContactPhone" className="text-neutral-800">Contact Phone at Pickup *</Label>
-                    <Input
-                      id="pickupContactPhone"
-                      placeholder="e.g. 0550123456"
-                      value={form.pickupContactPhone}
-                      onChange={(e) => updateField("pickupContactPhone", e.target.value)}
-                      className="mt-1 border border-[#d1d1d1]"
-                    />
+                  <div className="flex flex-col flex-1 items-start gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Label
+                        htmlFor="pickupContactPhone"
+                        className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-base leading-6"
+                      >
+                        Contact Phone number
+                      </Label>
+                      <span className="text-sm font-semibold text-[#e22420]">*</span>
+                    </div>
+                    <div className="relative w-full">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
+                        +233
+                      </span>
+                      <Input
+                        id="pickupContactPhone"
+                        type="tel"
+                        value={form.pickupContactPhone.startsWith("+233") ? form.pickupContactPhone.substring(4) : form.pickupContactPhone}
+                        onChange={(e) => updatePhoneField("pickupContactPhone", e.target.value)}
+                        placeholder="0XXXXXXXXX or XXXXXXXXX"
+                        className="pl-14 pr-3 w-full rounded-lg border border-[#d1d1d1] bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c]"
+                        maxLength={10}
+                      />
+                    </div>
                   </div>
                 </div>
               </section>
@@ -219,15 +289,30 @@ export const PickupRequest = (): JSX.Element => {
                       className="mt-1 border border-[#d1d1d1]"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="recipientPhone" className="text-neutral-800">Recipient Phone *</Label>
-                    <Input
-                      id="recipientPhone"
-                      placeholder="e.g. 0550123456"
-                      value={form.recipientPhone}
-                      onChange={(e) => updateField("recipientPhone", e.target.value)}
-                      className="mt-1 border border-[#d1d1d1]"
-                    />
+                  <div className="flex flex-col flex-1 items-start gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Label
+                        htmlFor="recipientPhone"
+                        className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-base leading-6"
+                      >
+                        Recipient Phone number
+                      </Label>
+                      <span className="text-sm font-semibold text-[#e22420]">*</span>
+                    </div>
+                    <div className="relative w-full">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
+                        +233
+                      </span>
+                      <Input
+                        id="recipientPhone"
+                        type="tel"
+                        value={form.recipientPhone.startsWith("+233") ? form.recipientPhone.substring(4) : form.recipientPhone}
+                        onChange={(e) => updatePhoneField("recipientPhone", e.target.value)}
+                        placeholder="0XXXXXXXXX or XXXXXXXXX"
+                        className="pl-14 pr-3 w-full rounded-lg border border-[#d1d1d1] bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c]"
+                        maxLength={10}
+                      />
+                    </div>
                   </div>
                 </div>
               </section>
@@ -253,15 +338,14 @@ export const PickupRequest = (): JSX.Element => {
                   </div>
                   <div>
                     <Label htmlFor="itemValue" className="text-neutral-800">Item Value (GHC)</Label>
-                    <Input
+                    <CostInput
                       id="itemValue"
-                      type="number"
-                      min={0}
-                      step={0.01}
+                      value={form.itemValue}
+                      onChange={(v) => updateField("itemValue", v)}
                       placeholder="Optional"
-                      value={form.itemValue ?? ""}
-                      onChange={(e) => updateField("itemValue", e.target.value ? parseFloat(e.target.value) : undefined)}
-                      className="mt-1 border border-[#d1d1d1]"
+                      allowClear
+                      className="mt-1"
+                      inputClassName="border border-[#d1d1d1]"
                     />
                   </div>
                   <div>
@@ -297,28 +381,26 @@ export const PickupRequest = (): JSX.Element => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <Label htmlFor="pickupCost" className="text-neutral-800">Pickup Cost (GHC)</Label>
-                    <Input
+                    <CostInput
                       id="pickupCost"
-                      type="number"
-                      min={0}
-                      step={0.01}
+                      value={form.pickupCost}
+                      onChange={(v) => updateField("pickupCost", v)}
                       placeholder="Optional"
-                      value={form.pickupCost ?? ""}
-                      onChange={(e) => updateField("pickupCost", e.target.value ? parseFloat(e.target.value) : undefined)}
-                      className="mt-1 border border-[#d1d1d1]"
+                      allowClear
+                      className="mt-1"
+                      inputClassName="border border-[#d1d1d1]"
                     />
                   </div>
                   <div>
                     <Label htmlFor="deliveryCost" className="text-neutral-800">Delivery Cost (GHC)</Label>
-                    <Input
+                    <CostInput
                       id="deliveryCost"
-                      type="number"
-                      min={0}
-                      step={0.01}
+                      value={form.deliveryCost}
+                      onChange={(v) => updateField("deliveryCost", v)}
                       placeholder="Optional"
-                      value={form.deliveryCost ?? ""}
-                      onChange={(e) => updateField("deliveryCost", e.target.value ? parseFloat(e.target.value) : undefined)}
-                      className="mt-1 border border-[#d1d1d1]"
+                      allowClear
+                      className="mt-1"
+                      inputClassName="border border-[#d1d1d1]"
                     />
                   </div>
                 </div>
