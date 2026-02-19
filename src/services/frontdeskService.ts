@@ -5,27 +5,57 @@ import { API_ENDPOINTS } from '../config/api';
 const API_BASE_URL_FRONTDESK = API_ENDPOINTS.FRONTDESK;
 
 interface ParcelRequest {
+    // Core sender / receiver
     senderName?: string;
-    senderPhoneNumber: string;
+    senderPhoneNumber?: string;
     receiverName?: string;
     receiverAddress?: string;
-    recieverPhoneNumber: string;
+    recieverPhoneNumber?: string;
     parcelDescription?: string;
-    driverName: string;
-    driverPhoneNumber: string;
+
+    // Station / driver intake info
+    driverName?: string;
+    driverPhoneNumber?: string;
     inboundCost?: number;
-    pickUpCost: number;
+    pickUpCost?: number;
     deliveryCost?: number;
     storageCost?: number;
-    shelfNumber: string;
+    shelfNumber?: string;
     hasCalled?: boolean;
-    vehicleNumber: string;
+    vehicleNumber?: string;
     officeId?: string;
+
+    // Parcel lifecycle flags
     pod?: boolean;
     pickedUp?: boolean;
     delivered?: boolean;
     parcelAssigned?: boolean;
     fragile?: boolean;
+    homeDelivery?: boolean;
+
+    // Payment / shelf details
+    paymentMethod?: string;
+    shelfName?: string;
+    inboudPayed?: boolean;
+    shelfId?: string;
+
+    // Parcel typing
+    typeofParcel?: "PARCEL" | "ONLINE" | "PICKUP";
+
+    // Pickup / delivery request specific fields
+    pickupAddress?: string;
+    pickupContactName?: string;
+    pickupContactPhoneNumber?: string;
+    pickupInstructions?: string;
+    deliveryAddress?: string;
+    deliveryContactName?: string;
+    deliveryContactPhoneNumber?: string;
+    specialInstructions?: string;
+
+    // Rider assignment and value
+    riderId?: string;
+    itemCost?: number;
+    itemOwnerPaid?: boolean;
 }
 
 interface ParcelUpdateRequest {
@@ -86,12 +116,21 @@ interface ParcelResponse {
     registeredDate?: number;
     createdAt?: number | null;
     updatedAt?: number | null;
+    typeofParcel?: "PARCEL" | "ONLINE" | "PICKUP";
+    returnCount?: number;
+    riderId?: string;
     // NEW: optional rider info when parcel is assigned to a rider
     riderInfo?: {
         riderId: string;
         riderName: string;
         riderPhoneNumber?: string;
     } | null;
+    // Post-delivery follow-up (delivered parcels)
+    followUpStatus?: 'PENDING' | 'FOLLOWED_UP';
+    followUpRemarkType?: string;
+    followUpAt?: number;
+    deliveryDate?: number;
+    officeName?: string;
 }
 
 interface PageParcelResponse {
@@ -602,6 +641,90 @@ class FrontdeskService {
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to reconcile payments. Please try again.',
+            };
+        }
+    }
+
+    /**
+     * Get delivered parcels for post-delivery follow-up (Call Center)
+     * Endpoint: GET /parcels/delivered
+     * Returns parcels across all stations for centralized call center
+     */
+    async getDeliveredParcels(filters: {
+        page?: number;
+        size?: number;
+        officeId?: string;
+        fromDate?: number;
+        toDate?: number;
+        followUpStatus?: 'PENDING' | 'FOLLOWED_UP' | 'ALL';
+    } = {}): Promise<ApiResponse> {
+        try {
+            const params = new URLSearchParams();
+            params.append('page', String(filters.page ?? 0));
+            params.append('size', String(filters.size ?? 20));
+
+            if (filters.officeId) params.append('officeId', filters.officeId);
+            if (filters.fromDate) params.append('fromDate', String(filters.fromDate));
+            if (filters.toDate) params.append('toDate', String(filters.toDate));
+            if (filters.followUpStatus && filters.followUpStatus !== 'ALL') {
+                params.append('followUpStatus', filters.followUpStatus);
+            }
+
+            const response = await this.apiClient.get<PageParcelResponse>(`/parcels/delivered?${params.toString()}`);
+
+            const data = response.data;
+            const content = data?.content ?? [];
+            return {
+                success: true,
+                message: 'Delivered parcels retrieved successfully',
+                data: {
+                    content,
+                    totalElements: data?.totalElements ?? 0,
+                    totalPages: data?.totalPages ?? 0,
+                    number: data?.number ?? 0,
+                    size: data?.size ?? (filters.size ?? 20),
+                },
+            };
+        } catch (error: any) {
+            console.error('Get delivered parcels error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message ?? 'Failed to retrieve delivered parcels.',
+                data: {
+                    content: [],
+                    totalElements: 0,
+                    totalPages: 0,
+                    number: 0,
+                    size: filters.size ?? 20,
+                },
+            };
+        }
+    }
+
+    /**
+     * Record post-delivery follow-up for a parcel
+     * Endpoint: POST /parcels/:parcelId/follow-up
+     */
+    async createFollowUp(
+        parcelId: string,
+        remarkType: string,
+        remarkOther?: string
+    ): Promise<ApiResponse> {
+        try {
+            const body: { remarkType: string; remarkOther?: string } = { remarkType };
+            if (remarkType === 'OTHER' && remarkOther?.trim()) {
+                body.remarkOther = remarkOther.trim();
+            }
+            const response = await this.apiClient.post(`/parcels/${parcelId}/follow-up`, body);
+            return {
+                success: true,
+                message: response.data?.message ?? 'Follow-up recorded successfully',
+            };
+        } catch (error: any) {
+            console.error('Create follow-up error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message ?? 'Failed to record follow-up.',
             };
         }
     }
