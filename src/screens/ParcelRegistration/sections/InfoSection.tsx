@@ -6,11 +6,11 @@ import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { CostInput } from "../../../components/ui/CostInput";
 import { Textarea } from "../../../components/ui/textarea";
 import { Badge } from "../../../components/ui/badge";
 import { Switch } from "../../../components/ui/switch";
 import { PlusIcon, Package, User, Truck, FileText, Save, X } from "lucide-react";
+import { CostInput } from "../../../components/ui/CostInput";
 
 interface ParcelFormData {
     driverName?: string;
@@ -39,6 +39,54 @@ interface InfoSectionProps {
     onRemoveParcel: (index: number) => void;
     isSaving?: boolean;
 }
+
+// Common parcel description presets for quick selection
+const ITEM_DESCRIPTION_PRESETS: string[] = [
+    // Envelopes & documents
+    "White envelope",
+    "Brown envelope",
+    "Manila envelope",
+    "Document parcel",
+    "Contract documents",
+
+    // Poly bags by color
+    "Black poly bag",
+    "White poly bag",
+    "Blue poly bag",
+    "Red poly bag",
+    "Green poly bag",
+    "Yellow poly bag",
+    "Pink poly bag",
+    "Purple poly bag",
+    "Orange poly bag",
+    "Grey poly bag",
+    "Transparent poly bag",
+    "Striped poly bag",
+
+    // Boxes and cartons
+    "Small box",
+    "Medium box",
+    "Large box",
+    "Electronics box",
+    "Shoe box",
+    "Gift box",
+
+    // Sacks and bags
+    "Sack",
+    "Jute sack",
+    "Rice sack",
+    "Laundry bag",
+
+    // Typical contents
+    "Clothing",
+    "Shoes",
+    "Electronics",
+    "Food item",
+    "Groceries",
+    "Cosmetics",
+    "Medicine",
+    "Stationery",
+];
 
 export const InfoSection = ({
     parcels = [],
@@ -594,11 +642,17 @@ export const InfoSection = ({
                                     </Label>
                                     <Input
                                         type="text"
+                                        list="itemDescriptionOptions"
                                         value={itemDescription}
                                         onChange={(e) => setItemDescription(e.target.value)}
-                                        placeholder="Enter item description"
+                                        placeholder="Select or type description"
                                         className="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
                                     />
+                                    <datalist id="itemDescriptionOptions">
+                                        {ITEM_DESCRIPTION_PRESETS.map((preset) => (
+                                            <option key={preset} value={preset} />
+                                        ))}
+                                    </datalist>
                                 </div>
 
                                 <div className="flex flex-col gap-2">
