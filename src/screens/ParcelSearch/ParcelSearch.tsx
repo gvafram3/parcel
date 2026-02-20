@@ -139,14 +139,6 @@ export const ParcelSearch = (): JSX.Element => {
             );
         }
 
-        // Filter by driver name
-        if (searchParams.driverName) {
-            const searchTerm = searchParams.driverName.toLowerCase();
-            filtered = filtered.filter((p) =>
-                p.driverName?.toLowerCase().includes(searchTerm)
-            );
-        }
-
         // Filter by shelf location
         if (searchParams.shelfLocation) {
             filtered = filtered.filter((p) =>
@@ -425,18 +417,18 @@ export const ParcelSearch = (): JSX.Element => {
                                             </select>
                                         </div>
 
-                                        {/* Driver Name Filter */}
+                                        {/* Receiver Name Filter */}
                                         <div>
                                             <label className="block text-sm font-semibold text-neutral-800 mb-2">
-                                                Driver Name
+                                                Receiver Name
                                             </label>
                                             <Input
-                                                placeholder="Driver name..."
-                                                value={searchParams.driverName}
+                                                placeholder="Receiver name..."
+                                                value={searchParams.recipientName}
                                                 onChange={(e) =>
                                                     setSearchParams((prev) => ({
                                                         ...prev,
-                                                        driverName: e.target.value,
+                                                        recipientName: e.target.value,
                                                     }))
                                                 }
                                                 className="border border-[#d1d1d1]"

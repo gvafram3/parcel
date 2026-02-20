@@ -585,7 +585,13 @@ export const ParcelEdit = (): JSX.Element => {
                                             <Label className="text-sm font-semibold text-neutral-800">Home Delivery</Label>
                                             <Switch
                                                 checked={formData.homeDelivery}
-                                                onCheckedChange={(checked) => setFormData({ ...formData, homeDelivery: checked })}
+                                                onCheckedChange={(checked) =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        homeDelivery: checked,
+                                                        ...(checked ? { hasCalled: true } : {}),
+                                                    })
+                                                }
                                             />
                                         </div>
                                     </div>
