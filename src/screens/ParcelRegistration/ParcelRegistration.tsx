@@ -667,7 +667,7 @@ export const ParcelRegistration = (): JSX.Element => {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {/* Session Banner - Only show if there's an active session */}
         {sessionDriver && parcels.length > 0 && (
-          <Card className="mb-4 border-blue-200 bg-gradient-to-r from-blue-50 to-blue-100">
+          <Card className="mb-4 border-blue-200 bg-gradient-to-r from-blue-50 to-blue-100 ">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
