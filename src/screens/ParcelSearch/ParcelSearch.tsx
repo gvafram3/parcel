@@ -22,7 +22,8 @@ export const ParcelSearch = (): JSX.Element => {
         backgroundLoading,
         pagination,
         loadParcelsIfNeeded,
-        refreshParcels
+        refreshParcels,
+        prefetchNextPageIfPossible,
     } = useFrontdeskParcel();
     const [searchParams, setSearchParams] = useState({
         recipientName: "",
@@ -66,6 +67,14 @@ export const ParcelSearch = (): JSX.Element => {
         loadParcelsIfNeeded({}, pagination.page, pagination.size, !hasCache);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Once current page has loaded, prefetch the next page in the background so "Next" feels instant
+    useEffect(() => {
+        if (loading || backgroundLoading) return;
+        if (parcels.length === 0) return;
+        if (pagination.totalPages <= 0 || pagination.page + 1 >= pagination.totalPages) return;
+        prefetchNextPageIfPossible();
+    }, [loading, backgroundLoading, parcels.length, pagination.page, pagination.totalPages, prefetchNextPageIfPossible]);
 
     // Load shelves using office ID from user data
     useEffect(() => {
@@ -469,7 +478,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                 }
                                                 className="border border-[#d1d1d1]"
                                             />
-                                        </div>
+                                        </div> 
                                     </div>
 
                                     <div className="mt-3 flex justify-end">

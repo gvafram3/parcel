@@ -193,7 +193,7 @@ export const InfoSection = ({
 
   if (showingDriverSelection) {
     return (
-      <Card className="w-full rounded-2xl border border-[#d1d1d1] bg-white shadow-[0px_2px_4px_#0000000d,0px_8px_8px_#0000000a,0px_17px_10px_#00000008,0px_30px_12px_#00000003,0px_47px_13px_transparent]">
+      <Card className="w-full rounded-2xl border border-[#d1d1d1] bg-black shadow-[0px_2px_4px_#0000000d,0px_8px_8px_#0000000a,0px_17px_10px_#00000008,0px_30px_12px_#00000003,0px_47px_13px_transparent]">
         <CardContent className="flex flex-col gap-6 p-4 sm:p-6">
           <header className="inline-flex items-center gap-2">
             <InboxIcon className="w-6 h-6 text-[#ea690c]" />
