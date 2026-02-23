@@ -329,7 +329,7 @@ export const ParcelSearch = (): JSX.Element => {
                                 <div className="flex-1 relative">
                                     <SearchIcon className="absolute left-3 top-3 w-5 h-5 text-[#5d5d5d]" />
                                     <Input
-                                        placeholder="Search by recipient name, parcel ID, phone, or driver..."
+                                        placeholder="Search by phone"
                                         value={generalSearch}
                                         onChange={(e) => {
                                             setGeneralSearch(e.target.value);
