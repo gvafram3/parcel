@@ -1,18 +1,32 @@
 import React, { useState, useEffect } from "react";
-import { PhoneIcon, CheckCircleIcon, Clock, DollarSign, Loader, X, MapPin, Package, User, Truck } from "lucide-react";
+import { PhoneIcon, CheckCircleIcon, Clock, DollarSign, Loader, X, MapPin, Package, User, Truck, PhoneCall, MessageSquare } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Badge } from "../../components/ui/badge";
 import { useStation } from "../../contexts/StationContext";
-import { calculateTotalAmount, formatDateTime } from "../../utils/dataHelpers";
+import { useLocation } from "../../contexts/LocationContext";
+import { calculateTotalAmount, formatDateTime, formatDate } from "../../utils/dataHelpers";
 import { formatPhoneNumber } from "../../utils/dataHelpers";
 import frontdeskService, { ParcelResponse } from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
+
+const REMARK_OPTIONS = [
+    { value: "NO_COMMENT", label: "No comment" },
+    { value: "NOT_REACHABLE", label: "Not reachable" },
+    { value: "UNANSWERED", label: "Unanswered" },
+    { value: "HIGH_COST", label: "High cost" },
+    { value: "RIDER_RUDE", label: "Rider was rude" },
+    { value: "DID_NOT_RECEIVE", label: "Did not receive any package" },
+    { value: "WRONG_CONTACT", label: "Wrong contact" },
+    { value: "OTHER", label: "Other" },
+] as const;
 export const CallCenter = (): JSX.Element => {
     const { currentUser } = useStation();
+    const { stations } = useLocation();
     const { showToast } = useToast();
+    const [activeTab, setActiveTab] = useState<"pre-delivery" | "post-delivery">("pre-delivery");
     const [parcels, setParcels] = useState<ParcelResponse[]>([]);
     const [loading, setLoading] = useState(false);
     const [pagination, setPagination] = useState({
@@ -30,6 +44,32 @@ export const CallCenter = (): JSX.Element => {
     const [preferredDate, setPreferredDate] = useState("");
     const [callNotes, setCallNotes] = useState("");
     const [updating, setUpdating] = useState(false);
+
+    // Post-delivery follow-up
+    const [deliveredParcels, setDeliveredParcels] = useState<ParcelResponse[]>([]);
+    const [deliveredLoading, setDeliveredLoading] = useState(false);
+    const [deliveredPagination, setDeliveredPagination] = useState({
+        page: 0,
+        size: 20,
+        totalElements: 0,
+        totalPages: 0,
+    });
+    const [deliveredFilters, setDeliveredFilters] = useState<{
+        officeId: string;
+        fromDate: string;
+        toDate: string;
+        followUpStatus: "PENDING" | "FOLLOWED_UP" | "ALL";
+    }>({
+        officeId: "",
+        fromDate: "",
+        toDate: "",
+        followUpStatus: "PENDING",
+    });
+    const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+    const [followUpParcel, setFollowUpParcel] = useState<ParcelResponse | null>(null);
+    const [remarkType, setRemarkType] = useState<string>("NO_COMMENT");
+    const [remarkOther, setRemarkOther] = useState("");
+    const [submittingFollowUp, setSubmittingFollowUp] = useState(false);
 
     // Load uncalled parcels on mount and when page changes
     useEffect(() => {
@@ -62,6 +102,140 @@ export const CallCenter = (): JSX.Element => {
 
         fetchUncalledParcels();
     }, [pagination.page, pagination.size, showToast]);
+
+    // Load delivered parcels for post-delivery tab
+    useEffect(() => {
+        if (activeTab !== "post-delivery") return;
+
+        const fetchDelivered = async () => {
+            setDeliveredLoading(true);
+            try {
+                const fromDate = deliveredFilters.fromDate
+                    ? new Date(deliveredFilters.fromDate).setHours(0, 0, 0, 0)
+                    : undefined;
+                const toDate = deliveredFilters.toDate
+                    ? new Date(deliveredFilters.toDate).setHours(23, 59, 59, 999)
+                    : undefined;
+
+                const response = await frontdeskService.getDeliveredParcels({
+                    page: deliveredPagination.page,
+                    size: deliveredPagination.size,
+                    officeId: deliveredFilters.officeId || undefined,
+                    fromDate,
+                    toDate,
+                    followUpStatus:
+                        deliveredFilters.followUpStatus === "ALL" ? undefined : deliveredFilters.followUpStatus,
+                });
+
+                if (response.success && response.data) {
+                    const data = response.data as any;
+                    const list = Array.isArray(data.content) ? data.content : [];
+                    setDeliveredParcels(list);
+                    setDeliveredPagination((prev) => ({
+                        ...prev,
+                        totalElements: data.totalElements ?? 0,
+                        totalPages: data.totalPages ?? 0,
+                        page: data.number ?? prev.page,
+                    }));
+                } else {
+                    showToast(response.message || "Failed to load delivered parcels", "error");
+                    setDeliveredParcels([]);
+                }
+            } catch (error) {
+                console.error("Failed to fetch delivered parcels:", error);
+                showToast("Failed to load delivered parcels. Please try again.", "error");
+                setDeliveredParcels([]);
+            } finally {
+                setDeliveredLoading(false);
+            }
+        };
+
+        fetchDelivered();
+    }, [
+        activeTab,
+        deliveredPagination.page,
+        deliveredPagination.size,
+        deliveredFilters.officeId,
+        deliveredFilters.fromDate,
+        deliveredFilters.toDate,
+        deliveredFilters.followUpStatus,
+        showToast,
+    ]);
+
+    const handleRefreshDelivered = async () => {
+        setDeliveredLoading(true);
+        try {
+            const fromDate = deliveredFilters.fromDate
+                ? new Date(deliveredFilters.fromDate).setHours(0, 0, 0, 0)
+                : undefined;
+            const toDate = deliveredFilters.toDate
+                ? new Date(deliveredFilters.toDate).setHours(23, 59, 59, 999)
+                : undefined;
+
+            const response = await frontdeskService.getDeliveredParcels({
+                page: deliveredPagination.page,
+                size: deliveredPagination.size,
+                officeId: deliveredFilters.officeId || undefined,
+                fromDate,
+                toDate,
+                followUpStatus:
+                    deliveredFilters.followUpStatus === "ALL" ? undefined : deliveredFilters.followUpStatus,
+            });
+
+            if (response.success && response.data) {
+                const data = response.data as any;
+                const list = Array.isArray(data.content) ? data.content : [];
+                setDeliveredParcels(list);
+                setDeliveredPagination((prev) => ({
+                    ...prev,
+                    totalElements: data.totalElements ?? 0,
+                    totalPages: data.totalPages ?? 0,
+                    page: data.number ?? prev.page,
+                }));
+            }
+        } catch (error) {
+            console.error("Failed to refresh delivered parcels:", error);
+        } finally {
+            setDeliveredLoading(false);
+        }
+    };
+
+    const openFollowUpModal = (parcel: ParcelResponse) => {
+        setFollowUpParcel(parcel);
+        setRemarkType("NO_COMMENT");
+        setRemarkOther("");
+        setShowFollowUpModal(true);
+    };
+
+    const handleSubmitFollowUp = async () => {
+        if (!followUpParcel) return;
+        if (remarkType === "OTHER" && !remarkOther.trim()) {
+            showToast("Please provide details when selecting 'Other'", "warning");
+            return;
+        }
+
+        setSubmittingFollowUp(true);
+        try {
+            const response = await frontdeskService.createFollowUp(
+                followUpParcel.parcelId,
+                remarkType,
+                remarkType === "OTHER" ? remarkOther : undefined
+            );
+            if (response.success) {
+                showToast("Follow-up recorded successfully", "success");
+                setShowFollowUpModal(false);
+                setFollowUpParcel(null);
+                handleRefreshDelivered();
+            } else {
+                showToast(response.message || "Failed to record follow-up", "error");
+            }
+        } catch (error) {
+            console.error("Submit follow-up error:", error);
+            showToast("Failed to record follow-up. Please try again.", "error");
+        } finally {
+            setSubmittingFollowUp(false);
+        }
+    };
 
     // Refresh parcels after updates
     const handleRefresh = async () => {
@@ -164,17 +338,33 @@ export const CallCenter = (): JSX.Element => {
         <div className="w-full">
             <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <main className="flex-1 space-y-6">
-                    {/* Header */}
-                    <div className="flex items-center justify-between">
-                        {/* <div>
-                            <h1 className="text-xl font-bold text-neutral-800">Call Center</h1>
-                            <p className="text-xs text-[#5d5d5d] mt-0.5">
-                                Contact customers and manage delivery preferences
-                            </p>
-                        </div> */}
+                    {/* Tabs */}
+                    <div className="flex gap-1 border-b border-[#d1d1d1]">
+                        <button
+                            onClick={() => setActiveTab("pre-delivery")}
+                            className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
+                                activeTab === "pre-delivery"
+                                    ? "bg-white border border-[#d1d1d1] border-b-0 -mb-px text-[#ea690c]"
+                                    : "text-[#5d5d5d] hover:bg-gray-50"
+                            }`}
+                        >
+                            Pre-Delivery (Uncalled)
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("post-delivery")}
+                            className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
+                                activeTab === "post-delivery"
+                                    ? "bg-white border border-[#d1d1d1] border-b-0 -mb-px text-[#ea690c]"
+                                    : "text-[#5d5d5d] hover:bg-gray-50"
+                            }`}
+                        >
+                            Post-Delivery Follow-Up
+                        </button>
                     </div>
 
-                    {/* Statistics Card */}
+                    {activeTab === "pre-delivery" && (
+                        <>
+                    {/* Pre-Delivery: Statistics Card */}
                     <Card className="border border-[#d1d1d1] bg-white shadow-sm">
                         <CardContent className="p-6">
                             <div className="flex items-center justify-between">
@@ -187,7 +377,7 @@ export const CallCenter = (): JSX.Element => {
                         </CardContent>
                     </Card>
 
-                    {/* Parcels Table */}
+                    {/* Pre-Delivery: Parcels Table */}
                     <Card className="border border-[#d1d1d1] bg-white">
                         <CardContent className="p-0">
                             {loading ? (
@@ -529,6 +719,223 @@ export const CallCenter = (): JSX.Element => {
                             )}
                         </CardContent>
                     </Card>
+                        </>
+                    )}
+
+                    {/* Post-Delivery Follow-Up */}
+                    {activeTab === "post-delivery" && (
+                        <>
+                            <Card className="border border-[#d1d1d1] bg-white shadow-sm">
+                                <CardContent className="p-6">
+                                    <div className="flex flex-wrap items-end gap-4">
+                                        <div>
+                                            <Label className="text-xs text-[#5d5d5d] block mb-1">Station</Label>
+                                            <select
+                                                value={deliveredFilters.officeId}
+                                                onChange={(e) =>
+                                                    setDeliveredFilters((f) => ({ ...f, officeId: e.target.value }))
+                                                }
+                                                className="h-9 min-w-[180px] rounded border border-[#d1d1d1] px-3 text-sm"
+                                            >
+                                                <option value="">All stations</option>
+                                                {stations.map((s) => (
+                                                    <option key={s.id} value={s.id}>
+                                                        {s.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <Label className="text-xs text-[#5d5d5d] block mb-1">From date</Label>
+                                            <Input
+                                                type="date"
+                                                value={deliveredFilters.fromDate}
+                                                onChange={(e) =>
+                                                    setDeliveredFilters((f) => ({ ...f, fromDate: e.target.value }))
+                                                }
+                                                className="h-9 w-40"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label className="text-xs text-[#5d5d5d] block mb-1">To date</Label>
+                                            <Input
+                                                type="date"
+                                                value={deliveredFilters.toDate}
+                                                onChange={(e) =>
+                                                    setDeliveredFilters((f) => ({ ...f, toDate: e.target.value }))
+                                                }
+                                                className="h-9 w-40"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label className="text-xs text-[#5d5d5d] block mb-1">Follow-up status</Label>
+                                            <select
+                                                value={deliveredFilters.followUpStatus}
+                                                onChange={(e) =>
+                                                    setDeliveredFilters((f) => ({
+                                                        ...f,
+                                                        followUpStatus: e.target.value as "PENDING" | "FOLLOWED_UP" | "ALL",
+                                                    }))
+                                                }
+                                                className="h-9 min-w-[140px] rounded border border-[#d1d1d1] px-3 text-sm"
+                                            >
+                                                <option value="PENDING">Pending</option>
+                                                <option value="FOLLOWED_UP">Followed up</option>
+                                                <option value="ALL">All</option>
+                                            </select>
+                                        </div>
+                                        <Button
+                                            onClick={handleRefreshDelivered}
+                                            variant="outline"
+                                            size="sm"
+                                            className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50"
+                                        >
+                                            Refresh
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border border-[#d1d1d1] bg-white">
+                                <CardContent className="p-0">
+                                    {deliveredLoading ? (
+                                        <div className="text-center py-12">
+                                            <Loader className="w-8 h-8 text-[#ea690c] mx-auto mb-4 animate-spin" />
+                                            <p className="text-sm text-[#5d5d5d]">Loading delivered parcels...</p>
+                                        </div>
+                                    ) : deliveredParcels.length === 0 ? (
+                                        <div className="text-center py-12">
+                                            <Package className="w-16 h-16 text-[#5d5d5d] mx-auto mb-4 opacity-50" />
+                                            <p className="text-sm text-[#5d5d5d]">No delivered parcels found.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full divide-y divide-[#d1d1d1]">
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Recipient</th>
+                                                        <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Phone</th>
+                                                        <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Destination</th>
+                                                        <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Delivery Date</th>
+                                                        <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Station</th>
+                                                        <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Follow-up</th>
+                                                        <th className="py-3 px-4 text-center text-xs font-semibold text-neutral-800 uppercase tracking-wider">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white divide-y divide-[#d1d1d1]">
+                                                    {deliveredParcels.map((p) => {
+                                                        const officeName = typeof p.officeId === "object" && p.officeId
+                                                            ? (p.officeId as { name?: string }).name
+                                                            : p.officeName ?? "N/A";
+                                                        const deliveryTs = p.deliveryDate ?? p.updatedAt ?? p.createdAt;
+                                                        const isFollowedUp = p.followUpStatus === "FOLLOWED_UP";
+
+                                                        return (
+                                                            <tr key={p.parcelId} className="hover:bg-gray-50">
+                                                                <td className="py-3 px-4">
+                                                                    <p className="font-semibold text-neutral-800 text-sm">{p.receiverName || "N/A"}</p>
+                                                                </td>
+                                                                <td className="py-3 px-4">
+                                                                    <a
+                                                                        href={`tel:${p.recieverPhoneNumber}`}
+                                                                        className="text-[#ea690c] hover:underline font-medium text-sm"
+                                                                    >
+                                                                        {p.recieverPhoneNumber ? formatPhoneNumber(p.recieverPhoneNumber) : "N/A"}
+                                                                    </a>
+                                                                </td>
+                                                                <td className="py-3 px-4 text-sm text-neutral-700 max-w-[200px] truncate" title={p.receiverAddress}>
+                                                                    {p.receiverAddress || "N/A"}
+                                                                </td>
+                                                                <td className="py-3 px-4 text-sm text-neutral-700">
+                                                                    {deliveryTs ? formatDate(new Date(deliveryTs).toISOString()) : "N/A"}
+                                                                </td>
+                                                                <td className="py-3 px-4 text-sm text-neutral-700">{officeName}</td>
+                                                                <td className="py-3 px-4">
+                                                                    {isFollowedUp ? (
+                                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                                            {p.followUpRemarkType ? p.followUpRemarkType.replace(/_/g, " ") : "Followed up"}
+                                                                            {p.followUpAt && (
+                                                                                <span className="ml-1 text-green-600">
+                                                                                    ({formatDate(new Date(p.followUpAt).toISOString())})
+                                                                                </span>
+                                                                            )}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                                                            Pending
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="py-3 px-4 text-center">
+                                                                    <div className="flex items-center justify-center gap-2">
+                                                                        <a
+                                                                            href={`tel:${p.recieverPhoneNumber}`}
+                                                                            className="inline-flex items-center justify-center h-8 w-8 rounded border border-[#ea690c] text-[#ea690c] hover:bg-orange-50"
+                                                                            title="Call"
+                                                                        >
+                                                                            <PhoneCall className="w-4 h-4" />
+                                                                        </a>
+                                                                        <Button
+                                                                            onClick={() => openFollowUpModal(p)}
+                                                                            size="sm"
+                                                                            className="bg-[#ea690c] text-white hover:bg-[#d45d0a] text-xs h-8 px-3"
+                                                                        >
+                                                                            <MessageSquare className="w-3.5 h-3.5 mr-1" />
+                                                                            {isFollowedUp ? "Add note" : "Record follow-up"}
+                                                                        </Button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+
+                                    {!deliveredLoading && deliveredPagination.totalPages > 1 && (
+                                        <div className="px-6 py-4 border-t border-[#d1d1d1] flex items-center justify-between">
+                                            <div className="text-sm text-neutral-700">
+                                                Showing {deliveredPagination.page * deliveredPagination.size + 1} to{" "}
+                                                {Math.min(
+                                                    (deliveredPagination.page + 1) * deliveredPagination.size,
+                                                    deliveredPagination.totalElements
+                                                )}{" "}
+                                                of {deliveredPagination.totalElements} parcels
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    onClick={() =>
+                                                        setDeliveredPagination((prev) => ({ ...prev, page: prev.page - 1 }))
+                                                    }
+                                                    disabled={deliveredPagination.page === 0 || deliveredLoading}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="border border-[#d1d1d1]"
+                                                >
+                                                    Previous
+                                                </Button>
+                                                <Button
+                                                    onClick={() =>
+                                                        setDeliveredPagination((prev) => ({ ...prev, page: prev.page + 1 }))
+                                                    }
+                                                    disabled={
+                                                        deliveredPagination.page >= deliveredPagination.totalPages - 1 ||
+                                                        deliveredLoading
+                                                    }
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="border border-[#d1d1d1]"
+                                                >
+                                                    Next
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </>
+                    )}
                 </main>
             </div>
 
@@ -909,6 +1316,112 @@ export const CallCenter = (): JSX.Element => {
                                             </Button>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
+            {/* Record Follow-Up Modal */}
+            {showFollowUpModal && followUpParcel && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-xl">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#d1d1d1]">
+                                <div>
+                                    <h3 className="text-lg font-bold text-neutral-800">Record Follow-Up</h3>
+                                    <p className="text-xs text-[#5d5d5d] mt-1">
+                                        {followUpParcel.receiverName || followUpParcel.parcelId}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setShowFollowUpModal(false);
+                                        setFollowUpParcel(null);
+                                    }}
+                                    className="text-[#9a9a9a] hover:text-neutral-800 transition-colors p-1 hover:bg-gray-100 rounded"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <Label className="text-sm font-semibold text-neutral-800 mb-2 block">
+                                        Remark <span className="text-[#e22420]">*</span>
+                                    </Label>
+                                    <div className="space-y-2">
+                                        {REMARK_OPTIONS.map((opt) => (
+                                            <label
+                                                key={opt.value}
+                                                className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
+                                                    remarkType === opt.value
+                                                        ? "border-[#ea690c] bg-orange-50"
+                                                        : "border-[#d1d1d1] hover:bg-gray-50"
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="remarkType"
+                                                    value={opt.value}
+                                                    checked={remarkType === opt.value}
+                                                    onChange={() => setRemarkType(opt.value)}
+                                                    className="w-4 h-4 text-[#ea690c]"
+                                                />
+                                                <span className="ml-3 text-sm font-medium text-neutral-800">
+                                                    {opt.label}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {remarkType === "OTHER" && (
+                                    <div>
+                                        <Label className="text-sm font-semibold text-neutral-800 mb-2 block">
+                                            Details <span className="text-[#e22420]">*</span>
+                                        </Label>
+                                        <textarea
+                                            value={remarkOther}
+                                            onChange={(e) => setRemarkOther(e.target.value)}
+                                            placeholder="Enter additional details..."
+                                            className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c] resize-none"
+                                            rows={3}
+                                            maxLength={500}
+                                        />
+                                        <p className="text-xs text-[#5d5d5d] mt-1">{remarkOther.length}/500</p>
+                                    </div>
+                                )}
+
+                                <div className="flex gap-3 pt-2">
+                                    <Button
+                                        onClick={() => {
+                                            setShowFollowUpModal(false);
+                                            setFollowUpParcel(null);
+                                        }}
+                                        variant="outline"
+                                        className="flex-1 border border-[#d1d1d1]"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleSubmitFollowUp}
+                                        disabled={
+                                            submittingFollowUp ||
+                                            (remarkType === "OTHER" && !remarkOther.trim())
+                                        }
+                                        className="flex-1 bg-[#ea690c] text-white hover:bg-[#d45d0a] disabled:opacity-50"
+                                    >
+                                        {submittingFollowUp ? (
+                                            <>
+                                                <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                Saving...
+                                            </>
+                                        ) : (
+                                            "Save"
+                                        )}
+                                    </Button>
                                 </div>
                             </div>
                         </CardContent>

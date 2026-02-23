@@ -10,6 +10,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import { Badge } from "../../../components/ui/badge";
 import { Switch } from "../../../components/ui/switch";
 import { PlusIcon, Package, User, Truck, FileText, Save, X } from "lucide-react";
+import { CostInput } from "../../../components/ui/CostInput";
 
 interface ParcelFormData {
     driverName?: string;
@@ -38,6 +39,54 @@ interface InfoSectionProps {
     onRemoveParcel: (index: number) => void;
     isSaving?: boolean;
 }
+
+// Common parcel description presets for quick selection
+const ITEM_DESCRIPTION_PRESETS: string[] = [
+    // Envelopes & documents
+    "White envelope",
+    "Brown envelope",
+    "Manila envelope",
+    "Document parcel",
+    "Contract documents",
+
+    // Poly bags by color
+    "Black poly bag",
+    "White poly bag",
+    "Blue poly bag",
+    "Red poly bag",
+    "Green poly bag",
+    "Yellow poly bag",
+    "Pink poly bag",
+    "Purple poly bag",
+    "Orange poly bag",
+    "Grey poly bag",
+    "Transparent poly bag",
+    "Striped poly bag",
+
+    // Boxes and cartons
+    "Small box",
+    "Medium box",
+    "Large box",
+    "Electronics box",
+    "Shoe box",
+    "Gift box",
+
+    // Sacks and bags
+    "Sack",
+    "Jute sack",
+    "Rice sack",
+    "Laundry bag",
+
+    // Typical contents
+    "Clothing",
+    "Shoes",
+    "Electronics",
+    "Food item",
+    "Groceries",
+    "Cosmetics",
+    "Medicine",
+    "Stationery",
+];
 
 export const InfoSection = ({
     parcels = [],
@@ -72,9 +121,9 @@ export const InfoSection = ({
     const [receiverAddress, setReceiverAddress] = useState("");
     const [itemDescription, setItemDescription] = useState("");
     const [shelf, setShelf] = useState("");
-    const [itemValue, setItemValue] = useState("");
+    const [itemValue, setItemValue] = useState<number | undefined>(undefined);
     const [homeDelivery, setHomeDelivery] = useState(false);
-    const [deliveryCost, setDeliveryCost] = useState("");
+    const [deliveryCost, setDeliveryCost] = useState<number | undefined>(undefined);
     const [specialNotes, setSpecialNotes] = useState("");
     const [phoneError, setPhoneError] = useState("");
     const [isDriverLocked, setIsDriverLocked] = useState(false);
@@ -102,9 +151,9 @@ export const InfoSection = ({
             setSenderPhone("");
             setItemDescription("");
             setShelf("");
-            setItemValue("");
+            setItemValue(undefined);
             setHomeDelivery(false);
-            setDeliveryCost("");
+            setDeliveryCost(undefined);
             setSpecialNotes("");
             setPhoneError("");
             setDriverName("");
@@ -165,7 +214,7 @@ export const InfoSection = ({
             return false;
         }
         // Validate delivery cost if home delivery is enabled
-        if (homeDelivery && (!deliveryCost || deliveryCost.trim() === "" || parseFloat(deliveryCost) <= 0)) {
+        if (homeDelivery && (deliveryCost === undefined || deliveryCost <= 0)) {
             setPhoneError("Delivery cost is required when home delivery is enabled");
             return false;
         }
@@ -198,10 +247,10 @@ export const InfoSection = ({
             itemDescription: itemDescription.trim() || undefined,
             shelfLocation: shelf, // Store shelf ID
             shelfName: selectedShelf?.name, // Store shelf name for display
-            itemValue: itemValue ? parseFloat(itemValue) : 0,
+            itemValue: itemValue ?? 0,
             pickUpCost: 0, // Default to 0
             homeDelivery: homeDelivery,
-            deliveryCost: homeDelivery && deliveryCost ? parseFloat(deliveryCost) : undefined,
+            deliveryCost: homeDelivery && deliveryCost != null ? deliveryCost : undefined,
             hasCalled: homeDelivery ? true : undefined,
         };
 
@@ -220,9 +269,9 @@ export const InfoSection = ({
         setSenderPhone("");
         setItemDescription("");
         setShelf("");
-        setItemValue("");
+        setItemValue(undefined);
         setHomeDelivery(false);
-        setDeliveryCost("");
+        setDeliveryCost(undefined);
         setSpecialNotes("");
         setPhoneError("");
     };
@@ -253,10 +302,10 @@ export const InfoSection = ({
             itemDescription: itemDescription.trim() || undefined,
             shelfLocation: shelf, // Store shelf ID
             shelfName: selectedShelf?.name, // Store shelf name for display
-            itemValue: itemValue ? parseFloat(itemValue) : 0,
+            itemValue: itemValue ?? 0,
             pickUpCost: 0, // Default to 0
             homeDelivery: homeDelivery,
-            deliveryCost: homeDelivery && deliveryCost ? parseFloat(deliveryCost) : undefined,
+            deliveryCost: homeDelivery && deliveryCost != null ? deliveryCost : undefined,
             hasCalled: homeDelivery ? true : undefined,
         };
 
@@ -271,9 +320,9 @@ export const InfoSection = ({
         setSenderPhone("");
         setItemDescription("");
         setShelf("");
-        setItemValue("");
+        setItemValue(undefined);
         setHomeDelivery(false);
-        setDeliveryCost("");
+        setDeliveryCost(undefined);
         setSpecialNotes("");
         setPhoneError("");
     };
@@ -290,7 +339,7 @@ export const InfoSection = ({
         phoneNumber.trim() &&
         shelf.trim() &&
         !phoneError &&
-        (!homeDelivery || (deliveryCost && parseFloat(deliveryCost) > 0));
+        (!homeDelivery || (deliveryCost != null && deliveryCost > 0));
 
     return (
         <div className="space-y-4">
@@ -593,11 +642,17 @@ export const InfoSection = ({
                                     </Label>
                                     <Input
                                         type="text"
+                                        list="itemDescriptionOptions"
                                         value={itemDescription}
                                         onChange={(e) => setItemDescription(e.target.value)}
-                                        placeholder="Enter item description"
+                                        placeholder="Select or type description"
                                         className="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
                                     />
+                                    <datalist id="itemDescriptionOptions">
+                                        {ITEM_DESCRIPTION_PRESETS.map((preset) => (
+                                            <option key={preset} value={preset} />
+                                        ))}
+                                    </datalist>
                                 </div>
 
                                 <div className="flex flex-col gap-2">
@@ -626,14 +681,11 @@ export const InfoSection = ({
                                     <Label className="text-sm font-semibold text-neutral-800">
                                         Item Value (GHC)
                                     </Label>
-                                    <Input
-                                        type="number"
+                                    <CostInput
                                         value={itemValue}
-                                        onChange={(e) => setItemValue(e.target.value)}
-                                        placeholder="0.00"
-                                        min="0"
-                                        step="0.01"
-                                        className="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        onChange={setItemValue}
+                                        placeholder="0"
+                                        inputClassName="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
                                     />
                                 </div>
 
@@ -652,7 +704,7 @@ export const InfoSection = ({
                                             onCheckedChange={(checked) => {
                                                 setHomeDelivery(checked);
                                                 if (!checked) {
-                                                    setDeliveryCost("");
+                                                    setDeliveryCost(undefined);
                                                 }
                                             }}
                                         />
@@ -664,15 +716,11 @@ export const InfoSection = ({
                                         <Label className="text-sm font-semibold text-neutral-800">
                                             Delivery Cost (GHC) <span className="text-[#e22420]">*</span>
                                         </Label>
-                                        <Input
-                                            type="number"
+                                        <CostInput
                                             value={deliveryCost}
-                                            onChange={(e) => setDeliveryCost(e.target.value)}
-                                            placeholder="0.00"
-                                            min="0"
-                                            step="0.01"
-                                            className="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                            required
+                                            onChange={setDeliveryCost}
+                                            placeholder="0"
+                                            inputClassName="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
                                         />
                                         <p className="text-xs text-blue-600">
                                             Has Called will be automatically set to true

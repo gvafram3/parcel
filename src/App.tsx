@@ -8,6 +8,7 @@ import { ShelfProvider } from "./contexts/ShelfContext";
 import { ToastProvider } from "./components/ui/toast";
 import { MainLayout } from "./layouts/MainLayout";
 import { RiderLayout } from "./layouts/RiderLayout";
+import { CallCenterLayout } from "./layouts/CallCenterLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Login } from "./screens/Login";
 import { ForgotPassword } from "./screens/ForgotPassword";
@@ -63,7 +64,7 @@ export const App = (): JSX.Element => {
                       <Route
                         path="/parcel-search"
                         element={
-                          <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", "ADMIN", "CALLER"]}>
+                          <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", "ADMIN"]}>
                             <MainLayout>
                               <ParcelSearch />
                             </MainLayout>
@@ -93,10 +94,10 @@ export const App = (): JSX.Element => {
                       <Route
                         path="/call-center"
                         element={
-                          <ProtectedRoute allowedRoles={["CALLER", "MANAGER", "ADMIN", "FRONTDESK"]}>
-                            <MainLayout>
+                          <ProtectedRoute allowedRoles={["CALLER"]}>
+                            <CallCenterLayout>
                               <CallCenter />
-                            </MainLayout>
+                            </CallCenterLayout>
                           </ProtectedRoute>
                         }
                       />
@@ -178,7 +179,7 @@ export const App = (): JSX.Element => {
                       <Route
                         path="/reconciliation"
                         element={
-                          <ProtectedRoute allowedRoles={["CALLER", "MANAGER", "ADMIN", "FRONTDESK"]}>
+                          <ProtectedRoute allowedRoles={["MANAGER", "ADMIN", "FRONTDESK"]}>
                             <MainLayout>
                               <Reconciliation />
                             </MainLayout>

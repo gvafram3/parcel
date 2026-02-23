@@ -22,7 +22,8 @@ export const ParcelSearch = (): JSX.Element => {
         backgroundLoading,
         pagination,
         loadParcelsIfNeeded,
-        refreshParcels
+        refreshParcels,
+        prefetchNextPageIfPossible,
     } = useFrontdeskParcel();
     const [searchParams, setSearchParams] = useState({
         recipientName: "",
@@ -66,6 +67,14 @@ export const ParcelSearch = (): JSX.Element => {
         loadParcelsIfNeeded({}, pagination.page, pagination.size, !hasCache);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Once current page has loaded, prefetch the next page in the background so "Next" feels instant
+    useEffect(() => {
+        if (loading || backgroundLoading) return;
+        if (parcels.length === 0) return;
+        if (pagination.totalPages <= 0 || pagination.page + 1 >= pagination.totalPages) return;
+        prefetchNextPageIfPossible();
+    }, [loading, backgroundLoading, parcels.length, pagination.page, pagination.totalPages, prefetchNextPageIfPossible]);
 
     // Load shelves using office ID from user data
     useEffect(() => {
@@ -136,14 +145,6 @@ export const ParcelSearch = (): JSX.Element => {
                 phoneMatchesSearch(p.recieverPhoneNumber, searchTerm) ||
                 phoneMatchesSearch(p.senderPhoneNumber, searchTerm) ||
                 phoneMatchesSearch(p.driverPhoneNumber, searchTerm)
-            );
-        }
-
-        // Filter by driver name
-        if (searchParams.driverName) {
-            const searchTerm = searchParams.driverName.toLowerCase();
-            filtered = filtered.filter((p) =>
-                p.driverName?.toLowerCase().includes(searchTerm)
             );
         }
 
@@ -425,18 +426,18 @@ export const ParcelSearch = (): JSX.Element => {
                                             </select>
                                         </div>
 
-                                        {/* Driver Name Filter */}
+                                        {/* Receiver Name Filter */}
                                         <div>
                                             <label className="block text-sm font-semibold text-neutral-800 mb-2">
-                                                Driver Name
+                                                Receiver Name
                                             </label>
                                             <Input
-                                                placeholder="Driver name..."
-                                                value={searchParams.driverName}
+                                                placeholder="Receiver name..."
+                                                value={searchParams.recipientName}
                                                 onChange={(e) =>
                                                     setSearchParams((prev) => ({
                                                         ...prev,
-                                                        driverName: e.target.value,
+                                                        recipientName: e.target.value,
                                                     }))
                                                 }
                                                 className="border border-[#d1d1d1]"
@@ -477,7 +478,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                 }
                                                 className="border border-[#d1d1d1]"
                                             />
-                                        </div>
+                                        </div> 
                                     </div>
 
                                     <div className="mt-3 flex justify-end">
