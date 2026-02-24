@@ -52,9 +52,16 @@ interface RiderGroup {
   deliveryCost: number; // Total delivery cost (driver's money)
   inboundCost: number; // Total inbound cost (driver's money)
   deliveredParcels: ReconciliationParcel[];
+  failedParcels: ReconciliationParcel[];
   totalDeliveredAmount: number;
   totalDeliveredCount: number;
   totalParcelsCount: number; // Total parcels (delivered + not delivered)
+  deliveredDeliveryCost: number;
+  deliveredInboundCost: number;
+  failedDeliveryCost: number;
+  failedInboundCost: number;
+  totalFailedAmount: number; // Sum of parcel amounts for failed (returned) parcels
+  expectedAmount: number; // Delivered amount + failed amount
   assignments: Map<string, AssignmentData>; // Map of assignmentId to assignment data with amounts
 }
 
@@ -123,9 +130,9 @@ export const Reconciliation = (): JSX.Element => {
       const riderName = assignment.riderInfo?.riderName || assignment.riderName || 'Unknown Rider';
       const riderPhoneNumber = assignment.riderInfo?.riderPhoneNumber || assignment.riderPhoneNumber;
       const assignedAt = assignment.assignedAt;
-      const assignmentAmount = assignment.amount || 0;
-      const assignmentDeliveryCost = assignment.deliveryCost || 0;
-      const assignmentInboundCost = assignment.inboundCost || 0;
+      const assignmentAmount = Math.round(Number(assignment.amount || 0));
+      const assignmentDeliveryCost = Math.round(Number(assignment.deliveryCost || 0));
+      const assignmentInboundCost = Math.round(Number(assignment.inboundCost || 0));
 
       // Create a unique group for each assignment (not merged by rider)
       if (!groupsMap.has(assignmentId)) {
@@ -139,9 +146,16 @@ export const Reconciliation = (): JSX.Element => {
           deliveryCost: assignmentDeliveryCost,
           inboundCost: assignmentInboundCost,
           deliveredParcels: [],
+          failedParcels: [],
           totalDeliveredAmount: 0,
           totalDeliveredCount: 0,
           totalParcelsCount: 0,
+          deliveredDeliveryCost: 0,
+          deliveredInboundCost: 0,
+          failedDeliveryCost: 0,
+          failedInboundCost: 0,
+          totalFailedAmount: 0,
+          expectedAmount: 0,
           assignments: new Map<string, AssignmentData>(),
         });
       }
@@ -163,9 +177,12 @@ export const Reconciliation = (): JSX.Element => {
         assignment.parcels.forEach((parcel: any) => {
           group.totalParcelsCount++;
 
-          // Only include delivered parcels (not cancelled)
+          const parcelAmount = Math.round(Number(parcel.parcelAmount ?? parcel.amount ?? 0) || 0);
+          const parcelDeliveryCost = Math.round(Number(parcel.deliveryCost ?? 0) || 0);
+          const parcelInboundCost = Math.round(Number(parcel.inboundCost ?? 0) || 0);
+
+          // Delivered parcels (not cancelled)
           if (parcel.delivered && !parcel.cancelled) {
-            const parcelAmount = parcel.parcelAmount || 0;
             group.deliveredParcels.push({
               parcelId: parcel.parcelId,
               parcelDescription: parcel.parcelDescription,
@@ -185,13 +202,36 @@ export const Reconciliation = (): JSX.Element => {
             group.totalDeliveredAmount += parcelAmount;
             assignmentData.totalAmount += parcelAmount;
             group.totalDeliveredCount++;
+            group.deliveredDeliveryCost += parcelDeliveryCost;
+            group.deliveredInboundCost += parcelInboundCost;
+          } else if (parcel.returned) {
+            // Failed = returned parcels only; show details and label as failed
+            group.failedParcels.push({
+              parcelId: parcel.parcelId,
+              parcelDescription: parcel.parcelDescription,
+              receiverName: parcel.receiverName,
+              receiverPhoneNumber: parcel.receiverPhoneNumber,
+              receiverAddress: parcel.receiverAddress,
+              senderName: parcel.senderName,
+              senderPhoneNumber: parcel.senderPhoneNumber,
+              parcelAmount,
+              deliveryCost: parcel.deliveryCost,
+              inboundCost: parcel.inboundCost,
+              delivered: false,
+              cancelled: !!parcel.cancelled,
+              returned: true,
+              paymentMethod: parcel.paymentMethod,
+            });
+            group.failedDeliveryCost += parcelDeliveryCost;
+            group.failedInboundCost += parcelInboundCost;
+            group.totalFailedAmount += parcelAmount;
           }
         });
       }
     });
 
-    // Filter out assignments with no delivered parcels and sort by rider name, then by assigned date (newest first)
-    return Array.from(groupsMap.values())
+    // Finalize groups: compute expected amount per assignment
+    const groups = Array.from(groupsMap.values())
       .filter(group => group.deliveredParcels.length > 0)
       .sort((a, b) => {
         // Sort by rider name first, then by assigned date (newest first)
@@ -202,6 +242,13 @@ export const Reconciliation = (): JSX.Element => {
         const dateB = b.assignedAt || 0;
         return dateB - dateA; // Newest first
       });
+
+    groups.forEach(group => {
+      // Expected amount = delivered amount + failed amount, both rounded to whole numbers
+      group.expectedAmount = Math.round(group.totalDeliveredAmount + group.totalFailedAmount);
+    });
+
+    return groups;
   }, [rawAssignments]);
 
   // Calculate totals for selected assignments
@@ -265,12 +312,12 @@ export const Reconciliation = (): JSX.Element => {
       }> = [];
 
       selectedRidersData.forEach(group => {
-        // Use assignmentId and amount from the group (assignment level)
-        if (group.amount > 0) {
+        // Use assignmentId and computed expectedAmount (what rider is expected to pay back)
+        if (group.expectedAmount > 0) {
           reconciliationPayload.push({
             assignmentId: group.assignmentId,
             reconciledAt: Date.now(), // Current timestamp in milliseconds
-            payedAmount: group.amount, // Use assignment.amount
+            payedAmount: group.expectedAmount,
           });
         }
       });
@@ -473,7 +520,7 @@ export const Reconciliation = (): JSX.Element => {
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
                                 <div className="text-sm font-bold text-[#ea690c]">
-                                  {formatCurrency(group.amount)}
+                                  {formatCurrency(group.expectedAmount)}
                                 </div>
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
@@ -495,7 +542,7 @@ export const Reconciliation = (): JSX.Element => {
                             {/* Expanded Parcels Rows */}
                             {isExpanded && (
                               <tr>
-                                <td colSpan={6} className="px-0 py-0">
+                                <td colSpan={7} className="px-0 py-0">
                                   <div className="bg-gray-50 border-t border-gray-200">
                                     <table className="w-full">
                                       <thead className="bg-gray-100">
@@ -592,6 +639,80 @@ export const Reconciliation = (): JSX.Element => {
                                         ))}
                                       </tbody>
                                     </table>
+                                    {/* Failed parcels and driver's money (failed fees) */}
+                                    {group.failedParcels.length > 0 && (
+                                      <div className="border-t-2 border-red-300 bg-red-50 px-4 py-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                                          <span className="text-sm font-semibold text-red-800">
+                                            Failed (returned) parcels: {group.failedParcels.length}
+                                          </span>
+                                          <span className="text-sm font-semibold text-red-800">
+                                            Driver&apos;s money (failed):{" "}
+                                            {formatCurrency(group.failedDeliveryCost + group.failedInboundCost)}
+                                          </span>
+                                        </div>
+                                        <table className="w-full text-xs">
+                                          <thead className="bg-red-200 border-b-2 border-red-400">
+                                            <tr>
+                                              <th className="px-2 py-1.5 text-left font-semibold text-red-900">Recipient</th>
+                                              <th className="px-2 py-1.5 text-left font-semibold text-red-900">Phone</th>
+                                              <th className="px-2 py-1.5 text-left font-semibold text-red-900">Location</th>
+                                              <th className="px-2 py-1.5 text-right font-semibold text-red-900">Amount</th>
+                                              <th className="px-2 py-1.5 text-center font-semibold text-red-900">Status</th>
+                                              <th className="px-2 py-1.5 text-right font-semibold text-red-900">Delivery Fee</th>
+                                              <th className="px-2 py-1.5 text-right font-semibold text-red-900">Inbound Fee</th>
+                                              <th className="px-2 py-1.5 text-center font-semibold text-red-900">Details</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {group.failedParcels.map((parcel) => (
+                                              <tr key={parcel.parcelId} className="border-b border-red-200 bg-red-50/80 hover:bg-red-100/80">
+                                                <td className="px-2 py-1.5 text-[11px] text-red-900">
+                                                  {parcel.receiverName || "N/A"}
+                                                  {parcel.parcelDescription && (
+                                                    <div className="text-[10px] text-red-700 truncate max-w-[120px]">
+                                                      {parcel.parcelDescription}
+                                                    </div>
+                                                  )}
+                                                </td>
+                                                <td className="px-2 py-1.5 text-[11px] text-red-900">
+                                                  {parcel.receiverPhoneNumber ? formatPhoneNumber(parcel.receiverPhoneNumber) : "N/A"}
+                                                </td>
+                                                <td className="px-2 py-1.5 text-[11px] text-red-900 truncate max-w-[140px]" title={parcel.receiverAddress}>
+                                                  {parcel.receiverAddress || "N/A"}
+                                                </td>
+                                                <td className="px-2 py-1.5 text-right text-[11px] text-red-900 font-medium">
+                                                  {formatCurrency(parcel.parcelAmount)}
+                                                </td>
+                                                <td className="px-2 py-1.5 text-center">
+                                                  <Badge className="bg-red-600 text-white border-0 text-[10px] font-semibold">Failed</Badge>
+                                                </td>
+                                                <td className="px-2 py-1.5 text-right text-[11px] text-red-900">
+                                                  {formatCurrency(parcel.deliveryCost || 0)}
+                                                </td>
+                                                <td className="px-2 py-1.5 text-right text-[11px] text-red-900">
+                                                  {formatCurrency(parcel.inboundCost || 0)}
+                                                </td>
+                                                <td className="px-2 py-1.5 text-center">
+                                                  <Button
+                                                    onClick={() => {
+                                                      setSelectedParcel(parcel);
+                                                      setShowParcelDetailsModal(true);
+                                                    }}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="border-red-400 text-red-700 bg-white hover:bg-red-100 hover:text-red-800 text-xs"
+                                                    title="View parcel details"
+                                                  >
+                                                    Details
+                                                  </Button>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
