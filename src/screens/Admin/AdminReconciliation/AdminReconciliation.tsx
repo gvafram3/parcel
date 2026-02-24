@@ -27,6 +27,7 @@ interface ReconciliationParcel {
   parcelAmount: number;
   delivered: boolean;
   cancelled?: boolean;
+  returned?: boolean;
   paymentMethod?: string | null;
 }
 
@@ -35,9 +36,12 @@ interface RiderGroup {
   riderName: string;
   riderPhoneNumber?: string;
   deliveredParcels: ReconciliationParcel[];
+  failedParcels: ReconciliationParcel[];
   totalDeliveredAmount: number;
   totalDeliveredCount: number;
   totalParcelsCount: number;
+  totalFailedAmount: number;
+  expectedAmount: number;
   assignmentIds: string[];
 }
 
@@ -124,9 +128,12 @@ export const AdminReconciliation = (): JSX.Element => {
           riderName,
           riderPhoneNumber,
           deliveredParcels: [],
+          failedParcels: [],
           totalDeliveredAmount: 0,
           totalDeliveredCount: 0,
           totalParcelsCount: 0,
+          totalFailedAmount: 0,
+          expectedAmount: 0,
           assignmentIds: [],
         });
       }
@@ -141,34 +148,57 @@ export const AdminReconciliation = (): JSX.Element => {
         assignment.parcels.forEach((parcel: any) => {
           group.totalParcelsCount++;
           const delivered = parcel.delivered === true;
-          const cancelled = parcel.returned === true;
-          if (delivered && !cancelled) {
-            const parcelAmount = parcel.parcelAmount || 0;
+          const returned = parcel.returned === true;
+          const amount = Math.round(Number(parcel.parcelAmount ?? parcel.amount ?? 0) || 0);
+
+          if (delivered && !returned) {
             group.deliveredParcels.push({
               parcelId: parcel.parcelId,
               parcelDescription: parcel.parcelDescription,
               receiverName: parcel.receiverName,
               receiverPhoneNumber: parcel.receiverPhoneNumber,
               receiverAddress: parcel.receiverAddress,
-              parcelAmount,
+              parcelAmount: amount,
               delivered: true,
               cancelled: false,
+              returned: false,
               paymentMethod: parcel.paymentMethod,
             });
-            group.totalDeliveredAmount += parcelAmount;
+            group.totalDeliveredAmount += amount;
             group.totalDeliveredCount++;
+          } else if (returned) {
+            group.failedParcels.push({
+              parcelId: parcel.parcelId,
+              parcelDescription: parcel.parcelDescription,
+              receiverName: parcel.receiverName,
+              receiverPhoneNumber: parcel.receiverPhoneNumber,
+              receiverAddress: parcel.receiverAddress,
+              parcelAmount: amount,
+              delivered: false,
+              cancelled: !!parcel.cancelled,
+              returned: true,
+              paymentMethod: parcel.paymentMethod,
+            });
+            group.totalFailedAmount += amount;
           }
         });
       }
     });
 
-    return Array.from(groupsMap.values())
+    const groups = Array.from(groupsMap.values())
       .filter((g) => g.deliveredParcels.length > 0)
       .sort((a, b) => a.riderName.localeCompare(b.riderName));
+
+    groups.forEach((g) => {
+      // Expected amount = delivered amount + failed amount (both rounded)
+      g.expectedAmount = Math.round(g.totalDeliveredAmount + g.totalFailedAmount);
+    });
+
+    return groups;
   }, [rawAssignments]);
 
   const totalAmount = useMemo(
-    () => riderGroups.reduce((sum, g) => sum + g.totalDeliveredAmount, 0),
+    () => riderGroups.reduce((sum, g) => sum + g.expectedAmount, 0),
     [riderGroups]
   );
   const totalParcels = useMemo(
@@ -428,13 +458,20 @@ export const AdminReconciliation = (): JSX.Element => {
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
                                 <div className="text-sm font-bold text-[#ea690c]">
-                                  {formatCurrency(group.totalDeliveredAmount)}
+                                  {formatCurrency(group.expectedAmount)}
                                 </div>
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap">
-                                <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
-                                  {group.totalDeliveredCount} Delivered
-                                </Badge>
+                                <div className="flex flex-col gap-1">
+                                  <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
+                                    {group.totalDeliveredCount} Delivered
+                                  </Badge>
+                                  {group.totalFailedAmount > 0 && (
+                                    <Badge className="bg-red-100 text-red-800 border-red-200 text-xs">
+                                      {group.failedParcels.length} Failed
+                                    </Badge>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                             {isExpanded && (
@@ -566,6 +603,78 @@ export const AdminReconciliation = (): JSX.Element => {
                                         )}
                                       </tbody>
                                     </table>
+
+                                    {/* Failed (returned) parcels summary for this rider */}
+                                    {group.failedParcels.length > 0 && (
+                                      <div className="border-t border-red-300 bg-red-50 px-4 py-3">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                                          <span className="text-sm font-semibold text-red-800">
+                                            Failed (returned) parcels: {group.failedParcels.length}
+                                          </span>
+                                          <span className="text-sm font-semibold text-red-800">
+                                            Failed amount:{" "}
+                                            {formatCurrency(group.totalFailedAmount)}
+                                          </span>
+                                        </div>
+                                        <table className="w-full text-xs">
+                                          <thead className="bg-red-200 border-b border-red-300">
+                                            <tr>
+                                              <th className="px-2 py-1.5 text-left font-semibold text-red-900">
+                                                Recipient
+                                              </th>
+                                              <th className="px-2 py-1.5 text-left font-semibold text-red-900">
+                                                Phone
+                                              </th>
+                                              <th className="px-2 py-1.5 text-left font-semibold text-red-900">
+                                                Location
+                                              </th>
+                                              <th className="px-2 py-1.5 text-right font-semibold text-red-900">
+                                                Amount
+                                              </th>
+                                              <th className="px-2 py-1.5 text-center font-semibold text-red-900">
+                                                Status
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {group.failedParcels.map((parcel) => (
+                                              <tr
+                                                key={parcel.parcelId}
+                                                className="border-b border-red-200 bg-red-50/80"
+                                              >
+                                                <td className="px-2 py-1.5 text-[11px] text-red-900">
+                                                  {parcel.receiverName || "N/A"}
+                                                  {parcel.parcelDescription && (
+                                                    <div className="text-[10px] text-red-700 truncate max-w-[150px]">
+                                                      {parcel.parcelDescription}
+                                                    </div>
+                                                  )}
+                                                </td>
+                                                <td className="px-2 py-1.5 text-[11px] text-red-900">
+                                                  {parcel.receiverPhoneNumber
+                                                    ? formatPhoneNumber(parcel.receiverPhoneNumber)
+                                                    : "N/A"}
+                                                </td>
+                                                <td
+                                                  className="px-2 py-1.5 text-[11px] text-red-900 truncate max-w-[180px]"
+                                                  title={parcel.receiverAddress}
+                                                >
+                                                  {parcel.receiverAddress || "N/A"}
+                                                </td>
+                                                <td className="px-2 py-1.5 text-right text-[11px] text-red-900 font-medium">
+                                                  {formatCurrency(parcel.parcelAmount)}
+                                                </td>
+                                                <td className="px-2 py-1.5 text-center">
+                                                  <Badge className="bg-red-600 text-white border-0 text-[10px] font-semibold">
+                                                    Failed
+                                                  </Badge>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
