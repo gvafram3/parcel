@@ -38,7 +38,7 @@ const mapAssignmentStatusToUI = (status: AssignmentStatus): UIStatus => {
             return "picked-up";
         case "DELIVERED":
             return "delivered";
-        case "CANCELLED":
+        case "RETURNED":
             return "delivery-failed";
         default:
             return "assigned";
@@ -458,7 +458,7 @@ export const RiderHistory = (): JSX.Element => {
                                         disabled={filteredAssignments.length === 0}
                                     >
                                         <Download className="w-4 h-4" />
-                                        <span className="hidden sm:inline">Download History</span>
+                                        <span className="hidden sm:inline">Export History</span>
                                         <span className="sm:hidden">Download</span>
                                     </Button>
                                 </div>
