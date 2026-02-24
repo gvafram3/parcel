@@ -27,7 +27,7 @@ export const ParcelSearch = (): JSX.Element => {
     } = useFrontdeskParcel();
     const [searchParams, setSearchParams] = useState({
         recipientName: "",
-        phoneNumber: "",
+        phoneNumber: "+233",
         parcelId: "",
         status: "",
         startDate: "",
@@ -95,27 +95,35 @@ export const ParcelSearch = (): JSX.Element => {
 
         // General search (searches across multiple fields with OR logic)
         if (generalSearch.trim()) {
-            const searchTerm = generalSearch.trim().toLowerCase();
+            const searchTerm = generalSearch.trim();
+            const searchTermLower = searchTerm.toLowerCase();
             filtered = filtered.filter((p) => {
                 // Check parcel ID
-                if (p.parcelId?.toLowerCase().includes(searchTerm)) return true;
+                if (p.parcelId?.toLowerCase().includes(searchTermLower)) return true;
 
                 // Check recipient name
-                if (p.receiverName?.toLowerCase().includes(searchTerm)) return true;
+                if (p.receiverName?.toLowerCase().includes(searchTermLower)) return true;
 
                 // Check sender name
-                if (p.senderName?.toLowerCase().includes(searchTerm)) return true;
+                if (p.senderName?.toLowerCase().includes(searchTermLower)) return true;
 
-                // Check phone numbers (handles various formats)
+                // Check phone numbers (handles various formats - +233, spaces, leading 0, etc.)
                 if (phoneMatchesSearch(p.recieverPhoneNumber, searchTerm)) return true;
                 if (phoneMatchesSearch(p.senderPhoneNumber, searchTerm)) return true;
                 if (phoneMatchesSearch(p.driverPhoneNumber, searchTerm)) return true;
 
                 // Check driver name
-                if (p.driverName?.toLowerCase().includes(searchTerm)) return true;
+                if (p.driverName?.toLowerCase().includes(searchTermLower)) return true;
+
+                // Check shelf location
+                const shelfLocation = (p.shelfName || p.shelfNumber || "").toLowerCase();
+                if (shelfLocation.includes(searchTermLower)) return true;
+
+                // Check receiver address
+                if (p.receiverAddress?.toLowerCase().includes(searchTermLower)) return true;
 
                 // Check parcel description
-                if (p.parcelDescription?.toLowerCase().includes(searchTerm)) return true;
+                if (p.parcelDescription?.toLowerCase().includes(searchTermLower)) return true;
 
                 return false;
             });
@@ -139,7 +147,8 @@ export const ParcelSearch = (): JSX.Element => {
         }
 
         // Filter by phone number - handles various formats (only if not using general search)
-        if (!generalSearch.trim() && searchParams.phoneNumber) {
+        // Treat "+233" alone as empty (no filter)
+        if (!generalSearch.trim() && searchParams.phoneNumber && searchParams.phoneNumber.trim() !== "+233") {
             const searchTerm = searchParams.phoneNumber.trim();
             filtered = filtered.filter((p) =>
                 phoneMatchesSearch(p.recieverPhoneNumber, searchTerm) ||
@@ -196,7 +205,7 @@ export const ParcelSearch = (): JSX.Element => {
         setGeneralSearch("");
         setSearchParams({
             recipientName: "",
-            phoneNumber: "",
+            phoneNumber: "+233",
             parcelId: "",
             status: "",
             startDate: "",
@@ -204,6 +213,78 @@ export const ParcelSearch = (): JSX.Element => {
             shelfLocation: "",
             driverName: "",
         });
+    };
+
+    const handlePhoneNumberChange = (value: string) => {
+        // Remove all non-digits to get clean digits
+        const digits = value.replace(/\D/g, "");
+        
+        // If user is typing starting with "0" and has 10 digits, convert to +233 format
+        if (digits.startsWith("0") && digits.length === 10) {
+            const nineDigits = digits.substring(1); // Remove leading 0
+            setSearchParams((prev) => ({
+                ...prev,
+                phoneNumber: "+233" + nineDigits,
+            }));
+            return;
+        }
+        
+        // If value starts with "+233", preserve it and allow digits after
+        if (value.startsWith("+233")) {
+            // Allow user to type digits after +233, but prevent deletion of +233
+            if (value.length < 4) {
+                // If user tries to delete +233, keep it
+                setSearchParams((prev) => ({
+                    ...prev,
+                    phoneNumber: "+233",
+                }));
+            } else {
+                // Extract digits after +233, remove leading 0 if present, and limit to 9 digits
+                let afterPrefix = value.substring(4).replace(/\D/g, "");
+                // Remove leading 0 if user mistakenly entered it after +233
+                if (afterPrefix.startsWith("0")) {
+                    afterPrefix = afterPrefix.substring(1);
+                }
+                afterPrefix = afterPrefix.substring(0, 9); // Limit to 9 digits
+                setSearchParams((prev) => ({
+                    ...prev,
+                    phoneNumber: "+233" + afterPrefix,
+                }));
+            }
+            return;
+        }
+        
+        // If value doesn't start with +233, check if it starts with digits
+        if (digits.length > 0) {
+            // If starts with 0 and less than 10 digits, keep it as is (will convert when 10 digits are entered)
+            if (digits.startsWith("0") && digits.length < 10) {
+                setSearchParams((prev) => ({
+                    ...prev,
+                    phoneNumber: digits,
+                }));
+            } else if (digits.startsWith("0") && digits.length > 10) {
+                // If more than 10 digits starting with 0, take first 10 and convert
+                const tenDigits = digits.substring(0, 10);
+                const nineDigits = tenDigits.substring(1);
+                setSearchParams((prev) => ({
+                    ...prev,
+                    phoneNumber: "+233" + nineDigits,
+                }));
+            } else {
+                // Otherwise, assume user wants +233 prefix
+                const limitedDigits = digits.substring(0, 9);
+                setSearchParams((prev) => ({
+                    ...prev,
+                    phoneNumber: "+233" + limitedDigits,
+                }));
+            }
+        } else {
+            // Empty input, set to +233
+            setSearchParams((prev) => ({
+                ...prev,
+                phoneNumber: "+233",
+            }));
+        }
     };
 
     const handleUpdateShelf = async () => {
@@ -330,7 +411,7 @@ export const ParcelSearch = (): JSX.Element => {
                                 <div className="flex-1 relative">
                                     <SearchIcon className="absolute left-3 top-3 w-5 h-5 text-[#5d5d5d]" />
                                     <Input
-                                        placeholder="Search by phone"
+                                        placeholder="Search by phone, name, parcel ID, driver, shelf, address..."
                                         value={generalSearch}
                                         onChange={(e) => {
                                             setGeneralSearch(e.target.value);
@@ -366,17 +447,14 @@ export const ParcelSearch = (): JSX.Element => {
                                             <label className="block text-sm font-semibold text-neutral-800 mb-2">
                                                 Phone Number
                                             </label>
-                                            <Input
-                                                placeholder="+233..."
-                                                value={searchParams.phoneNumber}
-                                                onChange={(e) =>
-                                                    setSearchParams((prev) => ({
-                                                        ...prev,
-                                                        phoneNumber: e.target.value,
-                                                    }))
-                                                }
-                                                className="border border-[#d1d1d1]"
-                                            />
+                                            <div className="relative">
+                                                <Input
+                                                    placeholder="+233..."
+                                                    value={searchParams.phoneNumber || "+233"}
+                                                    onChange={(e) => handlePhoneNumberChange(e.target.value)}
+                                                    className="border border-[#d1d1d1]"
+                                                />
+                                            </div>
                                         </div>
 
                                         {/* Status Filter */}

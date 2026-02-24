@@ -47,36 +47,77 @@ export const validatePhoneNumber = (phone: string): boolean => {
 };
 
 /**
- * Normalize phone number for search - extracts digits only
+ * Normalize phone number for search - extracts digits only and normalizes to 9-digit format
  * Handles +233XXXXXXXXX, 0XXXXXXXXX, XXXXXXXXX formats
+ * Returns the 9 digits after country code (233) or leading zero
  */
 export const normalizePhoneForSearch = (phone: string): string => {
     if (!phone) return "";
-    // Remove all non-digits
+    // Remove all non-digits (spaces, +, etc.)
     const digits = phone.replace(/\D/g, "");
-    // If starts with 233, remove it (we'll search for the 9 digits after)
+    
+    // If starts with 233, extract the 9 digits after it
     if (digits.startsWith("233") && digits.length >= 12) {
-        return digits.substring(3); // Get digits after 233
+        return digits.substring(3, 12); // Get exactly 9 digits after 233
     }
-    // If starts with 0, remove it
+    // If starts with 233 but shorter, still extract what we can
+    if (digits.startsWith("233")) {
+        return digits.substring(3);
+    }
+    // If starts with 0, remove it and get up to 9 digits
     if (digits.startsWith("0") && digits.length >= 10) {
-        return digits.substring(1); // Get digits after 0
+        return digits.substring(1, 10); // Get exactly 9 digits after 0
     }
-    // Return last 9 digits (in case of full number)
-    return digits.length > 9 ? digits.substring(digits.length - 9) : digits;
+    // If starts with 0 but shorter, still extract what we can
+    if (digits.startsWith("0")) {
+        return digits.substring(1);
+    }
+    // If it's exactly 9 digits, return as is
+    if (digits.length === 9) {
+        return digits;
+    }
+    // If longer than 9, take the last 9 digits
+    if (digits.length > 9) {
+        return digits.substring(digits.length - 9);
+    }
+    // Otherwise return all digits (partial match for search)
+    return digits;
 };
 
 /**
  * Check if phone number matches search term (handles various formats)
+ * Supports: +233 54 182 4496, +233541824496, +233541 824496, 0541824496, etc.
  */
 export const phoneMatchesSearch = (phone: string | undefined, searchTerm: string): boolean => {
     if (!phone || !searchTerm) return false;
     
+    // Normalize both to digits only (removing spaces, +, etc.)
+    const phoneDigits = phone.replace(/\D/g, "");
+    const searchDigits = searchTerm.replace(/\D/g, "");
+    
+    if (!phoneDigits || !searchDigits) return false;
+    
+    // Special case: if search is just "233" or starts with "233", match any +233 number
+    if (searchDigits === "233" || (searchDigits.startsWith("233") && searchDigits.length <= 3)) {
+        return phoneDigits.startsWith("233");
+    }
+    
+    // Normalize both to the 9-digit format (after country code/leading zero)
     const normalizedPhone = normalizePhoneForSearch(phone);
     const normalizedSearch = normalizePhoneForSearch(searchTerm);
     
-    // Check if normalized search term is contained in normalized phone
-    return normalizedPhone.includes(normalizedSearch) || normalizedSearch.includes(normalizedPhone);
+    // If normalized search is empty (e.g., user searched just "+233"), 
+    // check if phone starts with 233
+    if (!normalizedSearch && searchDigits.startsWith("233")) {
+        return phoneDigits.startsWith("233");
+    }
+    
+    // For partial matches, check if search term is contained in phone or vice versa
+    if (normalizedSearch.length <= normalizedPhone.length) {
+        return normalizedPhone.includes(normalizedSearch);
+    } else {
+        return normalizedSearch.includes(normalizedPhone);
+    }
 };
 
 /**
