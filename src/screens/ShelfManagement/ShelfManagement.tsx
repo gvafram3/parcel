@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Package, AlertCircleIcon, X, Loader } from "lucide-react";
+import { Plus, Trash2, Package, AlertCircleIcon, X, Loader, MapPin, Search, Layers } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -8,8 +8,9 @@ import { Badge } from "../../components/ui/badge";
 import { useStation } from "../../contexts/StationContext";
 import { useShelf } from "../../contexts/ShelfContext";
 import shelfService, { ApiShelf } from "../../services/shelfService";
-import frontdeskService, { ParcelResponse } from "../../services/frontdeskService";
+import frontdeskService, { ParcelResponse, Address } from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
+import { formatCurrency } from "../../utils/dataHelpers";
 import authService from "../../services/authService";
 
 type ParcelType = ParcelResponse;
@@ -45,6 +46,16 @@ export const ShelfManagement = (): JSX.Element => {
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
     const [adding, setAdding] = useState(false);
     const [loadingCounts, setLoadingCounts] = useState(false);
+
+    // Saved addresses (office address presets with cost)
+    const [addresses, setAddresses] = useState<Address[]>([]);
+    const [loadingAddresses, setLoadingAddresses] = useState(false);
+    const [showAddAddressModal, setShowAddAddressModal] = useState(false);
+    const [newAddressName, setNewAddressName] = useState("");
+    const [newAddressCost, setNewAddressCost] = useState<string>("");
+    const [addingAddress, setAddingAddress] = useState(false);
+    const [addressSearch, setAddressSearch] = useState("");
+    const [activeTab, setActiveTab] = useState<"shelves" | "addresses">("shelves");
 
     // Fetch parcel counts for shelves
     const fetchShelfParcelCounts = async (shelvesList: ApiShelf[]) => {
@@ -103,6 +114,29 @@ export const ShelfManagement = (): JSX.Element => {
             fetchShelfParcelCounts(shelves);
         }
     }, [shelves, currentStation, userRole]);
+
+    // Fetch saved addresses (office-scoped via API)
+    const fetchAddresses = async () => {
+        setLoadingAddresses(true);
+        try {
+            const response = await frontdeskService.getAddresses(addressSearch.trim() || undefined);
+            if (response.success && Array.isArray(response.data)) {
+                setAddresses(response.data);
+            } else {
+                setAddresses([]);
+            }
+        } catch (error) {
+            console.error("Failed to fetch addresses:", error);
+            setAddresses([]);
+        } finally {
+            setLoadingAddresses(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchAddresses();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [addressSearch]);
 
     const handleAddShelf = async () => {
         if (!newShelfName.trim()) {
@@ -205,30 +239,98 @@ export const ShelfManagement = (): JSX.Element => {
         setNewShelfName("");
     };
 
+    const handleAddAddress = async () => {
+        if (!newAddressName.trim()) {
+            showToast("Please enter an address name", "warning");
+            return;
+        }
+        const cost = Number(newAddressCost);
+        if (Number.isNaN(cost) || cost < 0) {
+            showToast("Please enter a valid cost (0 or more)", "warning");
+            return;
+        }
+        setAddingAddress(true);
+        try {
+            const response = await frontdeskService.addAddress(newAddressName.trim(), cost);
+            if (response.success) {
+                showToast(response.message || "Address saved successfully", "success");
+                setNewAddressName("");
+                setNewAddressCost("");
+                setShowAddAddressModal(false);
+                fetchAddresses();
+            } else {
+                showToast(response.message || "Failed to save address", "error");
+            }
+        } catch (error) {
+            console.error("Add address error:", error);
+            showToast("Failed to save address. Please try again.", "error");
+        } finally {
+            setAddingAddress(false);
+        }
+    };
+
+    const handleCloseAddressModal = () => {
+        setShowAddAddressModal(false);
+        setNewAddressName("");
+        setNewAddressCost("");
+    };
+
     const canManageShelves = userRole === "MANAGER" || userRole === "ADMIN";
 
     return (
-        <div className="w-full">
-            <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                <main className="flex-1 space-y-6">
-                    {/* Header */}
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="text-2xl font-bold text-neutral-800">Shelf Management</h1>
-                            <p className="text-sm text-[#5d5d5d] mt-1">
-                                {currentStation?.name} - Manage parcel shelves
-                            </p>
-                        </div>
-                        {canManageShelves && (
-                            <Button
-                                onClick={() => setShowAddModal(true)}
-                                className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2"
-                            >
-                                <Plus size={20} />
-                                Add Shelf
-                            </Button>
+        <div className="w-full min-h-screen bg-gray-50/50">
+            <div className="mx-auto max-w-6xl flex flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                {/* Page header */}
+                <header className="space-y-1">
+                    <h1 className="text-2xl font-bold text-neutral-800 tracking-tight">Shelf and Address</h1>
+                    <p className="text-sm text-[#5d5d5d]">
+                        {currentStation?.name ?? "Office"} — Manage parcel shelves and delivery address presets
+                    </p>
+                </header>
+
+                {/* Tabs */}
+                <div className="flex gap-1 p-1 bg-white rounded-xl border border-[#d1d1d1] shadow-sm w-fit">
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab("shelves")}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                            activeTab === "shelves"
+                                ? "bg-[#ea690c] text-white shadow-sm"
+                                : "text-neutral-600 hover:bg-gray-100 hover:text-neutral-800"
+                        }`}
+                    >
+                        <Layers className="w-4 h-4" />
+                        Shelves
+                        {!loading && shelves.length > 0 && (
+                            <span className={`ml-0.5 px-1.5 py-0.5 rounded-md text-xs font-semibold ${
+                                activeTab === "shelves" ? "bg-white/20" : "bg-gray-200 text-gray-700"
+                            }`}>
+                                {shelves.length}
+                            </span>
                         )}
-                    </div>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab("addresses")}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                            activeTab === "addresses"
+                                ? "bg-[#ea690c] text-white shadow-sm"
+                                : "text-neutral-600 hover:bg-gray-100 hover:text-neutral-800"
+                        }`}
+                    >
+                        <MapPin className="w-4 h-4" />
+                        Addresses
+                        {!loadingAddresses && addresses.length > 0 && (
+                            <span className={`ml-0.5 px-1.5 py-0.5 rounded-md text-xs font-semibold ${
+                                activeTab === "addresses" ? "bg-white/20" : "bg-gray-200 text-gray-700"
+                            }`}>
+                                {addresses.length}
+                            </span>
+                        )}
+                    </button>
+                </div>
+
+                <main className="flex-1 space-y-6">
 
                     {/* Add Shelf Modal */}
                     {showAddModal && canManageShelves && (
@@ -304,28 +406,56 @@ export const ShelfManagement = (): JSX.Element => {
                         </div>
                     )}
 
-                    {/* Shelves Grid */}
+                    {/* Shelves tab content */}
+                    {activeTab === "shelves" && (
+                        <Card className="border border-[#d1d1d1] bg-white rounded-2xl shadow-sm overflow-hidden">
+                            <div className="px-6 py-4 border-b border-[#d1d1d1] bg-gray-50/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 bg-orange-50 rounded-xl">
+                                        <Package className="w-5 h-5 text-[#ea690c]" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-neutral-800">Shelves</h2>
+                                        <p className="text-xs text-[#5d5d5d]">
+                                            Parcel storage locations for this office
+                                        </p>
+                                    </div>
+                                    {!loading && shelves.length > 0 && (
+                                        <Badge className="bg-orange-100 text-orange-800 border-0 font-semibold">
+                                            {shelves.length}
+                                        </Badge>
+                                    )}
+                                </div>
+                                {canManageShelves && (
+                                    <Button
+                                        onClick={() => setShowAddModal(true)}
+                                        className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2 shrink-0"
+                                    >
+                                        <Plus size={18} />
+                                        Add Shelf
+                                    </Button>
+                                )}
+                            </div>
+                            <CardContent className="p-6">
                     {loading ? (
-                        <Card className="border border-[#d1d1d1] bg-white">
-                            <CardContent className="p-12 text-center">
-                                <Loader className="w-8 h-8 text-[#ea690c] mx-auto mb-4 animate-spin" />
-                                <p className="text-sm text-neutral-700">Loading shelves...</p>
-                            </CardContent>
-                        </Card>
+                        <div className="py-16 text-center">
+                            <Loader className="w-10 h-10 text-[#ea690c] mx-auto mb-4 animate-spin" />
+                            <p className="text-sm text-neutral-700">Loading shelves...</p>
+                        </div>
                     ) : shelves.length === 0 ? (
-                        <Card className="border border-[#d1d1d1] bg-white">
-                            <CardContent className="p-12 text-center">
-                                <Package className="w-16 h-16 text-[#9a9a9a] mx-auto mb-4 opacity-50" />
-                                <p className="text-neutral-700 font-medium">No shelves found</p>
-                                <p className="text-sm text-[#5d5d5d] mt-2">
-                                    {canManageShelves
-                                        ? "Create your first shelf to start organizing parcels"
-                                        : "No shelves available in this station"}
-                                </p>
-                            </CardContent>
-                        </Card>
+                        <div className="py-16 text-center">
+                            <div className="inline-flex p-4 bg-gray-100 rounded-2xl mb-4">
+                                <Package className="w-14 h-14 text-[#9a9a9a]" />
+                            </div>
+                            <p className="text-neutral-800 font-semibold">No shelves yet</p>
+                            <p className="text-sm text-[#5d5d5d] mt-1 max-w-sm mx-auto">
+                                {canManageShelves
+                                    ? "Create your first shelf to organize parcels by location."
+                                    : "No shelves available in this station."}
+                            </p>
+                        </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {shelves.map((shelf) => {
                                 // Get parcel count for this shelf
                                 const parcelCount = shelfParcelCounts[shelf.id] || 0;
@@ -417,6 +547,177 @@ export const ShelfManagement = (): JSX.Element => {
                                     </Card>
                                 );
                             })}
+                        </div>
+                    )}
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Addresses tab content */}
+                    {activeTab === "addresses" && (
+                        <Card className="border border-[#d1d1d1] bg-white rounded-2xl shadow-sm overflow-hidden">
+                            <div className="px-6 py-4 border-b border-[#d1d1d1] bg-gray-50/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2.5 bg-blue-50 rounded-xl">
+                                        <MapPin className="w-5 h-5 text-blue-600" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-semibold text-neutral-800">Saved Addresses</h2>
+                                        <p className="text-xs text-[#5d5d5d]">
+                                            Delivery address presets with cost for this office
+                                        </p>
+                                    </div>
+                                    {!loadingAddresses && addresses.length > 0 && (
+                                        <Badge className="bg-blue-100 text-blue-800 border-0 font-semibold">
+                                            {addresses.length}
+                                        </Badge>
+                                    )}
+                                </div>
+                                {canManageShelves && (
+                                    <Button
+                                        onClick={() => setShowAddAddressModal(true)}
+                                        className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2 shrink-0"
+                                    >
+                                        <Plus size={18} />
+                                        Add Address
+                                    </Button>
+                                )}
+                            </div>
+                            <CardContent className="p-6">
+                                <div className="mb-4">
+                                    <div className="relative max-w-sm">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                        <Input
+                                            value={addressSearch}
+                                            onChange={(e) => setAddressSearch(e.target.value)}
+                                            placeholder="Search by address name..."
+                                            className="pl-9 border border-[#d1d1d1] rounded-lg bg-gray-50/50 focus:bg-white"
+                                        />
+                                    </div>
+                                </div>
+                                {loadingAddresses ? (
+                                    <div className="py-16 text-center">
+                                        <Loader className="w-10 h-10 text-[#ea690c] mx-auto mb-4 animate-spin" />
+                                        <p className="text-sm text-[#5d5d5d]">Loading addresses...</p>
+                                    </div>
+                                ) : addresses.length === 0 ? (
+                                    <div className="py-16 text-center">
+                                        <div className="inline-flex p-4 bg-gray-100 rounded-2xl mb-4">
+                                            <MapPin className="w-14 h-14 text-[#9a9a9a]" />
+                                        </div>
+                                        <p className="text-neutral-800 font-semibold">No saved addresses</p>
+                                        <p className="text-sm text-[#5d5d5d] mt-1 max-w-sm mx-auto">
+                                            {canManageShelves
+                                                ? "Add address presets to reuse name and delivery cost when registering parcels."
+                                                : "No addresses saved for this office."}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl border border-[#d1d1d1] overflow-hidden">
+                                        <table className="w-full">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Address name
+                                                    </th>
+                                                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Cost
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {addresses.map((addr) => (
+                                                    <tr key={addr.id} className="bg-white hover:bg-gray-50/80 transition-colors">
+                                                        <td className="py-3.5 px-4 text-sm font-medium text-neutral-800">
+                                                            {addr.name}
+                                                        </td>
+                                                        <td className="py-3.5 px-4 text-sm text-right font-semibold text-[#ea690c]">
+                                                            {formatCurrency(addr.cost)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Add Address Modal */}
+                    {showAddAddressModal && canManageShelves && (
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <Card className="w-full max-w-md rounded-2xl border border-[#d1d1d1] bg-white shadow-lg">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-blue-50 rounded-lg">
+                                                <MapPin className="w-5 h-5 text-blue-600" />
+                                            </div>
+                                            <h2 className="text-lg font-bold text-neutral-800">Add Address</h2>
+                                        </div>
+                                        <button
+                                            onClick={handleCloseAddressModal}
+                                            className="text-[#5d5d5d] hover:bg-gray-100 p-1 rounded transition-colors"
+                                        >
+                                            <X size={20} />
+                                        </button>
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                                Address name <span className="text-[#e22420]">*</span>
+                                            </Label>
+                                            <Input
+                                                value={newAddressName}
+                                                onChange={(e) => setNewAddressName(e.target.value)}
+                                                placeholder="e.g. East Legon, Adenta"
+                                                className="border border-[#d1d1d1] w-full"
+                                                onKeyDown={(e) => e.key === "Enter" && handleAddAddress()}
+                                                autoFocus
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                                Cost (GHC)
+                                            </Label>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                step={1}
+                                                value={newAddressCost}
+                                                onChange={(e) => setNewAddressCost(e.target.value)}
+                                                placeholder="0"
+                                                className="border border-[#d1d1d1] w-full"
+                                                onKeyDown={(e) => e.key === "Enter" && handleAddAddress()}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-3 mt-6">
+                                        <Button
+                                            onClick={handleCloseAddressModal}
+                                            variant="outline"
+                                            className="flex-1 border border-[#d1d1d1] text-neutral-700 hover:bg-gray-50"
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            onClick={handleAddAddress}
+                                            disabled={!newAddressName.trim() || addingAddress}
+                                            className="flex-1 bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50"
+                                        >
+                                            {addingAddress ? (
+                                                <>
+                                                    <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                    Saving...
+                                                </>
+                                            ) : (
+                                                "Save Address"
+                                            )}
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
                         </div>
                     )}
                 </main>
