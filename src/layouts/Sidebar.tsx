@@ -27,7 +27,7 @@ const navItems = [
     { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["MANAGER",] },
     // Station Manager & Front Desk - Management
     // { label: "Financial Dashboard", path: "/financial-dashboard", icon: LayoutDashboard, roles: ["MANAGER", "FRONTDESK"] },
-    { label: "Shelf Management", path: "/shelf-management", icon: Layers, roles: ["MANAGER",] },
+    { label: "Shelf and Address", path: "/shelf-management", icon: Layers, roles: ["MANAGER",] },
 
     // Manager Only - Parcel Editing
     { label: "Edit Parcels", path: "/parcel-edit", icon: Edit, roles: ["MANAGER", "FRONTDESK"] },

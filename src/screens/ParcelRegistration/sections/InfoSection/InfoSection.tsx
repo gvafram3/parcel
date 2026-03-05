@@ -3,13 +3,15 @@ import {
   DownloadIcon,
   InboxIcon,
   UploadIcon,
+  MapPinIcon,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "../../../../components/ui/button";
 import { Card, CardContent } from "../../../../components/ui/card";
 import { Input } from "../../../../components/ui/input";
 import { Label } from "../../../../components/ui/label";
 import { Textarea } from "../../../../components/ui/textarea";
+import frontdeskService, { Address } from "../../../../services/frontdeskService";
 
 const senderFields = [
   {
@@ -47,6 +49,7 @@ interface FormData {
   receiverName?: string;
   receiverPhone?: string;
   receiverAddress?: string;
+   deliveryCost?: number;
   additionalInfo?: string;
 }
 
@@ -116,7 +119,14 @@ export const InfoSection = ({
   const [receiverName, setReceiverName] = useState(formData.receiverName || "");
   const [receiverPhone, setReceiverPhone] = useState(formData.receiverPhone || "");
   const [receiverAddress, setReceiverAddress] = useState(formData.receiverAddress || "");
+  const [deliveryCost, setDeliveryCost] = useState<number | undefined>(
+    formData.deliveryCost
+  );
   const [additionalInfo, setAdditionalInfo] = useState(formData.additionalInfo || "");
+
+  // Saved addresses from Front Desk (office-scoped)
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
 
   // Reset all form fields (including driver) when parent bumps resetTrigger
   useEffect(() => {
@@ -129,8 +139,50 @@ export const InfoSection = ({
     setReceiverName("");
     setReceiverPhone("");
     setReceiverAddress("");
+    setDeliveryCost(undefined);
     setAdditionalInfo("");
   }, [resetTrigger]);
+
+  // Load saved addresses once (used as presets for receiver address + delivery cost)
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoadingAddresses(true);
+      try {
+        const response = await frontdeskService.getAddresses();
+        if (!cancelled && response.success && Array.isArray(response.data)) {
+          setAddresses(response.data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load addresses for parcel intake:", err);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAddresses(false);
+        }
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filteredAddresses = useMemo(() => {
+    const query = receiverAddress.trim().toLowerCase();
+    if (!query) return addresses.slice(0, 6);
+    return addresses
+      .filter((addr) => addr.name.toLowerCase().includes(query))
+      .slice(0, 6);
+  }, [addresses, receiverAddress]);
+
+  const handleSelectAddress = (addr: Address) => {
+    setReceiverAddress(addr.name);
+    setDeliveryCost(
+      Number.isFinite(addr.cost) ? Math.round(Number(addr.cost) || 0) : 0
+    );
+  };
 
   const handleContinueDriverSelection = () => {
     if (formDriverName.trim() && formVehicleNumber.trim() && onStartSession) {
@@ -147,6 +199,7 @@ export const InfoSection = ({
         receiverName,
         receiverPhone,
         receiverAddress,
+        deliveryCost,
         additionalInfo,
       };
 
@@ -167,7 +220,7 @@ export const InfoSection = ({
           itemValue: 0, // default; parent should update if needed
           pickUpCost: undefined,
           homeDelivery: false,
-          deliveryCost: undefined,
+          deliveryCost: deliveryCost,
           hasCalled: false,
         };
 
@@ -348,20 +401,82 @@ export const InfoSection = ({
                   />
                 </div>
               ))}
-              <div className="sm:col-span-2 flex flex-col items-start gap-2">
-                <Label
-                  htmlFor="receiverAddress"
-                  className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-base leading-6"
-                >
-                  Receiver Address
-                </Label>
-                <Input
-                  id="receiverAddress"
-                  placeholder="Enter address"
-                  value={receiverAddress}
-                  onChange={(e) => setReceiverAddress(e.target.value)}
-                  className="w-full rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0]"
-                />
+              <div className="sm:col-span-2 flex flex-col items-start gap-3">
+                <div className="w-full space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label
+                      htmlFor="receiverAddress"
+                      className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-base leading-6"
+                    >
+                      Receiver Address
+                    </Label>
+                    {loadingAddresses && (
+                      <span className="text-[10px] text-[#9a9a9a]">Loading saved…</span>
+                    )}
+                  </div>
+                  <div className="relative w-full">
+                    <Input
+                      id="receiverAddress"
+                      placeholder="Type or select a saved address"
+                      value={receiverAddress}
+                      onChange={(e) => setReceiverAddress(e.target.value)}
+                      className="w-full rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0]"
+                    />
+                    {filteredAddresses.length > 0 && (
+                      <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-[#d1d1d1] bg-white shadow-lg">
+                        {filteredAddresses.map((addr) => (
+                          <button
+                            key={addr.id}
+                            type="button"
+                            onClick={() => handleSelectAddress(addr)}
+                            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-gray-50"
+                          >
+                            <div className="flex items-center gap-2">
+                              <MapPinIcon className="w-3 h-3 text-blue-500" />
+                              <span className="text-[11px] font-medium text-neutral-800">
+                                {addr.name}
+                              </span>
+                            </div>
+                            <span className="ml-2 text-[11px] font-semibold text-[#ea690c]">
+                              GHC {Math.round(addr.cost || 0)}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="w-full">
+                  <Label
+                    htmlFor="deliveryCost"
+                    className="[font-family:'Lato',Helvetica] font-semibold text-neutral-800 text-xs"
+                  >
+                    Delivery Cost (GHC)
+                  </Label>
+                  <Input
+                    id="deliveryCost"
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="Auto from address or enter manually"
+                    value={deliveryCost ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value.trim();
+                      if (!val) {
+                        setDeliveryCost(undefined);
+                        return;
+                      }
+                      const n = Number(val);
+                      if (!Number.isNaN(n) && n >= 0) {
+                        setDeliveryCost(Math.round(n));
+                      }
+                    }}
+                    className="mt-1 w-full rounded border border-[#d1d1d1] bg-white px-3 py-2 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0]"
+                  />
+                  <p className="mt-1 text-[10px] text-[#9a9a9a]">
+                    Selecting a saved address will auto-fill this amount. You can still adjust it.
+                  </p>
+                </div>
               </div>
             </div>
           </section>

@@ -51,6 +51,17 @@ export const FrontdeskParcelProvider: React.FC<{ children: React.ReactNode }> = 
     const [currentFilters, setCurrentFilters] = useState<ParcelSearchFilters>({});
     const [currentPageable, setCurrentPageable] = useState<PageableRequest>({ page: 0, size: 1000 });
     const [nextPageCache, setNextPageCache] = useState<NextPageCache | null>(null);
+    // Cache of pages visited so far, keyed by filters+page+size so Previous/Next don't refetch
+    const [pageCache, setPageCache] = useState<Record<string, {
+        parcels: ParcelResponse[];
+        pagination: {
+            page: number;
+            size: number;
+            totalElements: number;
+            totalPages: number;
+        };
+        timestamp: number;
+    }>>({});
     const prefetchAbortRef = useRef<AbortController | null>(null);
 
     /** Prefetch the next page in the background (no loading UI). */
@@ -96,8 +107,9 @@ export const FrontdeskParcelProvider: React.FC<{ children: React.ReactNode }> = 
     ) => {
         const now = Date.now();
         const filtersKey = JSON.stringify(filters);
+        const cacheKey = `${filtersKey}|${page}|${size}`;
 
-        // Use prefetched next page if we're navigating to it (instant)
+        // 1) Use prefetched next page if we're navigating to it (instant)
         if (
             !forceRefresh &&
             nextPageCache &&
@@ -123,11 +135,31 @@ export const FrontdeskParcelProvider: React.FC<{ children: React.ReactNode }> = 
             return;
         }
 
-        // Check if we have cached data for this exact page and it's still valid
+        // 2) Check page cache for this exact page and filters (but always refetch page 0)
+        if (!forceRefresh && page > 0) {
+            const cached = pageCache[cacheKey];
+            if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+                setParcels(cached.parcels);
+                setPagination(cached.pagination);
+                setCurrentFilters(filters);
+                setCurrentPageable({ page, size });
+                setLastFetchTime(now);
+
+                // Prefetch next page in background based on cached pagination
+                const nextPage = cached.pagination.page + 1;
+                if (cached.pagination.totalPages > 0 && nextPage < cached.pagination.totalPages) {
+                    prefetchNextPage(filters, nextPage, cached.pagination.size);
+                }
+                return;
+            }
+        }
+
+        // 3) Fallback to legacy single-page cache (current page only, but not for page 0)
         const filtersMatch = filtersKey === JSON.stringify(currentFilters);
         const pageableMatch = page === currentPageable.page && size === currentPageable.size;
         if (
             !forceRefresh &&
+            page > 0 &&
             lastFetchTime &&
             (now - lastFetchTime) < CACHE_DURATION &&
             pageableMatch &&
@@ -168,16 +200,28 @@ export const FrontdeskParcelProvider: React.FC<{ children: React.ReactNode }> = 
                 const totalPages = response.data.totalPages ?? 0;
                 const totalElements = response.data.totalElements ?? 0;
 
-                setParcels(fetchedParcels);
-                setPagination({
+                const newPagination = {
                     page: response.data.number ?? page,
                     size: response.data.size ?? size,
                     totalElements,
                     totalPages,
-                });
+                };
+
+                setParcels(fetchedParcels);
+                setPagination(newPagination);
                 setCurrentFilters(filters);
                 setCurrentPageable({ page, size });
                 setLastFetchTime(now);
+
+                // Store this page in cache so Previous/Next don't refetch
+                setPageCache(prev => ({
+                    ...prev,
+                    [cacheKey]: {
+                        parcels: fetchedParcels,
+                        pagination: newPagination,
+                        timestamp: now,
+                    },
+                }));
 
                 // Prefetch next page as soon as this load is done so "Next" feels instant
                 const hasNextByTotal = totalPages > 0 && page + 1 < totalPages;
@@ -217,6 +261,7 @@ export const FrontdeskParcelProvider: React.FC<{ children: React.ReactNode }> = 
     const invalidateCache = useCallback(() => {
         setLastFetchTime(null);
         setNextPageCache(null);
+        setPageCache({});
         prefetchAbortRef.current?.abort();
     }, []);
 

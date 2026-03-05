@@ -65,7 +65,7 @@ const routeTitles: Record<string, { title: string; description: string }> = {
         description: "View financial overview and reports",
     },
     "/shelf-management": {
-        title: "Shelf Management",
+        title: "Shelf and Address",
         description: "Manage shelf locations and assignments",
     },
     "/parcel-edit": {
