@@ -302,6 +302,31 @@ export const InfoSection = ({
 
         onAddParcel(parcelData);
 
+        // Save address to list if toggle is on and address is valid
+        if (saveToAddressListChecked && receiverAddress.trim() && deliveryCost != null && deliveryCost > 0) {
+            const addressToSave = receiverAddress.trim();
+            const costToSave = Math.round(deliveryCost);
+            
+            // Check if address already exists in the list (case-insensitive)
+            const addressExists = addresses.some(
+                (addr) => addr.name.toLowerCase() === addressToSave.toLowerCase()
+            );
+            
+            if (!addressExists) {
+                frontdeskService
+                    .addAddress(addressToSave, costToSave)
+                    .then((res) => {
+                        if (res.success && res.data) {
+                            setAddresses((prev) => [...prev, res.data as Address]);
+                            showToast("Address saved to list for next time.", "success");
+                        }
+                    })
+                    .catch(() => {});
+            } else {
+                showToast("Address already exists in the list.", "info");
+            }
+        }
+
         // If this is the first parcel and has driver info, lock the driver for future parcels
         if (parcels.length === 0 && currentDriverName && currentVehicleNumber) {
             setIsDriverLocked(true);
@@ -320,6 +345,7 @@ export const InfoSection = ({
         setDeliveryCost(undefined);
         setSpecialNotes("");
         setPhoneError("");
+        setSaveToAddressListChecked(false);
     };
 
     const handleSaveDirectly = () => {
@@ -362,15 +388,24 @@ export const InfoSection = ({
 
         const onParcelSaveSuccess = () => {
             if (shouldSaveToAddressList && addressToSave && costToSave > 0) {
-                frontdeskService
-                    .addAddress(addressToSave, costToSave)
-                    .then((res) => {
-                        if (res.success && res.data) {
-                            setAddresses((prev) => [...prev, res.data as Address]);
-                            showToast("Address saved to list for next time.", "success");
-                        }
-                    })
-                    .catch(() => {});
+                // Check if address already exists in the list (case-insensitive)
+                const addressExists = addresses.some(
+                    (addr) => addr.name.toLowerCase() === addressToSave.toLowerCase()
+                );
+                
+                if (!addressExists) {
+                    frontdeskService
+                        .addAddress(addressToSave, costToSave)
+                        .then((res) => {
+                            if (res.success && res.data) {
+                                setAddresses((prev) => [...prev, res.data as Address]);
+                                showToast("Address saved to list for next time.", "success");
+                            }
+                        })
+                        .catch(() => {});
+                } else {
+                    showToast("Address already exists in the list.", "info");
+                }
             }
         };
 
@@ -795,6 +830,8 @@ export const InfoSection = ({
                                                                             setReceiverAddress(addr.name);
                                                                             setDeliveryCost(Math.round(addr.cost) || addr.cost);
                                                                             setShowAddressDropdown(false);
+                                                                            // Turn off save toggle since this address is already in the list
+                                                                            setSaveToAddressListChecked(false);
                                                                         }}
                                                                     >
                                                                         <span className="font-medium">{addr.name}</span>
