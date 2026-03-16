@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { LogOut, Menu, X, User, Package, History } from "lucide-react";
+import { LogOut, Menu, X, User, Package, History, DollarSign } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
+import { UpdateNotificationPopup } from "../components/UpdateNotificationPopup";
 
 interface RiderLayoutProps {
     children: React.ReactNode;
@@ -30,6 +31,7 @@ export const RiderLayout: React.FC<RiderLayoutProps> = ({ children }) => {
 
     return (
         <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+            <UpdateNotificationPopup />
             {/* Professional Header */}
             <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50 backdrop-blur-sm bg-white/95">
                 <div className="px-4 py-3.5">
@@ -78,6 +80,19 @@ export const RiderLayout: React.FC<RiderLayoutProps> = ({ children }) => {
                                     <div className="flex items-center gap-2">
                                         <History size={16} />
                                         <span>History</span>
+                                    </div>
+                                </button>
+                                <button
+                                    onClick={() => navigate("/rider/earnings")}
+                                    className={`px-4 py-2 rounded-lg transition-colors font-medium text-sm ${
+                                        location.pathname === "/rider/earnings"
+                                            ? "bg-[#ea690c] text-white"
+                                            : "bg-gray-50 text-neutral-800 hover:bg-gray-100"
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <DollarSign size={16} />
+                                        <span>Earnings</span>
                                     </div>
                                 </button>
                             </div>
@@ -170,6 +185,21 @@ export const RiderLayout: React.FC<RiderLayoutProps> = ({ children }) => {
                             >
                                 <History size={18} />
                                 <span>History</span>
+                            </button>
+                            
+                            <button
+                                onClick={() => {
+                                    navigate("/rider/earnings");
+                                    setMenuOpen(false);
+                                }}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-medium ${
+                                    location.pathname === "/rider/earnings"
+                                        ? "bg-[#ea690c] text-white"
+                                        : "bg-gray-50 text-neutral-800 hover:bg-gray-100"
+                                }`}
+                            >
+                                <DollarSign size={18} />
+                                <span>Earnings</span>
                             </button>
                             
                             <div className="pt-2 border-t border-gray-200">

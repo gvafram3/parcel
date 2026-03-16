@@ -76,6 +76,14 @@ class AuthService {
             async (error) => {
                 const originalRequest = error.config;
 
+                // If we're using a demo token, don't try to refresh or force logout.
+                // This allows front-end demo users (e.g. call center) to stay logged in
+                // even though the backend rejects the token.
+                const currentToken = this.getToken();
+                if (currentToken && currentToken.startsWith("demo-")) {
+                    return Promise.reject(error);
+                }
+
                 if (error.response?.status === 401 && !originalRequest._retry) {
                     originalRequest._retry = true;
 
@@ -350,6 +358,53 @@ class AuthService {
                 message: error.response?.data?.message || 'Failed to reset password. Please check your OTP and try again.',
             };
         }
+    }
+
+    /**
+     * Demo login helper - used to log in without hitting the backend.
+     * This is ONLY for local testing (e.g. call center demo accounts).
+     */
+    async loginAsDemoCaller(): Promise<{ success: boolean; message: string; data?: any }> {
+        // Minimal fake user data – adjust as needed for testing
+        const demoUser: AuthResponse = {
+            name: "Demo Call Center Agent",
+            phoneNumber: "+233550000000",
+            role: "CALLER",
+            token: "demo-token-caller",
+            userId: "demo-caller-1",
+            stationId: undefined,
+            email: "demo.caller@parcel.local",
+            office: undefined as any,
+        };
+
+        // Store token and user using the same helpers as real login
+        this.setToken(demoUser.token);
+        this.setUser({
+            id: demoUser.userId,
+            name: demoUser.name,
+            email: demoUser.email,
+            phoneNumber: demoUser.phoneNumber,
+            role: demoUser.role,
+            stationId: demoUser.stationId,
+            office: demoUser.office,
+        });
+
+        return {
+            success: true,
+            message: "Demo call center login successful",
+            data: {
+                token: demoUser.token,
+                user: {
+                    id: demoUser.userId,
+                    name: demoUser.name,
+                    email: demoUser.email,
+                    phoneNumber: demoUser.phoneNumber,
+                    role: demoUser.role,
+                    stationId: demoUser.stationId,
+                    office: demoUser.office,
+                },
+            },
+        };
     }
 }
 

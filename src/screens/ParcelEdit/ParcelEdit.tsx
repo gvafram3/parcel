@@ -180,6 +180,15 @@ export const ParcelEdit = (): JSX.Element => {
                                 Search and edit parcel information (Manager Only)
                             </p>
                         </div>
+                        {!loading && parcels.length > 0 && (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                <Package className="w-5 h-5 text-blue-600" />
+                                <div className="flex flex-col">
+                                    <span className="text-xs text-blue-600 font-medium">Total Parcels</span>
+                                    <span className="text-lg font-bold text-blue-900">{pagination.totalElements || parcels.length}</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Search Bar */}
@@ -196,7 +205,22 @@ export const ParcelEdit = (): JSX.Element => {
                                         className="pl-10 border border-[#d1d1d1]"
                                     />
                                 </div>
+                                {searchTerm && (
+                                    <button
+                                        onClick={() => setSearchTerm("")}
+                                        className="px-3 py-2 text-sm text-[#5d5d5d] hover:text-neutral-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
                             </div>
+                            {searchTerm && !loading && (
+                                <div className="mt-3 pt-3 border-t border-[#d1d1d1]">
+                                    <p className="text-sm text-[#5d5d5d]">
+                                        Found <span className="font-semibold text-neutral-800">{filteredParcels.length}</span> parcel{filteredParcels.length !== 1 ? 's' : ''} matching "{searchTerm}"
+                                    </p>
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -227,6 +251,9 @@ export const ParcelEdit = (): JSX.Element => {
                                                     Phone
                                                 </th>
                                                 <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">
+                                                    Registered Date
+                                                </th>
+                                                <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">
                                                     Status
                                                 </th>
                                                 <th className="py-3 px-4 text-center text-xs font-semibold text-neutral-800 uppercase tracking-wider">
@@ -235,7 +262,24 @@ export const ParcelEdit = (): JSX.Element => {
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-[#d1d1d1]">
-                                            {filteredParcels.map((parcel) => (
+                                            {filteredParcels.map((parcel) => {
+                                                // Format registration date
+                                                const registeredDate = parcel.registeredDate || parcel.createdAt;
+                                                const dateStr = registeredDate
+                                                    ? new Date(registeredDate).toLocaleDateString('en-GB', {
+                                                        day: '2-digit',
+                                                        month: 'short',
+                                                        year: 'numeric'
+                                                    })
+                                                    : 'N/A';
+                                                const timeStr = registeredDate
+                                                    ? new Date(registeredDate).toLocaleTimeString('en-GB', {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })
+                                                    : '';
+
+                                                return (
                                                 <tr key={parcel.parcelId} className="hover:bg-gray-50 transition-colors">
                                                     <td className="py-3 px-4 whitespace-nowrap">
                                                         <p className="text-sm text-neutral-800">{parcel.receiverName || "N/A"}</p>
@@ -247,6 +291,10 @@ export const ParcelEdit = (): JSX.Element => {
                                                         <p className="text-sm text-neutral-700">
                                                             {parcel.recieverPhoneNumber ? formatPhoneNumber(parcel.recieverPhoneNumber) : "N/A"}
                                                         </p>
+                                                    </td>
+                                                    <td className="py-3 px-4 whitespace-nowrap">
+                                                        <p className="text-sm text-neutral-800">{dateStr}</p>
+                                                        {timeStr && <p className="text-xs text-[#5d5d5d]">{timeStr}</p>}
                                                     </td>
                                                     <td className="py-3 px-4 whitespace-nowrap">
                                                         <div className="flex flex-col gap-1">
@@ -275,7 +323,7 @@ export const ParcelEdit = (): JSX.Element => {
                                                         </Button>
                                                     </td>
                                                 </tr>
-                                            ))}
+                                            )})}
                                         </tbody>
                                     </table>
                                 </div>
@@ -292,9 +340,26 @@ export const ParcelEdit = (): JSX.Element => {
                         <CardContent className="p-6">
                             {/* Header */}
                             <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#d1d1d1]">
-                                <div>
+                                <div className="flex-1">
                                     <h3 className="text-xl font-bold text-neutral-800">Edit Parcel</h3>
-                                    <p className="text-xs text-[#5d5d5d] mt-1">Parcel ID: {selectedParcel.parcelId}</p>
+                                    <div className="flex items-center gap-4 mt-2">
+                                        <p className="text-xs text-[#5d5d5d]">
+                                            Parcel ID: <span className="font-semibold text-blue-600">{selectedParcel.parcelId}</span>
+                                        </p>
+                                        {(selectedParcel.registeredDate || selectedParcel.createdAt) && (
+                                            <p className="text-xs text-[#5d5d5d]">
+                                                Registered: <span className="font-semibold text-neutral-800">
+                                                    {new Date(selectedParcel.registeredDate || selectedParcel.createdAt!).toLocaleDateString('en-GB', {
+                                                        day: '2-digit',
+                                                        month: 'short',
+                                                        year: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })}
+                                                </span>
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                                 <button
                                     onClick={() => {

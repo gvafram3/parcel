@@ -537,7 +537,7 @@ export const ParcelRegistration = (): JSX.Element => {
     }
   };
 
-  const handleSaveAll = async (additionalParcel?: ParcelFormData) => {
+  const handleSaveAll = async (additionalParcel?: ParcelFormData, onSuccess?: () => void) => {
     // Combine existing parcels with additional parcel if provided
     const parcelsToSave = additionalParcel ? [...parcels, additionalParcel] : parcels;
 
@@ -625,6 +625,9 @@ export const ParcelRegistration = (): JSX.Element => {
 
       localStorage.removeItem(STORAGE_KEY_PARCELS);
       localStorage.removeItem(STORAGE_KEY_SESSION_DRIVER);
+
+      // Optional: run callback after success (e.g. save address to list behind the scene)
+      onSuccess?.();
     } catch (error: any) {
       console.error("Error saving parcels:", error);
       showToast("An error occurred while saving parcels. Please try again.", "error");

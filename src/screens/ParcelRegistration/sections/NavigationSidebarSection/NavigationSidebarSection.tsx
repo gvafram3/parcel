@@ -17,6 +17,11 @@ const navigationItems = [
   },
   {
     icon: ClipboardListIcon,
+    label: "Parcel Transfer",
+    path: "/parcel-transfer",
+  },
+  {
+    icon: ClipboardListIcon,
     label: "Package Assignments",
     path: "/package-assignments",
   },

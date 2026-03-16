@@ -169,6 +169,13 @@ export const Login = (): JSX.Element => {
     }
   };
 
+  const handleDemoCallerLogin = () => {
+    // Pure UI demo: no auth, no token, no context changes.
+    // This route is not protected, so it will always load.
+    setError("");
+    navigate("/call-center-demo", { replace: true });
+  };
+
   // Load remembered credentials
   useEffect(() => {
     const rememberMe = localStorage.getItem("rememberMe") === "true";
@@ -377,6 +384,17 @@ export const Login = (): JSX.Element => {
                   </>
                 )}
               </Button>
+
+              {/* Demo Call Center Login */}
+              {/* <Button
+                type="button"
+                variant="outline"
+                disabled={loading}
+                onClick={handleDemoCallerLogin}
+                className="w-full border border-[#d1d1d1] text-[#ea690c] hover:bg-orange-50 text-sm flex items-center justify-center gap-2"
+              >
+                <span>Login as Call Center (Demo)</span>
+              </Button> */}
             </form>
 
             {/* Version */}

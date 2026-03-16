@@ -8,7 +8,6 @@ import { ShelfProvider } from "./contexts/ShelfContext";
 import { ToastProvider } from "./components/ui/toast";
 import { MainLayout } from "./layouts/MainLayout";
 import { RiderLayout } from "./layouts/RiderLayout";
-import { CallCenterLayout } from "./layouts/CallCenterLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { Login } from "./screens/Login";
 import { ForgotPassword } from "./screens/ForgotPassword";
@@ -24,6 +23,7 @@ import { ParcelRiderSelection } from "./screens/ParcelRiderSelection";
 import { ActiveDeliveries } from "./screens/ActiveDeliveries";
 import { RiderDashboard } from "./screens/RiderDashboard";
 import { RiderHistory } from "./screens/RiderHistory";
+import { RiderEarnings } from "./screens/RiderEarnings/RiderEarnings";
 import { Reconciliation } from "./screens/Reconciliation";
 import { ReconciliationConfirmation } from "./screens/ReconciliationConfirmation";
 import { FinancialDashboard } from "./screens/FinancialDashboard/FinancialDashboard";
@@ -39,6 +39,8 @@ import { FinancialReports } from "./screens/Admin/FinancialReports/FinancialRepo
 import { AdminReconciliation } from "./screens/Admin/AdminReconciliation/AdminReconciliation";
 import { Preferences } from "./screens/Preferences/Preferences";
 import { Help } from "./screens/Help/Help";
+import { TrackParcel } from "./screens/TrackParcel/TrackParcel";
+import { ParcelTransfer } from "./screens/ParcelTransfer";
 
 export const App = (): JSX.Element => {
   return (
@@ -56,6 +58,9 @@ export const App = (): JSX.Element => {
                       <Route path="/forgot-password" element={<ForgotPassword />} />
                       <Route path="/password-request-sent" element={<PasswordRequestSent />} />
                       <Route path="/reset-password" element={<ResetPassword />} />
+
+                      {/* Public: Customer parcel lookup (no login) */}
+                      <Route path="/track" element={<TrackParcel />} />
 
                       {/* Root - Redirect to login */}
                       <Route path="/" element={<Navigate to="/login" replace />} />
@@ -82,6 +87,16 @@ export const App = (): JSX.Element => {
                         }
                       />
                       <Route
+                        path="/parcel-transfer"
+                        element={
+                          <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", "ADMIN"]}>
+                            <MainLayout>
+                              <ParcelTransfer />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
                         path="/pickup-request"
                         element={
                           <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", ]}>
@@ -95,10 +110,19 @@ export const App = (): JSX.Element => {
                         path="/call-center"
                         element={
                           <ProtectedRoute allowedRoles={["CALLER"]}>
-                            <CallCenterLayout>
+                            <MainLayout>
                               <CallCenter />
-                            </CallCenterLayout>
+                            </MainLayout>
                           </ProtectedRoute>
+                        }
+                      />
+                      {/* Call Center demo page (no auth, UI only) */}
+                      <Route
+                        path="/call-center-demo"
+                        element={
+                          <MainLayout>
+                            <CallCenter />
+                          </MainLayout>
                         }
                       />
                       <Route
@@ -171,6 +195,16 @@ export const App = (): JSX.Element => {
                           <ProtectedRoute allowedRoles={["RIDER"]}>
                             <RiderLayout>
                               <RiderHistory />
+                            </RiderLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/rider/earnings"
+                        element={
+                          <ProtectedRoute allowedRoles={["RIDER"]}>
+                            <RiderLayout>
+                              <RiderEarnings />
                             </RiderLayout>
                           </ProtectedRoute>
                         }

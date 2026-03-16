@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useShelf } from "../../../contexts/ShelfContext";
 import authService from "../../../services/authService";
+import frontdeskService from "../../../services/frontdeskService";
+import type { Address } from "../../../services/frontdeskService";
 import { validatePhoneNumber, normalizePhoneNumber } from "../../../utils/dataHelpers";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
@@ -11,6 +13,7 @@ import { Badge } from "../../../components/ui/badge";
 import { Switch } from "../../../components/ui/switch";
 import { PlusIcon, Package, User, Truck, FileText, Save, X } from "lucide-react";
 import { CostInput } from "../../../components/ui/CostInput";
+import { useToast } from "../../../components/ui/toast";
 
 interface ParcelFormData {
     driverName?: string;
@@ -35,7 +38,7 @@ interface InfoSectionProps {
     parcels: ParcelFormData[];
     sessionDriver: { driverName?: string; driverPhone?: string; vehicleNumber?: string } | null;
     onAddParcel: (data: ParcelFormData) => void;
-    onSaveAll: (additionalParcel?: ParcelFormData) => void;
+    onSaveAll: (additionalParcel?: ParcelFormData, onSuccess?: () => void) => void;
     onRemoveParcel: (index: number) => void;
     isSaving?: boolean;
 }
@@ -127,6 +130,42 @@ export const InfoSection = ({
     const [specialNotes, setSpecialNotes] = useState("");
     const [phoneError, setPhoneError] = useState("");
     const [isDriverLocked, setIsDriverLocked] = useState(false);
+    const [addresses, setAddresses] = useState<Address[]>([]);
+    const [loadingAddresses, setLoadingAddresses] = useState(false);
+    const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+    const [saveToAddressListChecked, setSaveToAddressListChecked] = useState(false);
+    const addressDropdownRef = useRef<HTMLDivElement>(null);
+    const { showToast } = useToast();
+
+    // Load saved addresses (Shelf and Address tab) for receiver address + delivery cost
+    useEffect(() => {
+        let cancelled = false;
+        setLoadingAddresses(true);
+        frontdeskService
+            .getAddresses()
+            .then((res) => {
+                if (!cancelled && res.success && Array.isArray(res.data)) {
+                    setAddresses(res.data);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) setAddresses([]);
+            })
+            .finally(() => {
+                if (!cancelled) setLoadingAddresses(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const filteredAddresses = useMemo(() => {
+        const q = receiverAddress.trim().toLowerCase();
+        if (!q) return addresses.slice(0, 6);
+        return addresses
+            .filter((a) => a.name.toLowerCase().includes(q))
+            .slice(0, 6);
+    }, [addresses, receiverAddress]);
 
     // Lock driver fields when session driver is set
     useEffect(() => {
@@ -156,6 +195,7 @@ export const InfoSection = ({
             setDeliveryCost(undefined);
             setSpecialNotes("");
             setPhoneError("");
+            setSaveToAddressListChecked(false);
             setDriverName("");
             setDriverPhone("");
             setVehicleNumber("");
@@ -213,10 +253,16 @@ export const InfoSection = ({
             setPhoneError("Invalid sender phone number format. Use 0XXXXXXXXX or XXXXXXXXX");
             return false;
         }
-        // Validate delivery cost if home delivery is enabled
-        if (homeDelivery && (deliveryCost === undefined || deliveryCost <= 0)) {
-            setPhoneError("Delivery cost is required when home delivery is enabled");
-            return false;
+        // Validate receiver address and delivery cost when home delivery is enabled
+        if (homeDelivery) {
+            if (!receiverAddress.trim()) {
+                setPhoneError("Receiver address is required when home delivery is enabled");
+                return false;
+            }
+            if (deliveryCost === undefined || deliveryCost <= 0) {
+                setPhoneError("Delivery cost is required when home delivery is enabled");
+                return false;
+            }
         }
         return true;
     };
@@ -256,6 +302,31 @@ export const InfoSection = ({
 
         onAddParcel(parcelData);
 
+        // Save address to list if toggle is on and address is valid
+        if (saveToAddressListChecked && receiverAddress.trim() && deliveryCost != null && deliveryCost > 0) {
+            const addressToSave = receiverAddress.trim();
+            const costToSave = Math.round(deliveryCost);
+            
+            // Check if address already exists in the list (case-insensitive)
+            const addressExists = addresses.some(
+                (addr) => addr.name.toLowerCase() === addressToSave.toLowerCase()
+            );
+            
+            if (!addressExists) {
+                frontdeskService
+                    .addAddress(addressToSave, costToSave)
+                    .then((res) => {
+                        if (res.success && res.data) {
+                            setAddresses((prev) => [...prev, res.data as Address]);
+                            showToast("Address saved to list for next time.", "success");
+                        }
+                    })
+                    .catch(() => {});
+            } else {
+                showToast("Address already exists in the list.", "info");
+            }
+        }
+
         // If this is the first parcel and has driver info, lock the driver for future parcels
         if (parcels.length === 0 && currentDriverName && currentVehicleNumber) {
             setIsDriverLocked(true);
@@ -274,6 +345,7 @@ export const InfoSection = ({
         setDeliveryCost(undefined);
         setSpecialNotes("");
         setPhoneError("");
+        setSaveToAddressListChecked(false);
     };
 
     const handleSaveDirectly = () => {
@@ -309,10 +381,36 @@ export const InfoSection = ({
             hasCalled: homeDelivery ? true : undefined,
         };
 
-        // Save all parcels (including current form data)
-        // Note: Fields are cleared by parent component on successful save
-        // Do not clear fields here to preserve data on error
-        onSaveAll(parcelData);
+        // Capture address-list preference and values for after parcel save (behind the scene)
+        const shouldSaveToAddressList = saveToAddressListChecked;
+        const addressToSave = receiverAddress.trim();
+        const costToSave = deliveryCost != null && deliveryCost > 0 ? Math.round(deliveryCost) : 0;
+
+        const onParcelSaveSuccess = () => {
+            if (shouldSaveToAddressList && addressToSave && costToSave > 0) {
+                // Check if address already exists in the list (case-insensitive)
+                const addressExists = addresses.some(
+                    (addr) => addr.name.toLowerCase() === addressToSave.toLowerCase()
+                );
+                
+                if (!addressExists) {
+                    frontdeskService
+                        .addAddress(addressToSave, costToSave)
+                        .then((res) => {
+                            if (res.success && res.data) {
+                                setAddresses((prev) => [...prev, res.data as Address]);
+                                showToast("Address saved to list for next time.", "success");
+                            }
+                        })
+                        .catch(() => {});
+                } else {
+                    showToast("Address already exists in the list.", "info");
+                }
+            }
+        };
+
+        // Save all parcels (including current form data); address list save runs after success
+        onSaveAll(parcelData, onParcelSaveSuccess);
         setRecipientName("");
         setPhoneNumber("");
         setReceiverAddress("");
@@ -339,7 +437,7 @@ export const InfoSection = ({
         phoneNumber.trim() &&
         shelf.trim() &&
         !phoneError &&
-        (!homeDelivery || (deliveryCost != null && deliveryCost > 0));
+        (!homeDelivery || (receiverAddress.trim() && deliveryCost != null && deliveryCost > 0));
 
     return (
         <div className="space-y-4">
@@ -611,19 +709,6 @@ export const InfoSection = ({
                                         <p className="text-xs text-[#e22420] mt-1">{phoneError}</p>
                                     )}
                                 </div>
-
-                                <div className="flex flex-col gap-2 md:col-span-2">
-                                    <Label className="text-sm font-semibold text-neutral-800">
-                                        Receiver Address
-                                    </Label>
-                                    <Input
-                                        type="text"
-                                        value={receiverAddress}
-                                        onChange={(e) => setReceiverAddress(e.target.value)}
-                                        placeholder="Enter receiver address"
-                                        className="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
-                                    />
-                                </div>
                             </div>
                         </div>
 
@@ -696,7 +781,7 @@ export const InfoSection = ({
                                                 Home Delivery Requested
                                             </Label>
                                             <p className="text-xs text-[#5d5d5d]">
-                                                Enable if the recipient has requested home delivery
+                                                Enable if the recipient has requested home delivery. Then enter receiver address and delivery cost below.
                                             </p>
                                         </div>
                                         <Switch
@@ -704,29 +789,88 @@ export const InfoSection = ({
                                             onCheckedChange={(checked) => {
                                                 setHomeDelivery(checked);
                                                 if (!checked) {
+                                                    setReceiverAddress("");
                                                     setDeliveryCost(undefined);
+                                                    setSaveToAddressListChecked(false);
                                                 }
                                             }}
                                         />
                                     </div>
+                                    {homeDelivery && (
+                                        <>
+                                            <p className="text-xs text-blue-600">
+                                                Has Called will be automatically set to true
+                                            </p>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                                                <div className="flex flex-col gap-2">
+                                                    <Label className="text-sm font-semibold text-neutral-800">
+                                                        Receiver Address <span className="text-[#e22420]">*</span>
+                                                    </Label>
+                                                    <div className="relative" ref={addressDropdownRef}>
+                                                        <Input
+                                                            type="text"
+                                                            value={receiverAddress}
+                                                            onChange={(e) => {
+                                                                setReceiverAddress(e.target.value);
+                                                                setShowAddressDropdown(true);
+                                                            }}
+                                                            onFocus={() => setShowAddressDropdown(true)}
+                                                            onBlur={() => setTimeout(() => setShowAddressDropdown(false), 200)}
+                                                            placeholder={loadingAddresses ? "Loading addresses…" : "Type or select saved address"}
+                                                            className="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
+                                                        />
+                                                        {showAddressDropdown && filteredAddresses.length > 0 && (
+                                                            <ul className="absolute z-20 mt-1 w-full rounded-lg border border-[#d1d1d1] bg-white shadow-lg max-h-48 overflow-auto">
+                                                                {filteredAddresses.map((addr) => (
+                                                                    <li
+                                                                        key={addr.id}
+                                                                        className="px-3 py-2 cursor-pointer hover:bg-orange-50 text-sm text-neutral-800 border-b border-[#eee] last:border-b-0"
+                                                                        onMouseDown={(e) => {
+                                                                            e.preventDefault();
+                                                                            setReceiverAddress(addr.name);
+                                                                            setDeliveryCost(Math.round(addr.cost) || addr.cost);
+                                                                            setShowAddressDropdown(false);
+                                                                            // Turn off save toggle since this address is already in the list
+                                                                            setSaveToAddressListChecked(false);
+                                                                        }}
+                                                                    >
+                                                                        <span className="font-medium">{addr.name}</span>
+                                                                        <span className="text-neutral-500 ml-2">GHC {addr.cost}</span>
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col gap-2">
+                                                    <Label className="text-sm font-semibold text-neutral-800">
+                                                        Delivery Cost (GHC) <span className="text-[#e22420]">*</span>
+                                                    </Label>
+                                                    <CostInput
+                                                        value={deliveryCost}
+                                                        onChange={setDeliveryCost}
+                                                        placeholder="0"
+                                                        inputClassName="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col gap-2">
+                                                    <Label className="text-sm font-semibold text-neutral-800">
+                                                        Save to address list
+                                                    </Label>
+                                                    <div className="flex items-center gap-2 p-3 border border-[#d1d1d1] rounded-lg bg-gray-50 min-h-[40px]">
+                                                        <Switch
+                                                            checked={saveToAddressListChecked}
+                                                            onCheckedChange={setSaveToAddressListChecked}
+                                                        />
+                                                        <span className="text-xs text-[#5d5d5d]">
+                                                            When on, this address and cost are saved to the list once you save the parcel
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-
-                                {homeDelivery && (
-                                    <div className="flex flex-col gap-2">
-                                        <Label className="text-sm font-semibold text-neutral-800">
-                                            Delivery Cost (GHC) <span className="text-[#e22420]">*</span>
-                                        </Label>
-                                        <CostInput
-                                            value={deliveryCost}
-                                            onChange={setDeliveryCost}
-                                            placeholder="0"
-                                            inputClassName="w-full rounded-lg border border-[#d1d1d1] bg-white px-3 py-2"
-                                        />
-                                        <p className="text-xs text-blue-600">
-                                            Has Called will be automatically set to true
-                                        </p>
-                                    </div>
-                                )}
 
                                 <div className="flex flex-col gap-2 md:col-span-2">
                                     <Label className="text-sm font-semibold text-neutral-800">

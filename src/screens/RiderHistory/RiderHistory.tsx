@@ -511,6 +511,17 @@ export const RiderHistory = (): JSX.Element => {
                     <div className="space-y-6">
                         {groupedByDate.sortedDates.map((dateKey) => {
                             const dateAssignments = groupedByDate.groups[dateKey];
+                            // Calculate total amount for this date (per-day total)
+                            const dayTotalAmount = dateAssignments.reduce((sum, assignment) => {
+                                const parcel = assignment.parcel;
+                                const totalAmount =
+                                    (parcel.deliveryCost || 0) +
+                                    (parcel.pickUpCost || 0) +
+                                    (parcel.inboundCost || 0) +
+                                    (parcel.storageCost || 0);
+                                return sum + totalAmount;
+                            }, 0);
+
                             return (
                                 <Card key={dateKey} className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
                                     {/* Date Header */}
@@ -524,9 +535,14 @@ export const RiderHistory = (): JSX.Element => {
                                                 {formatDateHeader(dateKey)}
                                             </h2>
                                             <div className="flex items-center gap-3">
-                                                <Badge className="bg-white text-[#ea690c] border-white text-xs font-semibold px-3 py-1 shadow-sm">
-                                                    {dateAssignments.length} {dateAssignments.length === 1 ? 'delivery' : 'deliveries'}
-                                                </Badge>
+                                                <div className="flex flex-col items-end gap-1 text-right">
+                                                    <Badge className="bg-white text-[#ea690c] border-white text-xs sm:text-[13px] font-semibold px-3 py-1 shadow-sm">
+                                                        {dateAssignments.length} {dateAssignments.length === 1 ? 'delivery' : 'deliveries'}
+                                                    </Badge>
+                                                    <span className="text-xs sm:text-sm font-semibold text-white">
+                                                        Daily Total: {formatCurrency(dayTotalAmount)}
+                                                    </span>
+                                                </div>
                                                 {collapsedDates.has(dateKey) ? (
                                                     <ChevronDown className="w-5 h-5 text-white" />
                                                 ) : (

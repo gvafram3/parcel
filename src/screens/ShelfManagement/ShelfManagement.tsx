@@ -115,13 +115,18 @@ export const ShelfManagement = (): JSX.Element => {
         }
     }, [shelves, currentStation, userRole]);
 
-    // Fetch saved addresses (office-scoped via API)
+    // Fetch saved addresses (office-scoped via API) - fetch once without search parameter
     const fetchAddresses = async () => {
         setLoadingAddresses(true);
         try {
-            const response = await frontdeskService.getAddresses(addressSearch.trim() || undefined);
+            // Fetch all addresses without search filter (we'll filter locally)
+            const response = await frontdeskService.getAddresses();
             if (response.success && Array.isArray(response.data)) {
-                setAddresses(response.data);
+                // Sort addresses alphabetically by name (case-insensitive)
+                const sortedAddresses = response.data.sort((a, b) => 
+                    a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+                );
+                setAddresses(sortedAddresses);
             } else {
                 setAddresses([]);
             }
@@ -133,10 +138,20 @@ export const ShelfManagement = (): JSX.Element => {
         }
     };
 
+    // Fetch addresses once when component mounts or tab changes to addresses
     useEffect(() => {
-        fetchAddresses();
+        if (activeTab === "addresses") {
+            fetchAddresses();
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [addressSearch]);
+    }, [activeTab]);
+
+    // Filter addresses locally based on search query
+    const filteredAddresses = addressSearch.trim()
+        ? addresses.filter((addr) =>
+              addr.name.toLowerCase().includes(addressSearch.trim().toLowerCase())
+          )
+        : addresses;
 
     const handleAddShelf = async () => {
         if (!newShelfName.trim()) {
@@ -612,6 +627,16 @@ export const ShelfManagement = (): JSX.Element => {
                                                 : "No addresses saved for this office."}
                                         </p>
                                     </div>
+                                ) : filteredAddresses.length === 0 ? (
+                                    <div className="py-16 text-center">
+                                        <div className="inline-flex p-4 bg-gray-100 rounded-2xl mb-4">
+                                            <Search className="w-14 h-14 text-[#9a9a9a]" />
+                                        </div>
+                                        <p className="text-neutral-800 font-semibold">No addresses found</p>
+                                        <p className="text-sm text-[#5d5d5d] mt-1 max-w-sm mx-auto">
+                                            No addresses match "{addressSearch}". Try a different search term.
+                                        </p>
+                                    </div>
                                 ) : (
                                     <div className="rounded-xl border border-[#d1d1d1] overflow-hidden">
                                         <table className="w-full">
@@ -626,7 +651,7 @@ export const ShelfManagement = (): JSX.Element => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
-                                                {addresses.map((addr) => (
+                                                {filteredAddresses.map((addr) => (
                                                     <tr key={addr.id} className="bg-white hover:bg-gray-50/80 transition-colors">
                                                         <td className="py-3.5 px-4 text-sm font-medium text-neutral-800">
                                                             {addr.name}

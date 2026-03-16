@@ -197,23 +197,16 @@ interface PageableRequest {
     sort?: string[];
 }
 
-/** Saved address for the office (Front Desk). Used for delivery cost / address presets. */
-export interface Address {
-    id: string;
-    name: string;
-    officeId: string;
-    cost: number;
-}
-
-interface AddAddressRequest {
-    name: string;
-    cost: number;
-}
-
 interface ApiResponse {
     success: boolean;
     message: string;
     data?: any;
+}
+
+interface Address {
+    id?: number | string;
+    name: string;
+    cost: number;
 }
 
 class FrontdeskService {
@@ -599,56 +592,6 @@ class FrontdeskService {
     }
 
     /**
-     * Get addresses stored for the current office.
-     * Endpoint: GET /addresses
-     * Optional query: name (filter by address name).
-     */
-    async getAddresses(name?: string): Promise<ApiResponse> {
-        try {
-            const params = new URLSearchParams();
-            if (name != null && name.trim() !== '') params.append('name', name.trim());
-            const url = params.toString() ? `/addresses?${params.toString()}` : '/addresses';
-            const response = await this.apiClient.get<Address[]>(url);
-            const list = Array.isArray(response.data) ? response.data : [];
-            return {
-                success: true,
-                message: 'Addresses retrieved successfully',
-                data: list,
-            };
-        } catch (error: any) {
-            console.error('Get addresses error:', error);
-            return {
-                success: false,
-                message: error.response?.data?.message || 'Failed to retrieve addresses.',
-                data: [],
-            };
-        }
-    }
-
-    /**
-     * Save an address for the current office.
-     * Endpoint: POST /addresses
-     * Body: { name, cost }
-     */
-    async addAddress(name: string, cost: number): Promise<ApiResponse> {
-        try {
-            const body: AddAddressRequest = { name: name.trim(), cost: Number(cost) || 0 };
-            const response = await this.apiClient.post<Address>('/addresses', body);
-            return {
-                success: true,
-                message: 'Address saved successfully',
-                data: response.data,
-            };
-        } catch (error: any) {
-            console.error('Add address error:', error);
-            return {
-                success: false,
-                message: error.response?.data?.message || 'Failed to save address. Please try again.',
-            };
-        }
-    }
-
-    /**
      * Get reconciliations by date
      * Date should be in milliseconds (start of day)
      */
@@ -810,6 +753,56 @@ class FrontdeskService {
                 success: false,
                 message: error.response?.data?.message || 'Failed to retrieve riders. Please try again.',
                 data: [],
+            };
+        }
+    }
+
+    /**
+     * Get addresses stored for the current office.
+     * Endpoint: GET /addresses
+     * Optional query: name (filter by address name).
+     */
+    async getAddresses(name?: string): Promise<ApiResponse> {
+        try {
+            const params = new URLSearchParams();
+            if (name != null && name.trim() !== '') params.append('name', name.trim());
+            const url = params.toString() ? `/addresses?${params.toString()}` : '/addresses';
+            const response = await this.apiClient.get<Address[]>(url);
+            const list = Array.isArray(response.data) ? response.data : [];
+            return {
+                success: true,
+                message: 'Addresses retrieved successfully',
+                data: list,
+            };
+        } catch (error: any) {
+            console.error('Get addresses error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to retrieve addresses.',
+                data: [],
+            };
+        }
+    }
+
+    /**
+     * Save an address for the current office.
+     * Endpoint: POST /addresses
+     * Body: { name, cost }
+     */
+    async addAddress(name: string, cost: number): Promise<ApiResponse> {
+        try {
+            const body = { name: name.trim(), cost: Number(cost) || 0 };
+            const response = await this.apiClient.post<Address>('/addresses', body);
+            return {
+                success: true,
+                message: 'Address saved successfully',
+                data: response.data,
+            };
+        } catch (error: any) {
+            console.error('Add address error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to save address. Please try again.',
             };
         }
     }
