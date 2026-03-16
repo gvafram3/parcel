@@ -203,6 +203,12 @@ interface ApiResponse {
     data?: any;
 }
 
+interface Address {
+    id?: number | string;
+    name: string;
+    cost: number;
+}
+
 class FrontdeskService {
     private apiClient: AxiosInstance;
 

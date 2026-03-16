@@ -64,9 +64,12 @@ const mapUIToAssignmentStatus = (uiStatus: UIStatus): AssignmentStatus => {
     }
 };
 
+// DUMMY DATA - remove when real API data is available
+
 export const RiderDashboard = (): JSX.Element => {
     const { showToast } = useToast();
     const { currentUser } = useStation();
+
     const [assignments, setAssignments] = useState<RiderAssignmentResponse[]>([]);
     const [loading, setLoading] = useState(false);
     const [selectedAssignment, setSelectedAssignment] = useState<RiderAssignmentResponse | null>(null);
@@ -102,28 +105,21 @@ export const RiderDashboard = (): JSX.Element => {
         setLoading(true);
         try {
             const response = await riderService.getAssignments(page, size);
-            console.log('Fetch assignments response:', response);
 
             if (response.success && response.data) {
                 const data = response.data as any;
-                console.log('Response data structure:', data);
 
                 // Handle both paginated response (with content) and direct array
                 let assignmentsList: RiderAssignmentResponse[] = [];
                 if (data.content && Array.isArray(data.content)) {
                     assignmentsList = data.content;
-                    console.log('Using data.content, found', assignmentsList.length, 'assignments');
                 } else if (Array.isArray(data)) {
                     assignmentsList = data;
-                    console.log('Using data as array, found', assignmentsList.length, 'assignments');
                 } else if (Array.isArray(response.data)) {
                     assignmentsList = response.data;
-                    console.log('Using response.data as array, found', assignmentsList.length, 'assignments');
-                } else {
-                    console.warn('Unexpected data structure:', data);
                 }
 
-                console.log('Setting assignments:', assignmentsList.length);
+                const hasActive = assignmentsList.some(a => !a.parcel?.delivered && !a.parcel?.cancelled && !a.parcel?.returned);
                 setAssignments(assignmentsList);
                 setPagination({
                     page: data.number !== undefined ? data.number : page,
@@ -132,12 +128,11 @@ export const RiderDashboard = (): JSX.Element => {
                     totalPages: data.totalPages !== undefined ? data.totalPages : 1,
                 });
             } else {
-                console.error('Failed response:', response);
                 showToast(response.message || "Failed to load assignments", "error");
                 setAssignments([]);
             }
         } catch (error) {
-            console.error("Failed to fetch assignments:", error);
+            console.error("Failed to fetch assignments");
             showToast("Failed to load assignments. Please try again.", "error");
             setAssignments([]);
         } finally {
@@ -158,12 +153,6 @@ export const RiderDashboard = (): JSX.Element => {
         const assignment = parcelId
             ? assignments.find((a) => a.assignmentId === assignmentId && a.parcel.parcelId === parcelId)
             : assignments.find((a) => a.assignmentId === assignmentId);
-
-        console.log('=== Finding Assignment ===');
-        console.log('Looking for assignmentId:', assignmentId);
-        console.log('Looking for parcelId:', parcelId);
-        console.log('Found assignment:', assignment);
-        console.log('Assignment parcelId:', assignment?.parcel?.parcelId);
 
         if (newUIStatus === "delivered") {
             // Show confirmation modal for delivery
@@ -202,7 +191,7 @@ export const RiderDashboard = (): JSX.Element => {
                 showToast(response.message || "Failed to update status", "error");
             }
         } catch (error) {
-            console.error("Failed to update assignment status:", error);
+            console.error("Failed to update assignment status");
             showToast("Failed to update status. Please try again.", "error");
         } finally {
             setUpdatingAssignment(null);
@@ -221,14 +210,6 @@ export const RiderDashboard = (): JSX.Element => {
         try {
             const assignmentId = selectedAssignment.assignmentId;
             const parcelId = selectedAssignment.parcel.parcelId;
-
-            // Log the payload for debugging
-            console.log('=== Marking Parcel as Delivered ===');
-            console.log('Assignment ID:', assignmentId);
-            console.log('Parcel ID:', parcelId);
-            console.log('Payment Method:', paymentMethod);
-            console.log('Confirmation Code:', confirmationCode.trim() || '(none)');
-            console.log('Amount Collected:', amountCollected);
 
             const response = await riderService.updateAssignmentStatus(
                 assignmentId,
@@ -260,7 +241,7 @@ export const RiderDashboard = (): JSX.Element => {
                 showToast(response.message || "Failed to complete delivery", "error");
             }
         } catch (error) {
-            console.error("Failed to complete delivery:", error);
+            console.error("Failed to complete delivery");
             showToast("Failed to complete delivery. Please try again.", "error");
         } finally {
             setUpdatingAssignment(null);
@@ -285,13 +266,6 @@ export const RiderDashboard = (): JSX.Element => {
             const assignmentId = selectedAssignment.assignmentId;
             const parcelId = selectedAssignment.parcel.parcelId;
 
-            // Log the payload for debugging
-            console.log('=== Marking Parcel as Failed ===');
-            console.log('Assignment ID:', assignmentId);
-            console.log('Parcel ID:', parcelId);
-            console.log('Return Reason:', finalReason);
-            console.log('Status: RETURNED');
-
             const response = await riderService.updateAssignmentStatus(
                 assignmentId,
                 "RETURNED", // Status should be RETURNED when marking as failed
@@ -313,7 +287,7 @@ export const RiderDashboard = (): JSX.Element => {
                 showToast(response.message || "Failed to record failure", "error");
             }
         } catch (error) {
-            console.error("Failed to record failure:", error);
+            console.error("Failed to record failure");
             showToast("Failed to record failure. Please try again.", "error");
         } finally {
             setUpdatingAssignment(null);
@@ -323,19 +297,12 @@ export const RiderDashboard = (): JSX.Element => {
     // Filter assignments by parcel-level status
     // Backend assignment.status is unreliable, so we rely on parcel flags
     const activeAssignments = useMemo(() => {
-        console.log('Filtering assignments. Total:', assignments.length);
-        const filtered = assignments.filter(a => {
+        return assignments.filter(a => {
             const isDelivered = !!a.parcel?.delivered;
             const isCancelled = !!a.parcel?.cancelled;
             const isReturned = !!a.parcel?.returned;
-            const isActive = !isDelivered && !isCancelled && !isReturned;
-            if (!isActive) {
-                console.log('Filtered out assignment:', a.assignmentId, 'parcel delivered:', a.parcel?.delivered, 'parcel cancelled:', a.parcel?.cancelled, 'parcel returned:', a.parcel?.returned);
-            }
-            return isActive;
+            return !isDelivered && !isCancelled && !isReturned;
         });
-        console.log('Active assignments after filtering:', filtered.length);
-        return filtered;
     }, [assignments]);
 
     // Calculate total amount to collect from active assignments
@@ -401,7 +368,7 @@ export const RiderDashboard = (): JSX.Element => {
             generateAssignmentsPDF(pdfData, currentUser?.name || 'Rider');
             showToast("PDF downloaded successfully", "success");
         } catch (error) {
-            console.error("Failed to generate PDF:", error);
+            console.error("Failed to generate PDF");
             showToast("Failed to generate PDF. Please try again.", "error");
         }
     };
@@ -440,78 +407,94 @@ export const RiderDashboard = (): JSX.Element => {
     };
 
 
+    const hour = new Date().getHours();
+        const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const todayAssignments = assignments.filter(a => {
+            const t = a.assignedAt ? new Date(a.assignedAt).getTime() : null;
+            return t !== null && t >= todayStart.getTime() && t <= todayEnd.getTime();
+        });
+
+        const todayDelivered = todayAssignments.filter(a => !!a.parcel?.delivered).length;
+        const todayTotal = todayAssignments.length;
+        const progressPct = todayTotal > 0 ? Math.round((todayDelivered / todayTotal) * 100) : 0;
+
     return (
-        <div className="w-full min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 pb-6">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-                {/* Header */}
-                <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">My Deliveries</h1>
-                    <p className="text-sm text-gray-600">Manage your assigned parcels</p>
+        <div className="w-full min-h-screen bg-gray-50 pb-10">
+            <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+
+                {/* Greeting Header */}
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-sm text-gray-500">{greeting},</p>
+                        <h1 className="text-2xl font-bold text-neutral-800">{currentUser?.name || "Rider"} 👋</h1>
+                    </div>
+                    <button
+                        onClick={() => fetchAssignments(pagination.page, pagination.size)}
+                        disabled={loading}
+                        className="w-10 h-10 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-500 hover:text-[#ea690c] hover:border-[#ea690c] transition-colors disabled:opacity-50"
+                        title="Refresh"
+                    >
+                        <Loader className={`w-4 h-4 ${loading ? "animate-spin text-[#ea690c]" : ""}`} />
+                    </button>
                 </div>
 
-                {/* Statistics Cards */}
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm flex-1 min-w-0">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-xs text-gray-600 mb-1">Active Deliveries</p>
-                                    <p className="text-xl sm:text-2xl font-bold text-blue-600 truncate">{activeAssignments.length}</p>
-                                </div>
-                                <TruckIcon className="w-6 h-6 sm:w-8 sm:h-8 text-blue-500 opacity-50 flex-shrink-0 ml-2" />
-                            </div>
-                        </CardContent>
-                    </Card>
+                {/* Progress Bar */}
+                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-neutral-700">Today's Progress</span>
+                        <span className="text-sm font-bold text-[#ea690c]">{todayDelivered} of {todayTotal} delivered</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-3">
+                        <div
+                            className="bg-gradient-to-r from-[#ea690c] to-orange-400 h-3 rounded-full transition-all duration-500"
+                            style={{ width: `${progressPct}%` }}
+                        />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">{progressPct}% complete</p>
+                </div>
 
-                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm flex-1 min-w-0">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-xs text-gray-600 mb-1">Total Amount to Collect</p>
-                                    <p className="text-xl sm:text-2xl font-bold text-[#ea690c] truncate">{formatCurrency(totalAmountToCollect)}</p>
-                                </div>
-                                <DollarSignIcon className="w-6 h-6 sm:w-8 sm:h-8 text-[#ea690c] opacity-50 flex-shrink-0 ml-2" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="rounded-lg border border-gray-200 bg-white shadow-sm flex-1 min-w-0">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-xs text-gray-600 mb-1">Today&apos;s Collected Amount</p>
-                                    <p className="text-xl sm:text-2xl font-bold text-green-600 truncate">
-                                        {formatCurrency(todayCollected)}
-                                    </p>
-                                    <p className="mt-0.5 text-[11px] text-gray-500">
-                                        Based on assignments completed today
-                                    </p>
-                                </div>
-                                <CheckCircleIcon className="w-6 h-6 sm:w-8 sm:h-8 text-green-500 opacity-50 flex-shrink-0 ml-2" />
-                            </div>
-                        </CardContent>
-                    </Card>
+                {/* Stats Row */}
+                <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 text-center">
+                        <div className="w-8 h-8 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-1">
+                            <TruckIcon className="w-4 h-4 text-blue-500" />
+                        </div>
+                        <p className="text-xl font-bold text-blue-600">{activeAssignments.length}</p>
+                        <p className="text-[10px] text-gray-500 leading-tight">Active</p>
+                    </div>
+                    <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 text-center">
+                        <div className="w-8 h-8 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-1">
+                            <DollarSignIcon className="w-4 h-4 text-[#ea690c]" />
+                        </div>
+                        <p className="text-sm font-bold text-[#ea690c] truncate">{formatCurrency(totalAmountToCollect)}</p>
+                        <p className="text-[10px] text-gray-500 leading-tight">To Collect</p>
+                    </div>
+                    <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 text-center">
+                        <div className="w-8 h-8 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-1">
+                            <CheckCircleIcon className="w-4 h-4 text-green-500" />
+                        </div>
+                        <p className="text-sm font-bold text-green-600 truncate">{formatCurrency(todayCollected)}</p>
+                        <p className="text-[10px] text-gray-500 leading-tight">Collected</p>
+                    </div>
                 </div>
 
                 {/* Active Assignments */}
                 <div>
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-xl font-bold text-neutral-800">Active Assignments</h2>
-                        <div className="flex items-center gap-3">
-                            {activeAssignments.length > 0 && (
-                                <Button
-                                    onClick={handleDownloadPDF}
-                                    variant="outline"
-                                    className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50 flex items-center gap-2"
-                                >
-                                    <Download className="w-4 h-4" />
-                                    Download
-                                </Button>
-                            )}
-                            {/* <Badge className="bg-[#ea690c] text-white px-3 py-1 font-semibold">
-                                {activeAssignments.length} {activeAssignments.length === 1 ? 'Parcel' : 'Parcels'}
-                            </Badge> */}
-                        </div>
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-base font-bold text-neutral-800">Active Assignments
+                            <span className="ml-2 bg-[#ea690c] text-white text-xs font-semibold px-2 py-0.5 rounded-full">{activeAssignments.length}</span>
+                        </h2>
+                        {activeAssignments.length > 0 && (
+                            <Button onClick={handleDownloadPDF} variant="outline" className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50 text-xs px-3 py-1.5 h-auto flex items-center gap-1.5">
+                                <Download className="w-3.5 h-3.5" /> Download
+                            </Button>
+                        )}
                     </div>
 
                     {loading ? (
@@ -663,9 +646,7 @@ export const RiderDashboard = (): JSX.Element => {
                                     </div>
                                     <div className="flex gap-2">
                                         <Button
-                                            onClick={() => {
-                                                setPagination(prev => ({ ...prev, page: prev.page - 1 }));
-                                            }}
+                                            onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                                             disabled={pagination.page === 0 || loading}
                                             variant="outline"
                                             size="sm"
@@ -674,9 +655,7 @@ export const RiderDashboard = (): JSX.Element => {
                                             Previous
                                         </Button>
                                         <Button
-                                            onClick={() => {
-                                                setPagination(prev => ({ ...prev, page: prev.page + 1 }));
-                                            }}
+                                            onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                                             disabled={pagination.page >= pagination.totalPages - 1 || loading}
                                             variant="outline"
                                             size="sm"
@@ -760,15 +739,22 @@ export const RiderDashboard = (): JSX.Element => {
                                     <Label className="text-sm font-semibold text-neutral-800 mb-2">
                                         Payment Method <span className="text-[#e22420]">*</span>
                                     </Label>
-                                    <select
-                                        value={paymentMethod}
-                                        onChange={(e) => setPaymentMethod(e.target.value)}
-                                        className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c] bg-white"
-                                    >
-                                        <option value="">Select payment method</option>
-                                        <option value="cash">Cash</option>
-                                        <option value="momo">Mobile Money (MoMo)</option>
-                                    </select>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {[{ value: "cash", label: "💵 Cash" }, { value: "momo", label: "📱 Mobile Money" }].map(opt => (
+                                            <button
+                                                key={opt.value}
+                                                type="button"
+                                                onClick={() => setPaymentMethod(opt.value)}
+                                                className={`py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+                                                    paymentMethod === opt.value
+                                                        ? "border-[#ea690c] bg-orange-50 text-[#ea690c]"
+                                                        : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                                                }`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 <div>
