@@ -104,12 +104,18 @@ export const Login = (): JSX.Element => {
 
       if (response.data) {
         const userData = response.data.user;
-        // Normalize role - handle both old and new role formats
+        // Normalize role - handle both old and new role formats and backend variants
         let normalizedRole = userData.role?.toUpperCase() || "FRONTDESK";
         // Map old role names to new ones
-        if (normalizedRole === 'STATION-MANAGER') normalizedRole = 'MANAGER';
-        if (normalizedRole === 'FRONT-DESK') normalizedRole = 'FRONTDESK';
-        if (normalizedRole === 'CALL-CENTER') normalizedRole = 'CALLER';
+        if (["STATION-MANAGER", "STATION_MANAGER", "STATION MANAGER"].includes(normalizedRole)) {
+          normalizedRole = "MANAGER";
+        }
+        if (["FRONT-DESK", "FRONT_DESK", "FRONT DESK"].includes(normalizedRole)) {
+          normalizedRole = "FRONTDESK";
+        }
+        if (["CALL-CENTER", "CALLCENTER", "CALL_CENTER", "CALL CENTER"].includes(normalizedRole)) {
+          normalizedRole = "CALLER";
+        }
 
         console.log("Setting user with role:", normalizedRole);
 

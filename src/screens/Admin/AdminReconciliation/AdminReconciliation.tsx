@@ -9,6 +9,7 @@ import {
   UserIcon,
   CalendarIcon,
   Building2,
+  Globe,
 } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
@@ -46,49 +47,99 @@ interface RiderGroup {
 }
 
 export const AdminReconciliation = (): JSX.Element => {
-  const { stations } = useLocation();
+  const { locations, stations } = useLocation();
   const { showToast } = useToast();
 
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("ALL");
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [loading, setLoading] = useState(false);
   const [rawAssignments, setRawAssignments] = useState<any[]>([]);
   const [expandedRiders, setExpandedRiders] = useState<Set<string>>(new Set());
+  const [riderSearch, setRiderSearch] = useState<string>("");
 
-  // Ensure default office when stations load
-  useEffect(() => {
-    if (!selectedOfficeId && stations.length > 0) {
-      setSelectedOfficeId(stations[0].id);
+  // Filter offices based on selected location
+  const filteredOffices = useMemo(() => {
+    if (selectedLocationId === "ALL") {
+      return stations;
     }
-  }, [stations, selectedOfficeId]);
+    const location = locations.find((l) => l.id === selectedLocationId);
+    return location?.offices || [];
+  }, [selectedLocationId, locations, stations]);
+
+  // Reset office selection when location changes
+  useEffect(() => {
+    if (filteredOffices.length > 0) {
+      setSelectedOfficeId(filteredOffices.length === 1 ? filteredOffices[0].id : "ALL");
+    }
+  }, [filteredOffices]);
+
+  // Ensure default values when data loads
+  useEffect(() => {
+    if (selectedLocationId === "ALL" && !selectedOfficeId && stations.length > 0) {
+      setSelectedOfficeId("ALL");
+    }
+  }, [stations, selectedLocationId, selectedOfficeId]);
 
   const fetchReconciliations = async (
+    locationId: string,
     officeId: string,
     date: Date
   ): Promise<void> => {
-    if (!officeId) return;
+    if (!locationId && !officeId) return;
     setLoading(true);
     try {
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
       const dateInMillis = startOfDay.getTime();
 
-      const response = await adminService.getOfficeReconciliationsByDate(
-        officeId,
-        dateInMillis
+      // Determine which offices to fetch based on location and office selection
+      let officesToFetch: string[] = [];
+      
+      if (locationId === "ALL") {
+        // All locations - use all offices
+        officesToFetch = stations.map((s) => s.id);
+      } else {
+        // Specific location selected
+        const location = locations.find((l) => l.id === locationId);
+        if (location) {
+          if (officeId === "ALL") {
+            // All offices in this location
+            officesToFetch = location.offices.map((o) => o.id);
+          } else {
+            // Specific office
+            officesToFetch = [officeId];
+          }
+        }
+      }
+
+      if (officesToFetch.length === 0) {
+        setRawAssignments([]);
+        return;
+      }
+
+      // Fetch reconciliations for all selected offices
+      const responses = await Promise.all(
+        officesToFetch.map((officeId) =>
+          adminService.getOfficeReconciliationsByDate(officeId, dateInMillis)
+        )
       );
 
-      if (response.success && response.data) {
-        const data = response.data as any;
-        const content = Array.isArray(data) ? data : data.content || [];
-        setRawAssignments(content);
-      } else {
-        showToast(
-          response.message || "Failed to load reconciliations",
-          "error"
-        );
-        setRawAssignments([]);
-      }
+      const aggregated: any[] = [];
+      responses.forEach((response, index) => {
+        if (response.success && response.data) {
+          const data = response.data as any;
+          const content = Array.isArray(data) ? data : data.content || [];
+          content.forEach((assignment: any) => {
+            if (!assignment.officeId) {
+              assignment.officeId = officesToFetch[index];
+            }
+            aggregated.push(assignment);
+          });
+        }
+      });
+
+      setRawAssignments(aggregated);
     } catch (error) {
       console.error("Failed to fetch admin reconciliations:", error);
       showToast(
@@ -102,11 +153,11 @@ export const AdminReconciliation = (): JSX.Element => {
   };
 
   useEffect(() => {
-    if (selectedOfficeId) {
-      fetchReconciliations(selectedOfficeId, selectedDate);
+    if (selectedLocationId && selectedOfficeId) {
+      fetchReconciliations(selectedLocationId, selectedOfficeId, selectedDate);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedOfficeId, selectedDate]);
+  }, [selectedLocationId, selectedOfficeId, selectedDate]);
 
   // Group assignments by rider (same logic as ReconciliationHistory)
   const riderGroups = useMemo(() => {
@@ -206,6 +257,64 @@ export const AdminReconciliation = (): JSX.Element => {
     [riderGroups]
   );
 
+  const filteredRiderGroups = useMemo(() => {
+    const term = riderSearch.trim().toLowerCase();
+    if (!term) return riderGroups;
+    return riderGroups.filter((g) =>
+      g.riderName.toLowerCase().includes(term)
+    );
+  }, [riderGroups, riderSearch]);
+
+  const filteredTotalAmount = useMemo(
+    () => filteredRiderGroups.reduce((sum, g) => sum + g.expectedAmount, 0),
+    [filteredRiderGroups]
+  );
+
+  const filteredTotalParcels = useMemo(
+    () => filteredRiderGroups.reduce((sum, g) => sum + g.totalDeliveredCount, 0),
+    [filteredRiderGroups]
+  );
+
+  // Aggregate by office for admin overview (when viewing ALL)
+  const officeAggregates = useMemo(() => {
+    const map = new Map<
+      string,
+      { officeId: string; officeName: string; riders: number; deliveredParcels: number; amount: number }
+    >();
+
+    riderGroups.forEach((group) => {
+      group.assignmentIds.forEach((assignmentId) => {
+        const assignment = rawAssignments.find(
+          (a) => a.assignmentId === assignmentId
+        );
+        const officeId = assignment?.officeId;
+        if (!officeId) return;
+
+        const existing = map.get(officeId);
+        const officeName =
+          stations.find((s) => s.id === officeId)?.name || officeId;
+
+        if (!existing) {
+          map.set(officeId, {
+            officeId,
+            officeName,
+            riders: 1,
+            deliveredParcels: group.totalDeliveredCount,
+            amount: group.expectedAmount,
+          });
+        } else {
+          existing.riders += 1;
+          existing.deliveredParcels += group.totalDeliveredCount;
+          existing.amount += group.expectedAmount;
+        }
+      });
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.officeName.localeCompare(b.officeName)
+    );
+  }, [riderGroups, rawAssignments, stations]);
+
   const handleToggleRiderExpansion = (riderId: string) => {
     setExpandedRiders((prev) => {
       const next = new Set(prev);
@@ -216,22 +325,58 @@ export const AdminReconciliation = (): JSX.Element => {
   };
 
   const selectedOfficeName =
-    stations.find((s) => s.id === selectedOfficeId)?.name || "Select office";
+    selectedLocationId === "ALL" && selectedOfficeId === "ALL"
+      ? "All stations"
+      : selectedLocationId === "ALL"
+        ? stations.find((s) => s.id === selectedOfficeId)?.name || "Select station"
+        : selectedOfficeId === "ALL"
+          ? locations.find((l) => l.id === selectedLocationId)?.name || "Select location"
+          : stations.find((s) => s.id === selectedOfficeId)?.name || "Select station";
 
   return (
     <div className="w-full">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <main className="flex-1 space-y-6">
           {/* Header */}
-       
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-neutral-800 mb-1">
+                Admin Reconciliation
+              </h1>
+              <p className="text-sm text-gray-600">
+                View and compare reconciliations across stations by date.
+              </p>
+            </div>
+          </div>
 
           {/* Filters */}
           <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
             <CardContent className="p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-neutral-800 mb-2">
-                    Office
+                    Location
+                  </label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <select
+                      value={selectedLocationId}
+                      onChange={(e) => setSelectedLocationId(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#ea690c] text-sm bg-white"
+                    >
+                      <option value="ALL">All Locations</option>
+                      {locations.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                    Station
                   </label>
                   <div className="relative">
                     <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -240,8 +385,8 @@ export const AdminReconciliation = (): JSX.Element => {
                       onChange={(e) => setSelectedOfficeId(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#ea690c] text-sm bg-white"
                     >
-                      <option value="">Select office</option>
-                      {stations.map((s) => (
+                      <option value="ALL">All Stations</option>
+                      {filteredOffices.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
                         </option>
@@ -269,40 +414,61 @@ export const AdminReconciliation = (): JSX.Element => {
                   </div>
                 </div>
 
-                <div className="flex items-end gap-2">
-                  <Button
-                    onClick={() => setSelectedDate(new Date())}
-                    variant="outline"
-                    className="border border-gray-300 text-neutral-800 hover:bg-gray-50"
-                  >
-                    Today
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      const d = new Date(selectedDate);
-                      d.setDate(d.getDate() - 1);
-                      setSelectedDate(d);
-                    }}
-                    variant="outline"
-                    className="border border-gray-300 text-neutral-800 hover:bg-gray-50"
-                  >
-                    Previous Day
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      const d = new Date(selectedDate);
-                      d.setDate(d.getDate() + 1);
-                      if (d <= new Date()) setSelectedDate(d);
-                    }}
-                    variant="outline"
-                    className="border border-gray-300 text-neutral-800 hover:bg-gray-50"
-                    disabled={
-                      new Date(selectedDate).setHours(23, 59, 59, 999) >=
-                      new Date().getTime()
-                    }
-                  >
-                    Next Day
-                  </Button>
+                <div className="flex flex-col gap-2">
+                  <label className="block text-sm font-semibold text-neutral-800">
+                    Quick Actions
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      onClick={() => setSelectedDate(new Date())}
+                      variant="outline"
+                      size="sm"
+                      className="border border-gray-300 text-neutral-800 hover:bg-gray-50 text-xs"
+                    >
+                      Today
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const d = new Date(selectedDate);
+                        d.setDate(d.getDate() - 1);
+                        setSelectedDate(d);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="border border-gray-300 text-neutral-800 hover:bg-gray-50 text-xs"
+                    >
+                      Prev
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const d = new Date(selectedDate);
+                        d.setDate(d.getDate() + 1);
+                        if (d <= new Date()) setSelectedDate(d);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="border border-gray-300 text-neutral-800 hover:bg-gray-50 text-xs"
+                      disabled={
+                        new Date(selectedDate).setHours(23, 59, 59, 999) >=
+                        new Date().getTime()
+                      }
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                    Filter by Rider
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Rider name..."
+                    value={riderSearch}
+                    onChange={(e) => setRiderSearch(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                  />
                 </div>
               </div>
               <div className="mt-2 text-xs text-gray-500">
@@ -325,14 +491,14 @@ export const AdminReconciliation = (): JSX.Element => {
           </Card>
 
           {/* Summary */}
-          {riderGroups.length > 0 && (
+          {filteredRiderGroups.length > 0 && (
             <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
-              <CardContent className="px-3 py-2 sm:px-4 sm:py-3">
+              <CardContent className="px-3 py-3 sm:px-4 sm:py-4 space-y-3">
                 <div className="grid grid-cols-3 gap-2 sm:gap-3">
                   <div>
-                    <p className="text-xs text-gray-600 mb-0.5">Total Riders</p>
+                    <p className="text-xs text-gray-600 mb-0.5">Riders (filtered)</p>
                     <p className="text-base font-bold text-[#ea690c]">
-                      {riderGroups.length}
+                      {filteredRiderGroups.length}
                     </p>
                   </div>
                   <div>
@@ -340,16 +506,62 @@ export const AdminReconciliation = (): JSX.Element => {
                       Delivered Parcels
                     </p>
                     <p className="text-base font-bold text-blue-600">
-                      {totalParcels}
+                      {filteredTotalParcels}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-600 mb-0.5">Total Amount</p>
                     <p className="text-base font-bold text-green-600">
-                      {formatCurrency(totalAmount)}
+                      {formatCurrency(filteredTotalAmount)}
                     </p>
                   </div>
                 </div>
+
+                {selectedOfficeId === "ALL" && officeAggregates.length > 0 && (
+                  <div className="mt-2 border-t border-gray-200 pt-2">
+                    <p className="text-xs font-semibold text-neutral-800 mb-2">
+                      Station overview (all offices)
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left font-semibold text-gray-700">
+                              Office
+                            </th>
+                            <th className="px-2 py-1.5 text-right font-semibold text-gray-700">
+                              Riders
+                            </th>
+                            <th className="px-2 py-1.5 text-right font-semibold text-gray-700">
+                              Delivered
+                            </th>
+                            <th className="px-2 py-1.5 text-right font-semibold text-gray-700">
+                              Amount
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {officeAggregates.map((office) => (
+                            <tr key={office.officeId} className="border-t border-gray-100">
+                              <td className="px-2 py-1.5 text-[11px] text-neutral-800">
+                                {office.officeName}
+                              </td>
+                              <td className="px-2 py-1.5 text-[11px] text-right text-gray-700">
+                                {office.riders}
+                              </td>
+                              <td className="px-2 py-1.5 text-[11px] text-right text-blue-700">
+                                {office.deliveredParcels}
+                              </td>
+                              <td className="px-2 py-1.5 text-[11px] text-right text-green-700">
+                                {formatCurrency(office.amount)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -373,7 +585,7 @@ export const AdminReconciliation = (): JSX.Element => {
                     Choose an office to view reconciliation data.
                   </p>
                 </div>
-              ) : riderGroups.length === 0 ? (
+              ) : filteredRiderGroups.length === 0 ? (
                 <div className="text-center py-12">
                   <PackageIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                   <p className="text-neutral-800 font-semibold text-lg mb-2">
@@ -404,7 +616,7 @@ export const AdminReconciliation = (): JSX.Element => {
                       </tr>
                     </thead>
                     <tbody className="bg-white">
-                      {riderGroups.map((group, groupIndex) => {
+                      {filteredRiderGroups.map((group, groupIndex) => {
                         const isExpanded = expandedRiders.has(group.riderId);
                         return (
                           <React.Fragment key={group.riderId}>

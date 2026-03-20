@@ -12,6 +12,7 @@ export const API_ENDPOINTS = {
     FRONTDESK: `${API_BASE_URL}/api-frontdesk`,
     RIDER: `${API_BASE_URL}/api-rider`,
     OFFICES: `${API_BASE_URL}/api/offices`,
+    CALL_CENTER: `${API_BASE_URL}/api-call-center`,
 };
 
 export default API_BASE_URL;

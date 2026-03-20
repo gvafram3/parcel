@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { PhoneIcon, CheckCircleIcon, Clock, Loader, X, Package, PhoneCall, MessageSquare, DollarSign, MapPin, User, Truck } from "lucide-react";
+import { PhoneIcon, CheckCircleIcon, Clock, Loader, X, Package, PhoneCall, MessageSquare, DollarSign, MapPin, User, Truck, PieChart } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -11,6 +11,7 @@ import { calculateTotalAmount, formatDateTime, formatDate } from "../../utils/da
 import { formatPhoneNumber } from "../../utils/dataHelpers";
 import frontdeskService, { ParcelResponse } from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
+import callCenterService, { type CallCenterStatsResponse } from "../../services/callCenterService";
 
 const REMARK_OPTIONS = [
     { value: "NO_COMMENT", label: "No comment" },
@@ -67,21 +68,17 @@ const DEMO_DELIVERED_PARCELS: ParcelResponse[] = [
     },
 ];
 
-const CALL_CENTER_TABS = [
-    { id: "follow-up", label: "Follow-Up" },
-    { id: "all-deliveries", label: "All Deliveries" },
-    { id: "active-deliveries", label: "Active Deliveries" },
-    { id: "reconciliation", label: "Reconciliation" },
-    { id: "history", label: "History" },
-] as const;
+export type CallCenterView = "follow-up" | "all-deliveries" | "active-deliveries" | "history";
 
-type CallCenterTabId = (typeof CALL_CENTER_TABS)[number]["id"];
+export interface CallCenterProps {
+    view?: CallCenterView;
+}
 
-export const CallCenter = (): JSX.Element => {
+export const CallCenter: React.FC<CallCenterProps> = ({ view = "follow-up" }) => {
     const { currentUser } = useStation();
     const { stations } = useLocation();
     const { showToast } = useToast();
-    const [activeTab, setActiveTab] = useState<CallCenterTabId>("follow-up");
+    // We treat this screen as the main Call Center follow-up workspace.
     const [selectedParcel, setSelectedParcel] = useState<ParcelResponse | null>(null);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [deliveryPreference, setDeliveryPreference] = useState<"pickup" | "delivery">("delivery");
@@ -109,7 +106,7 @@ export const CallCenter = (): JSX.Element => {
         officeId: "",
         fromDate: "",
         toDate: "",
-        followUpStatus: "PENDING",
+        followUpStatus: view === "all-deliveries" ? "ALL" : "PENDING",
     });
     const [showFollowUpModal, setShowFollowUpModal] = useState(false);
     const [followUpParcel, setFollowUpParcel] = useState<ParcelResponse | null>(null);
@@ -117,10 +114,22 @@ export const CallCenter = (): JSX.Element => {
     const [remarkOther, setRemarkOther] = useState("");
     const [submittingFollowUp, setSubmittingFollowUp] = useState(false);
 
-    // Load delivered parcels for post-delivery tabs
-    useEffect(() => {
-        if (activeTab !== "follow-up" && activeTab !== "all-deliveries") return;
+    // Call center stats (from dedicated backend endpoint)
+    const [stats, setStats] = useState<CallCenterStatsResponse | null>(null);
+    const [statsLoading, setStatsLoading] = useState(false);
+    const [statsError, setStatsError] = useState<string | null>(null);
 
+    useEffect(() => {
+        if (view === "all-deliveries") {
+            setDeliveredFilters((f) => ({ ...f, followUpStatus: "ALL" }));
+        } else if (view === "follow-up") {
+            setDeliveredFilters((f) => ({ ...f, followUpStatus: "PENDING" }));
+        }
+    }, [view]);
+
+    // Load delivered parcels for post-delivery follow-up
+    useEffect(() => {
+        if (view !== "follow-up" && view !== "all-deliveries") return;
         // Demo mode: use local dummy data and skip backend
         if (isDemoMode) {
             setDeliveredLoading(false);
@@ -144,7 +153,10 @@ export const CallCenter = (): JSX.Element => {
                     ? new Date(deliveredFilters.toDate).setHours(23, 59, 59, 999)
                     : undefined;
 
-                const response = await frontdeskService.getDeliveredParcels({
+                // Use call center service for CALLER role, frontdesk service for others
+                const service = currentUser?.role === 'CALLER' ? callCenterService : frontdeskService;
+                
+                const response = await service.getDeliveredParcels({
                     page: deliveredPagination.page,
                     size: deliveredPagination.size,
                     officeId: deliveredFilters.officeId || undefined,
@@ -179,7 +191,7 @@ export const CallCenter = (): JSX.Element => {
 
         fetchDelivered();
     }, [
-        activeTab,
+        view,
         deliveredPagination.page,
         deliveredPagination.size,
         deliveredFilters.officeId,
@@ -188,6 +200,33 @@ export const CallCenter = (): JSX.Element => {
         deliveredFilters.followUpStatus,
         showToast,
     ]);
+
+    // Load high-level call center stats (yesterday overview)
+    useEffect(() => {
+        const fetchStats = async () => {
+            setStatsLoading(true);
+            setStatsError(null);
+            try {
+                const response = await callCenterService.getStats();
+                if (response.success && response.data) {
+                    setStats(response.data);
+                } else {
+                    setStats(null);
+                    if (response.message) {
+                        setStatsError(response.message);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch call center stats:", error);
+                setStats(null);
+                setStatsError("Failed to load call center statistics.");
+            } finally {
+                setStatsLoading(false);
+            }
+        };
+
+        fetchStats();
+    }, []);
 
     const handleRefreshDelivered = async () => {
         if (isDemoMode) {
@@ -204,7 +243,10 @@ export const CallCenter = (): JSX.Element => {
                 ? new Date(deliveredFilters.toDate).setHours(23, 59, 59, 999)
                 : undefined;
 
-            const response = await frontdeskService.getDeliveredParcels({
+            // Use call center service for CALLER role, frontdesk service for others
+            const service = currentUser?.role === 'CALLER' ? callCenterService : frontdeskService;
+
+            const response = await service.getDeliveredParcels({
                 page: deliveredPagination.page,
                 size: deliveredPagination.size,
                 officeId: deliveredFilters.officeId || undefined,
@@ -248,7 +290,10 @@ export const CallCenter = (): JSX.Element => {
 
         setSubmittingFollowUp(true);
         try {
-            const response = await frontdeskService.createFollowUp(
+            // Use call center service for CALLER role, frontdesk service for others
+            const service = currentUser?.role === 'CALLER' ? callCenterService : frontdeskService;
+            
+            const response = await service.createFollowUp(
                 followUpParcel.parcelId,
                 remarkType,
                 remarkType === "OTHER" ? remarkOther : undefined
@@ -269,18 +314,14 @@ export const CallCenter = (): JSX.Element => {
         }
     };
 
-    const handleTabChange = (tabId: CallCenterTabId) => {
-        setActiveTab(tabId);
-
-        if (tabId === "follow-up") {
-            setDeliveredFilters((f) => ({ ...f, followUpStatus: "PENDING" }));
-        } else if (tabId === "all-deliveries") {
-            setDeliveredFilters((f) => ({ ...f, followUpStatus: "ALL" }));
-        }
-    };
-
     const handleSavePreferences = async () => {
         if (!selectedParcel || !currentUser) return;
+
+        // CALLER role should only record follow-ups, not update parcel details
+        if (currentUser.role === 'CALLER') {
+            showToast("Call center users can only record follow-ups, not edit parcel details", "error");
+            return;
+        }
 
         if (deliveryPreference === "delivery" && (!deliveryAddress || !deliveryFee)) {
             showToast("Please fill in delivery address and fee for home delivery", "warning");
@@ -330,9 +371,6 @@ export const CallCenter = (): JSX.Element => {
                 p.followUpRemarkType === "WRONG_CONTACT")
     ).length;
 
-    const activeTabLabel =
-        CALL_CENTER_TABS.find((t) => t.id === activeTab)?.label ?? "Follow-Up";
-
     const totalToCollect = selectedParcel
         ? calculateTotalAmount(
               selectedParcel.inboundCost || 0,
@@ -341,51 +379,40 @@ export const CallCenter = (): JSX.Element => {
           )
         : 0;
 
+    const viewTitle: Record<CallCenterView, string> = {
+        "follow-up": "Follow-Up",
+        "all-deliveries": "All Deliveries",
+        "active-deliveries": "Active Deliveries",
+        history: "History",
+    };
+
     return (
         <div className="w-full">
-            <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                <header className="space-y-1">
+                    <h1 className="text-xl font-bold text-neutral-800">Call Center – {viewTitle[view]}</h1>
+                    <p className="text-xs text-[#5d5d5d]">
+                        Delivered parcels and post-delivery follow-up across all stations.
+                    </p>
+                </header>
+
+                {/* Main content area */}
                 <main className="flex-1 space-y-6">
-                    <header className="space-y-1">
-                        <h1 className="text-xl font-bold text-neutral-800">Call Center – {activeTabLabel}</h1>
-                        <p className="text-xs text-[#5d5d5d]">
-                            Delivered parcels and post-delivery follow-up across all stations.
-                        </p>
-                    </header>
-
-                    {/* Call Center Tabs */}
-                    <div className="flex flex-wrap gap-2 border-b border-[#d1d1d1] pb-1">
-                        {CALL_CENTER_TABS.map((tab) => {
-                            const isActive = tab.id === activeTab;
-                            return (
-                                <button
-                                    key={tab.id}
-                                    type="button"
-                                    onClick={() => handleTabChange(tab.id)}
-                                    className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
-                                        isActive
-                                            ? "bg-white border border-[#d1d1d1] border-b-0 -mb-px text-[#ea690c]"
-                                            : "text-[#5d5d5d] hover:bg-gray-50"
-                                    }`}
-                                >
-                                    {tab.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    {/* Post-Delivery Follow-Up */}
-                    {(activeTab === "follow-up" || activeTab === "all-deliveries") && (
+                    {(view === "follow-up" || view === "all-deliveries") ? (
                         <>
-                            {/* Summary cards */}
+                            {/* Call Center Overview - Top Metrics */}
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                                 <Card className="border-none bg-[#ffefe5]">
                                     <CardContent className="flex items-center justify-between p-4">
                                         <div>
-                                            <p className="text-xs font-medium text-[#8b4a1f]">
-                                                {activeTab === "follow-up" ? "Total Queue" : "Total Parcels"}
+                                            <p className="text-[11px] font-medium text-[#8b4a1f] uppercase tracking-wide">
+                                                Total Queue
                                             </p>
                                             <p className="mt-2 text-2xl font-bold text-[#ea690c]">
                                                 {deliveredPagination.totalElements || totalQueue}
+                                            </p>
+                                            <p className="mt-1 text-[11px] text-[#8b4a1f]">
+                                                Delivered today across all stations
                                             </p>
                                         </div>
                                         <Package className="w-8 h-8 text-[#f5a76a]" />
@@ -394,8 +421,15 @@ export const CallCenter = (): JSX.Element => {
                                 <Card className="border-none bg-[#e5f6e9]">
                                     <CardContent className="flex items-center justify-between p-4">
                                         <div>
-                                            <p className="text-xs font-medium text-green-700">Followed Up</p>
-                                            <p className="mt-2 text-2xl font-bold text-green-700">{followedUpCount}</p>
+                                            <p className="text-[11px] font-medium text-green-700 uppercase tracking-wide">
+                                                Completion Rate
+                                            </p>
+                                            <p className="mt-2 text-2xl font-bold text-green-700">
+                                                {totalQueue > 0 ? Math.round((followedUpCount / totalQueue) * 100) : 0}%
+                                            </p>
+                                            <p className="mt-1 text-[11px] text-green-600">
+                                                {followedUpCount} of {totalQueue} followed up
+                                            </p>
                                         </div>
                                         <CheckCircleIcon className="w-8 h-8 text-green-500 opacity-70" />
                                     </CardContent>
@@ -403,8 +437,15 @@ export const CallCenter = (): JSX.Element => {
                                 <Card className="border-none bg-[#e5f0ff]">
                                     <CardContent className="flex items-center justify-between p-4">
                                         <div>
-                                            <p className="text-xs font-medium text-blue-700">Pending</p>
-                                            <p className="mt-2 text-2xl font-bold text-blue-700">{pendingCount}</p>
+                                            <p className="text-[11px] font-medium text-blue-700 uppercase tracking-wide">
+                                                Pending
+                                            </p>
+                                            <p className="mt-2 text-2xl font-bold text-blue-700">
+                                                {pendingCount}
+                                            </p>
+                                            <p className="mt-1 text-[11px] text-blue-600">
+                                                Awaiting follow-ups
+                                            </p>
                                         </div>
                                         <Clock className="w-8 h-8 text-blue-500 opacity-70" />
                                     </CardContent>
@@ -412,9 +453,14 @@ export const CallCenter = (): JSX.Element => {
                                 <Card className="border-none bg-[#ffe5e8]">
                                     <CardContent className="flex items-center justify-between p-4">
                                         <div>
-                                            <p className="text-xs font-medium text-[#b3261e]">Unreachable</p>
+                                            <p className="text-[11px] font-medium text-[#b3261e] uppercase tracking-wide">
+                                                Unreachable
+                                            </p>
                                             <p className="mt-2 text-2xl font-bold text-[#b3261e]">
                                                 {unreachableCount}
+                                            </p>
+                                            <p className="mt-1 text-[11px] text-[#b3261e]">
+                                                No answer / wrong contact
                                             </p>
                                         </div>
                                         <PhoneIcon className="w-8 h-8 text-[#b3261e] opacity-70" />
@@ -632,29 +678,12 @@ export const CallCenter = (): JSX.Element => {
                                 </CardContent>
                             </Card>
                         </>
-                    )}
-
-                    {activeTab === "active-deliveries" && (
+                    ) : (
                         <Card className="border border-dashed border-[#d1d1d1] bg-white">
                             <CardContent className="p-6 text-sm text-[#5d5d5d]">
-                                Active deliveries insights for the call center will be added here. For now, use the main{" "}
-                                <span className="font-semibold">Active Deliveries</span> screen from the sidebar.
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {activeTab === "reconciliation" && (
-                        <Card className="border border-dashed border-[#d1d1d1] bg-white">
-                            <CardContent className="p-6 text-sm text-[#5d5d5d]">
-                                Reconciliation summaries for follow-up calls will appear here in a future update.
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {activeTab === "history" && (
-                        <Card className="border border-dashed border-[#d1d1d1] bg-white">
-                            <CardContent className="p-6 text-sm text-[#5d5d5d]">
-                                Call history and detailed follow-up records will be surfaced here.
+                                {view === "active-deliveries"
+                                    ? "Active deliveries view will be added here."
+                                    : "History view will be added here."}
                             </CardContent>
                         </Card>
                     )}

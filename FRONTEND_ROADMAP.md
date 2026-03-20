@@ -16,7 +16,7 @@
 2. **Create `src/types/index.ts`**
    - Standardize all TypeScript interfaces
    - Parcel status enum/union type
-   - User roles enum
+   - User roles enump           
    - Consistent data structures across all screens
 
 3. **Create `src/utils/dataHelpers.ts`**

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Menu, BellIcon, SettingsIcon, ChevronDownIcon, UserIcon, HelpCircleIcon, LogOut } from "lucide-react";
+import { Menu, BellIcon, SettingsIcon, ChevronDownIcon, HelpCircleIcon, LogOut } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { Badge } from "../components/ui/badge";
@@ -27,6 +27,18 @@ const routeTitles: Record<string, { title: string; description: string }> = {
     "/call-center": {
         title: "Call Center",
         description: "Contact customers and record delivery preferences",
+    },
+    "/call-center/all-deliveries": {
+        title: "All Deliveries",
+        description: "View delivered parcels across all stations",
+    },
+    "/call-center/active-deliveries": {
+        title: "Active Deliveries",
+        description: "View active deliveries for follow-up",
+    },
+    "/call-center/history": {
+        title: "History",
+        description: "View follow-up history and remarks",
     },
     "/parcel-costs-pod": {
         title: "Parcel Costs & POD",
@@ -140,6 +152,18 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
         };
     }, []);
 
+    const roleLabelMap: Record<string, string> = {
+        ADMIN: "Admin",
+        MANAGER: "Station Manager",
+        FRONTDESK: "Front Desk",
+        RIDER: "Rider",
+        CALLER: "Call Center",
+    };
+
+    const getRoleLabel = (role: string) => {
+        return roleLabelMap[role] || role.replace("-", " ");
+    };
+
     return (
         <nav className="sticky top-0 z-10 border-b border-[#d1d1d1] bg-white">
             <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -217,7 +241,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                         {currentUser.name}
                                     </div>
                                     <div className="text-xs text-[#5d5d5d] capitalize">
-                                        {currentUser.role.replace("-", " ")}
+                                        {getRoleLabel(currentUser.role)}
                                     </div>
                                 </div>
                             </div>
@@ -267,7 +291,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                                     {currentUser.name}
                                                 </div>
                                                 <div className="text-xs text-[#5d5d5d] capitalize">
-                                                    {currentUser.role.replace("-", " ")}
+                                                    {getRoleLabel(currentUser.role)}
                                                 </div>
                                             </div>
                                         </div>

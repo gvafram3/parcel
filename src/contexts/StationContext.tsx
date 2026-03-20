@@ -54,6 +54,9 @@ const normalizeRole = (role: string): UserRole => {
         'caller': 'CALLER',
         'CALL-CENTER': 'CALLER',
         'call-center': 'CALLER',
+        'CALLCENTER': 'CALLER',
+        'CALL_CENTER': 'CALLER',
+        'CALL CENTER': 'CALLER',
     };
 
     // Check if role exists in mapping

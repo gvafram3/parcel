@@ -17,15 +17,21 @@ const navItems = [
     { label: "Admin Reconciliation", path: "/admin/reconciliation", icon: DollarSignIcon, roles: ["ADMIN"] },
     { label: "Financial Dashboard", path: "/admin/financial", icon: BarChart3, roles: ["ADMIN"] },
 
-    // Station Manager & Front Desk - Core Operations
-    { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["FRONTDESK", "MANAGER"] },
+    // Station Manager, Front Desk & Call Center - Core Operations
+    { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["FRONTDESK", "MANAGER", "ADMIN"] },
     { label: "Parcel Intake", path: "/parcel-intake", icon: InboxIcon, roles: ["FRONTDESK", "MANAGER"] },
     // { label: "Parcel Transfer", path: "/parcel-transfer", icon: ClipboardListIcon, roles: ["FRONTDESK", "MANAGER"] },
-    { label: "Pickup Request", path: "/pickup-request", icon: MapPin, roles: ["FRONTDESK", "MANAGER",] },
+    { label: "Pickup Request", path: "/pickup-request", icon: MapPin, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Package Assignments", path: "/package-assignments", icon: ClipboardListIcon, roles: ["MANAGER", "FRONTDESK"] },
-    // Call Center is CALLER-only - separate entity, no station access
-    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER",] },
-    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["MANAGER",] },
+
+    // Call Center (CALLER) - Post-delivery follow-ups (design-based)
+    { label: "Follow-up", path: "/call-center", icon: PhoneIcon, roles: ["CALLER"] },
+    { label: "All Deliveries", path: "/call-center/all-deliveries", icon: Package, roles: ["CALLER"] },
+    { label: "Active Deliveries", path: "/call-center/active-deliveries", icon: TruckIcon, roles: ["CALLER"] },
+    { label: "History", path: "/call-center/history", icon: ClipboardListIcon, roles: ["CALLER"] },
+    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER"] },
+    // Reconciliation not shown to CALLER per latest requirement
+    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["MANAGER", "FRONTDESK", "ADMIN"] },
     // Station Manager & Front Desk - Management
     // { label: "Financial Dashboard", path: "/financial-dashboard", icon: LayoutDashboard, roles: ["MANAGER", "FRONTDESK"] },
     { label: "Shelf and Address", path: "/shelf-management", icon: Layers, roles: ["MANAGER",] },

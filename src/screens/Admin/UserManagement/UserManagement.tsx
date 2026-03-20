@@ -16,7 +16,7 @@ const roleColors: Record<string, string> = {
     MANAGER: "bg-blue-100 text-blue-800",
     FRONTDESK: "bg-green-100 text-green-800",
     RIDER: "bg-purple-100 text-purple-800",
-    CALLER: "bg-orange-100 text-orange-800",
+    CALLCENTER: "bg-orange-100 text-orange-800",
 };
 
 const statusColors: Record<string, string> = {
@@ -208,7 +208,7 @@ export const UserManagement = (): JSX.Element => {
                 name: formData.name.trim(),
                 email: formData.email.trim().toLowerCase(),
                 phoneNumber: formattedPhone,
-                role: formData.role as "ADMIN" | "RIDER" | "FRONTDESK" | "MANAGER" | "CALLER",
+                role: formData.role as "ADMIN" | "RIDER" | "FRONTDESK" | "MANAGER" | "CALLCENTER",
                 officeId: formData.officeId,
             };
 
@@ -397,7 +397,7 @@ export const UserManagement = (): JSX.Element => {
                                                 <option value="MANAGER">Manager</option>
                                                 <option value="FRONTDESK">Front Desk</option>
                                                 <option value="RIDER">Rider</option>
-                                                <option value="CALLER">Caller</option>
+                                                <option value="CALLCENTER">Caller</option>
                                             </select>
                                         </div>
 
@@ -488,7 +488,7 @@ export const UserManagement = (): JSX.Element => {
                                         <option value="MANAGER">Manager</option>
                                         <option value="FRONTDESK">Front Desk</option>
                                         <option value="RIDER">Rider</option>
-                                        <option value="CALLER">Caller</option>
+                                        <option value="CALLCENTER">Caller</option>
                                     </select>
                                 </div>
 
