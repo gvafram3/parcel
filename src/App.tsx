@@ -37,6 +37,7 @@ import { UserManagement } from "./screens/Admin/UserManagement/UserManagement";
 import { SystemParcelOverview } from "./screens/Admin/SystemParcelOverview/SystemParcelOverview";
 import { FinancialReports } from "./screens/Admin/FinancialReports/FinancialReports";
 import { AdminReconciliation } from "./screens/Admin/AdminReconciliation/AdminReconciliation";
+import { AdminFinancialDashboard } from "./screens/Admin/AdminFinancialDashboard/AdminFinancialDashboard";
 import { Preferences } from "./screens/Preferences/Preferences";
 import { Help } from "./screens/Help/Help";
 import { TrackParcel } from "./screens/TrackParcel/TrackParcel";
@@ -345,6 +346,17 @@ export const App = (): JSX.Element => {
                           <ProtectedRoute allowedRoles={["ADMIN"]}>
                             <MainLayout>
                               <AdminReconciliation />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+
+                      <Route
+                        path="/admin/financial"
+                        element={
+                          <ProtectedRoute allowedRoles={["ADMIN"]}>
+                            <MainLayout>
+                              <AdminFinancialDashboard />
                             </MainLayout>
                           </ProtectedRoute>
                         }
