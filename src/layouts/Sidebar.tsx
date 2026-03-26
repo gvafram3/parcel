@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, MapPin, PhoneIcon } from "lucide-react";
+import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, MapPin, BarChart3, PhoneIcon, CarIcon, ScrollTextIcon } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 
 interface SidebarProps {
@@ -15,7 +15,8 @@ const navItems = [
     { label: "User Management", path: "/admin/users", icon: Users, roles: ["ADMIN"] },
     { label: "System Parcels", path: "/admin/parcels", icon: Package, roles: ["ADMIN"] },
     { label: "Admin Reconciliation", path: "/admin/reconciliation", icon: DollarSignIcon, roles: ["ADMIN"] },
-    // { label: "Financial Reports", path: "/admin/financial-reports", icon: BarChart3, roles: ["ADMIN"] },
+    { label: "System Logs", path: "/admin/system-logs", icon: ScrollTextIcon, roles: ["ADMIN"] },
+    { label: "Financial Dashboard", path: "/admin/financial", icon: BarChart3, roles: ["ADMIN"] },
 
     // Station Manager, Front Desk & Call Center - Core Operations
     { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["FRONTDESK", "MANAGER", "ADMIN"] },
@@ -29,8 +30,9 @@ const navItems = [
     { label: "All Deliveries", path: "/call-center/all-deliveries", icon: Package, roles: ["CALLER"] },
     { label: "Active Deliveries", path: "/call-center/active-deliveries", icon: TruckIcon, roles: ["CALLER"] },
     { label: "History", path: "/call-center/history", icon: ClipboardListIcon, roles: ["CALLER"] },
-    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER"] },
+    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER", "FRONTDESK"] },
     // Reconciliation not shown to CALLER per latest requirement
+    { label: "Driver Tracker", path: "/driver-tracker", icon: CarIcon, roles: ["MANAGER", "FRONTDESK"] },
     { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["MANAGER", "FRONTDESK", "ADMIN"] },
     // Station Manager & Front Desk - Management
     // { label: "Financial Dashboard", path: "/financial-dashboard", icon: LayoutDashboard, roles: ["MANAGER", "FRONTDESK"] },

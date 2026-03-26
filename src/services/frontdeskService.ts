@@ -789,6 +789,32 @@ class FrontdeskService {
      * Endpoint: POST /addresses
      * Body: { name, cost }
      */
+    /**
+     * Get unpaid driver reconciliations
+     * Endpoint: GET /driver-reconciliations/unpaid
+     */
+    async getUnpaidDriverReconciliations(page = 0, size = 20): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.get(`/driver-reconciliations/unpaid?page=${page}&size=${size}`);
+            return { success: true, message: 'Driver reconciliations retrieved', data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to load driver reconciliations.' };
+        }
+    }
+
+    /**
+     * Mark a driver reconciliation as paid
+     * Endpoint: PUT /driver-reconciliations/{reconciliationId}/pay
+     */
+    async payDriverReconciliation(reconciliationId: string): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.put(`/driver-reconciliations/${reconciliationId}/pay`);
+            return { success: true, message: 'Marked as paid', data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to mark as paid.' };
+        }
+    }
+
     async addAddress(name: string, cost: number): Promise<ApiResponse> {
         try {
             const body = { name: name.trim(), cost: Number(cost) || 0 };
@@ -821,4 +847,8 @@ export type {
     PageableRequest,
     RiderResponse,
 };
+
+
+
+
 

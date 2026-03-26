@@ -107,6 +107,20 @@ class AdminService {
    * Matches admin route:
    *   GET /api-admin/reconciliations/by-date?officeId=...&date=...
    */
+  async getUserActions(page: number = 0, size: number = 20): Promise<ApiResponse> {
+    try {
+      const response = await this.apiClient.get(
+        `/user-actions?page=${page}&size=${size}`
+      );
+      return { success: true, message: "User actions retrieved", data: response.data };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || "Failed to fetch user actions.",
+      };
+    }
+  }
+
   async getOfficeReconciliationsByDate(
     officeId: string,
     dateInMillis: number

@@ -9,6 +9,7 @@ import {
   ChevronLeftIcon,
   UserIcon,
   CalendarIcon,
+  DownloadIcon,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -88,9 +89,9 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
   // Get filtered offices based on selected location
   const filteredOffices = useMemo(() => {
     if (selectedLocationId === "ALL") {
-      return locations.flatMap(loc => (loc.offices || []).map(office => ({ ...office, locationId: loc.locationId, locationName: loc.locationName })));
+      return locations.flatMap(loc => (loc.offices || []).map(office => ({ ...office, locationId: loc.id, locationName: loc.name })));
     }
-    const location = locations.find(loc => loc.locationId === selectedLocationId);
+    const location = locations.find(loc => loc.id === selectedLocationId);
     return (location?.offices || []).map(office => ({ ...office, locationId: location!.locationId, locationName: location!.locationName }));
   }, [locations, selectedLocationId]);
 
@@ -363,6 +364,93 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
     return riderGroups.reduce((sum, group) => sum + group.totalDeliveredCount, 0);
   }, [riderGroups]);
 
+  const handleDownloadMonthlyPDF = () => {
+    const monthLabel = selectedMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    const year = selectedMonth.getFullYear();
+    const month = selectedMonth.getMonth();
+    const firstDayOfWeek = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Build calendar rows HTML
+    let cells = Array(firstDayOfWeek).fill('<td></td>').join('');
+    let rows = '';
+    let cellCount = firstDayOfWeek;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      date.setHours(0, 0, 0, 0);
+      const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const summary = monthlySummaries[key];
+      const isFuture = date > today;
+
+      let bg = '#f9fafb'; let border = '#e5e7eb'; let amountColor = '#16a34a';
+      if (isFuture) { bg = '#fff'; border = '#e5e7eb'; }
+      else if (summary?.hasReconciliations) { bg = '#f0fdf4'; border = '#86efac'; }
+      else if (summary?.hasAssignments) { bg = '#fefce8'; border = '#fde047'; }
+      else if (summary) { bg = '#fef2f2'; border = '#fca5a5'; }
+
+      cells += `<td style="padding:4px">
+        <div style="background:${bg};border:1px solid ${border};border-radius:6px;padding:6px 4px;min-height:52px;text-align:center">
+          <div style="font-weight:600;font-size:12px">${day}</div>
+          ${summary && summary.totalParcels > 0
+            ? `<div style="font-size:10px;color:#4b5563;margin-top:2px">${summary.totalParcels} parcels</div>
+               <div style="font-size:10px;font-weight:700;color:${amountColor}">${formatCurrency(summary.totalAmount)}</div>`
+            : '<div style="font-size:10px;color:#d1d5db;margin-top:2px">&nbsp;</div>'}
+        </div>
+      </td>`;
+      cellCount++;
+
+      if (cellCount % 7 === 0 || day === daysInMonth) {
+        // Pad last row
+        const remaining = 7 - (cellCount % 7 === 0 ? 7 : cellCount % 7);
+        if (day === daysInMonth && remaining < 7) cells += '<td></td>'.repeat(remaining);
+        rows += `<tr>${cells}</tr>`;
+        cells = '';
+      }
+    }
+
+    // Monthly totals
+    const monthTotal = Object.values(monthlySummaries).reduce((s, d) => s + d.totalAmount, 0);
+    const monthParcels = Object.values(monthlySummaries).reduce((s, d) => s + d.totalParcels, 0);
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      <title>Monthly Overview – ${monthLabel}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:24px;color:#111}
+        h1{font-size:18px;margin-bottom:4px}p{font-size:12px;color:#555;margin:0 0 12px}
+        table{width:100%;border-collapse:collapse}th{font-size:11px;font-weight:600;color:#6b7280;text-align:center;padding:4px 0;}
+        .legend{display:flex;gap:16px;margin-top:12px;font-size:11px;color:#555}
+        .legend span{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:middle}
+        .totals{margin-top:14px;padding:10px 14px;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;display:flex;gap:32px}
+        .totals div{font-size:12px;color:#7c2d12} .totals strong{font-size:16px;color:#ea690c;display:block}
+        @media print{body{margin:12px}}
+      </style></head><body>
+      <h1>Monthly Overview – ${monthLabel}</h1>
+      <p>Mealex &amp; Mailex (M&amp;M) Parcel Delivery System &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}</p>
+      <table>
+        <thead><tr>
+          <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="totals">
+        <div><span>Total Parcels</span><strong>${monthParcels}</strong></div>
+        <div><span>Total Amount</span><strong>${formatCurrency(monthTotal)}</strong></div>
+      </div>
+      <div class="legend">
+        <div><span style="background:#f0fdf4;border:1px solid #86efac"></span>Reconciliation approved</div>
+        <div><span style="background:#fefce8;border:1px solid #fde047"></span>Work done, pending approval</div>
+        <div><span style="background:#fef2f2;border:1px solid #fca5a5"></span>No parcels / no work</div>
+      </div>
+      <script>window.onload=()=>{window.print();}<\/script>
+    </body></html>`;
+
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
   const handleToggleRiderExpansion = (riderId: string) => {
     setExpandedRiders(prev => {
       const newSet = new Set(prev);
@@ -407,8 +495,8 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
               >
                 <option value="ALL">All Locations</option>
                 {locations.map(location => (
-                  <option key={location.locationId} value={location.locationId}>
-                    {location.locationName}
+                  <option key={location.id} value={location.id}>
+                    {location.name}
                   </option>
                 ))}
               </select>
@@ -428,8 +516,8 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
               >
                 <option value="ALL">All Stations</option>
                 {filteredOffices.map(office => (
-                  <option key={office.officeId} value={office.officeId}>
-                    {office.officeName || office.name}
+                  <option key={office.id} value={office.id}>
+                    {office.name}
                   </option>
                 ))}
               </select>
@@ -445,9 +533,19 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
                 <div className="flex items-center gap-2 sm:gap-3">
                   <CalendarIcon className="w-5 h-5 text-[#ea690c]" />
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-gray-500">
-                      Monthly Overview
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Monthly Overview</p>
+                      <button
+                        type="button"
+                        onClick={handleDownloadMonthlyPDF}
+                        disabled={loadingMonth}
+                        title="Download as PDF"
+                        className="inline-flex items-center gap-1 rounded-md border border-[#ea690c] px-2 py-0.5 text-[11px] font-medium text-[#ea690c] hover:bg-orange-50 disabled:opacity-40"
+                      >
+                        <DownloadIcon className="w-3 h-3" />
+                        PDF
+                      </button>
+                    </div>
                     <p className="text-base sm:text-lg md:text-xl font-bold text-neutral-900 leading-tight">
                       {selectedMonth.toLocaleDateString("en-US", {
                         month: "long",

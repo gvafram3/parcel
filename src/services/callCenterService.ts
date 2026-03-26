@@ -36,6 +36,17 @@ class CallCenterService {
       },
       (error) => Promise.reject(error)
     );
+
+    this.apiClient.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          authService.logout();
+          window.location.href = "/login";
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   /**
@@ -147,35 +158,35 @@ class CallCenterService {
   }
 
   /**
-   * Record post-delivery follow-up for a parcel (CALLER role).
+   * Update call outcome for a parcel (CALLER role).
    * Backend reference: PUT /api-call-center/parcels/:parcelId/call-outcome
+   * callOutCome: "REACHED" | "UNREACHABLE" | "DELIVERED"
+   * If REACHED, hasCallCenterSpokenToClient is automatically set to true.
    */
-  async createFollowUp(
+  async updateCallOutcome(
     parcelId: string,
-    callOutcome: string,
-    details?: string
+    callOutCome: "REACHED" | "UNREACHABLE" | "DELIVERED",
+    remark?: string
   ): Promise<ApiResponse> {
     try {
-      const body: any = { callOutcome };
-      if (details) {
-        body.details = details;
-      }
+      const body: { callOutCome: string; remark?: string } = { callOutCome };
+      if (remark) body.remark = remark;
       const response = await this.apiClient.put<any>(
         `/parcels/${parcelId}/call-outcome`,
         body
       );
       return {
         success: true,
-        message: 'Follow-up recorded successfully',
+        message: 'Call outcome recorded successfully',
         data: response.data,
       };
     } catch (error: any) {
-      console.error('Record follow-up error:', error);
+      console.error('Update call outcome error:', error);
       return {
         success: false,
         message:
           error.response?.data?.message ||
-          'Failed to record follow-up.',
+          'Failed to record call outcome.',
       };
     }
   }
