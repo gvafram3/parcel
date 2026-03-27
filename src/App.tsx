@@ -28,7 +28,9 @@ import { Reconciliation } from "./screens/Reconciliation";
 import { ReconciliationConfirmation } from "./screens/ReconciliationConfirmation";
 import { FinancialDashboard } from "./screens/FinancialDashboard/FinancialDashboard";
 import { ShelfManagement } from "./screens/ShelfManagement/ShelfManagement";
-import { CallCenter } from "./screens/CallCenter/CallCenter";
+import { PreDeliveryQueue } from "./screens/CallCenter/PreDeliveryQueue/PreDeliveryQueue";
+import { PostDeliveryFollowUp } from "./screens/CallCenter/PostDeliveryFollowUp/PostDeliveryFollowUp";
+import { HomeDeliveryWatchlist } from "./screens/CallCenter/HomeDeliveryWatchlist/HomeDeliveryWatchlist";
 import { ParcelSearch } from "./screens/ParcelSearch/ParcelSearch";
 import { ParcelEdit } from "./screens/ParcelEdit";
 import { AdminDashboard } from "./screens/Admin/AdminDashboard/AdminDashboard";
@@ -44,11 +46,10 @@ import { TrackParcel } from "./screens/TrackParcel/TrackParcel";
 import { ParcelTransfer } from "./screens/ParcelTransfer";
 import { DriverInboundReconciliation } from "./screens/DriverInboundReconciliation/DriverInboundReconciliation";
 import { SystemLogs } from "./screens/Admin/SystemLogs/SystemLogs";
+import { SmartSearch } from "./screens/SmartSearch/SmartSearch";
 
 export const App = (): JSX.Element => {
   // Some environments cache component prop types aggressively; this keeps routing flexible.
-  const CallCenterScreen = CallCenter as React.FC<any>;
-
   return (
     <StationProvider>
       <LocationProvider>
@@ -71,6 +72,17 @@ export const App = (): JSX.Element => {
                       {/* Root - Redirect to login */}
                       <Route path="/" element={<Navigate to="/login" replace />} />
 
+
+                      <Route
+                        path="/smart-search"
+                        element={
+                          <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", "ADMIN", "CALLER"]}>
+                            <MainLayout>
+                              <SmartSearch />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
 
                       <Route
                         path="/parcel-search"
@@ -117,50 +129,33 @@ export const App = (): JSX.Element => {
                         element={
                           <ProtectedRoute allowedRoles={["CALLER", "FRONTDESK", "MANAGER", "ADMIN"]}>
                             <MainLayout>
-                              <CallCenter />
+                              <PreDeliveryQueue />
                             </MainLayout>
                           </ProtectedRoute>
                         }
                       />
                       <Route
-                        path="/call-center/all-deliveries"
+                        path="/call-center/follow-up"
                         element={
                           <ProtectedRoute allowedRoles={["CALLER"]}>
                             <MainLayout>
-                              <CallCenterScreen view="all-deliveries" />
+                              <PostDeliveryFollowUp />
                             </MainLayout>
                           </ProtectedRoute>
                         }
                       />
                       <Route
-                        path="/call-center/active-deliveries"
+                        path="/call-center/home-delivery"
                         element={
                           <ProtectedRoute allowedRoles={["CALLER"]}>
                             <MainLayout>
-                              <CallCenterScreen view="active-deliveries" />
-                            </MainLayout>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/call-center/history"
-                        element={
-                          <ProtectedRoute allowedRoles={["CALLER"]}>
-                            <MainLayout>
-                              <CallCenterScreen view="history" />
+                              <HomeDeliveryWatchlist />
                             </MainLayout>
                           </ProtectedRoute>
                         }
                       />
                       {/* Call Center demo page (no auth, UI only) */}
-                      <Route
-                        path="/call-center-demo"
-                        element={
-                          <MainLayout>
-                            <CallCenter />
-                          </MainLayout>
-                        }
-                      />
+
                       <Route
                         path="/parcel-costs-pod"
                         element={

@@ -1,0 +1,479 @@
+import { useState } from "react";
+import { SearchIcon, Loader, Eye, X } from "lucide-react";
+import { Card, CardContent } from "../../components/ui/card";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Badge } from "../../components/ui/badge";
+import { searchParcelsByPhone, type CustomerParcel } from "../../services/customerService";
+import frontdeskService from "../../services/frontdeskService";
+import { formatPhoneNumber } from "../../utils/dataHelpers";
+import { useToast } from "../../components/ui/toast";
+
+type Tab = "all" | "pending" | "pickedup" | "delivered";
+
+function getStatusLabel(p: CustomerParcel): string {
+    if (p.delivered)            return "Delivered";
+    if ((p as any).pickedUp)    return "Picked Up";
+    if (p.pod)                  return "POD";
+    if (p.parcelAssigned)       return "Assigned";
+    if ((p as any).hasCalled)   return "Called";
+    return "Registered";
+}
+
+function getStatusColor(label: string): string {
+    if (label === "Delivered")  return "bg-green-100 text-green-800";
+    if (label === "Picked Up")  return "bg-orange-100 text-orange-800";
+    if (label === "Assigned")   return "bg-blue-100 text-blue-800";
+    if (label === "POD")        return "bg-purple-100 text-purple-800";
+    if (label === "Called")     return "bg-yellow-100 text-yellow-800";
+    return "bg-gray-100 text-gray-800";
+}
+
+export const SmartSearch = (): JSX.Element => {
+    const { showToast } = useToast();
+    const [phoneInput, setPhoneInput]   = useState("");
+    const [loading, setLoading]         = useState(false);
+    const [parcels, setParcels]         = useState<CustomerParcel[]>([]);
+    const [searched, setSearched]       = useState(false);
+    const [error, setError]             = useState("");
+    const [selectedParcel, setSelectedParcel] = useState<CustomerParcel | null>(null);
+    const [activeTab, setActiveTab]     = useState<Tab>("all");
+    const [markPickupLoading, setMarkPickupLoading] = useState(false);
+
+    const handleSearch = async (e?: React.FormEvent) => {
+        e?.preventDefault();
+        const q = phoneInput.trim();
+        if (!q) { setError("Please enter a phone number."); return; }
+        setError(""); setParcels([]); setSelectedParcel(null); setSearched(false); setLoading(true);
+        try {
+            const res = await searchParcelsByPhone(q);
+            setSearched(true);
+            if (res.success && res.data) {
+                setParcels(res.data);
+                if (res.data.length === 0) setError("No parcels found for this number.");
+            } else {
+                setError(res.message || "Search failed. Please try again.");
+            }
+        } catch {
+            setSearched(true);
+            setError("Something went wrong. Please try again.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleMarkPickedUp = async () => {
+        if (!selectedParcel) return;
+        setMarkPickupLoading(true);
+        try {
+            const res = await frontdeskService.updateParcel(selectedParcel.parcelId, {
+                pickedUp: true,
+                hasCalled: true,
+            });
+            if (res.success) {
+                showToast("Parcel marked as picked up", "success");
+                const updated = { ...selectedParcel, pickedUp: true, hasCalled: true } as any;
+                setParcels(prev => prev.map(p => p.parcelId === selectedParcel.parcelId ? updated : p));
+                setSelectedParcel(updated);
+            } else {
+                showToast(res.message || "Failed to update parcel", "error");
+            }
+        } catch {
+            showToast("Failed to update parcel. Please try again.", "error");
+        } finally {
+            setMarkPickupLoading(false);
+        }
+    };
+
+    const tabParcels: Record<Tab, CustomerParcel[]> = {
+        all:       parcels,
+        pending:   parcels.filter(p => !p.delivered && !(p as any).pickedUp),
+        pickedup:  parcels.filter(p => (p as any).pickedUp && !p.delivered),
+        delivered: parcels.filter(p => p.delivered),
+    };
+
+    const tabs: { key: Tab; label: string }[] = [
+        { key: "all",       label: `All (${parcels.length})` },
+        { key: "pending",   label: `Pending (${tabParcels.pending.length})` },
+        { key: "pickedup",  label: `Picked Up (${tabParcels.pickedup.length})` },
+        { key: "delivered", label: `Delivered (${tabParcels.delivered.length})` },
+    ];
+
+    const visibleParcels = tabParcels[activeTab];
+
+    return (
+        <div className="w-full">
+            <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                <main className="flex-1 space-y-6">
+
+                    {/* Search bar */}
+                    <Card className="border border-[#d1d1d1] bg-white">
+                        <CardContent className="p-3 sm:p-4">
+                            <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
+                                <div className="flex-1 relative">
+                                    <SearchIcon className="absolute left-3 top-3 w-5 h-5 text-[#5d5d5d]" />
+                                    <Input
+                                        placeholder="Search by receiver or sender phone number..."
+                                        value={phoneInput}
+                                        onChange={e => { setPhoneInput(e.target.value); setError(""); }}
+                                        className="pl-10 border border-[#d1d1d1]"
+                                        disabled={loading}
+                                    />
+                                </div>
+                                <Button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2"
+                                >
+                                    {loading
+                                        ? <><Loader className="w-4 h-4 animate-spin" />Searching...</>
+                                        : <><SearchIcon className="w-4 h-4" />Search</>}
+                                </Button>
+                            </form>
+
+                            {error && (
+                                <p className="mt-2 text-xs text-red-600">{error}</p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Empty state before search */}
+                    {!searched && !loading && (
+                        <div className="text-center py-16">
+                            <SearchIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                            <p className="text-sm text-[#5d5d5d]">Enter a phone number above to find parcels.</p>
+                        </div>
+                    )}
+
+                    {/* Loading */}
+                    {loading && (
+                        <div className="text-center py-8">
+                            <Loader className="w-8 h-8 text-[#ea690c] mx-auto mb-4 animate-spin" />
+                            <p className="text-sm text-neutral-700">Searching parcels...</p>
+                        </div>
+                    )}
+
+                    {/* Results */}
+                    {!loading && searched && parcels.length > 0 && (
+                        <>
+                            {/* Tabs */}
+                            <div className="flex gap-0 border-b border-[#d1d1d1]">
+                                {tabs.map(tab => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => { setActiveTab(tab.key); setSelectedParcel(null); }}
+                                        className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                                            activeTab === tab.key
+                                                ? "border-[#ea690c] text-[#ea690c]"
+                                                : "border-transparent text-[#5d5d5d] hover:text-neutral-800"
+                                        }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Count */}
+                            <div className="flex items-center justify-between text-xs text-[#5d5d5d] -mt-4">
+                                <span>Showing {visibleParcels.length} of {parcels.length} parcel(s)</span>
+                            </div>
+
+                            {/* Table */}
+                            <Card className="border border-[#d1d1d1] bg-white overflow-hidden">
+                                <CardContent className="p-0">
+                                    <div className="overflow-x-auto max-h-[calc(100vh-300px)] overflow-y-auto">
+                                        <table className="w-full divide-y divide-[#d1d1d1] text-sm">
+                                            <thead className="bg-gray-50 sticky top-0 z-10">
+                                                <tr>
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">Recipient</th>
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">Phone</th>
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">Address</th>
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">Sender</th>
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">Shelf</th>
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">Date</th>
+                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">Status</th>
+                                                    <th className="py-2 px-2 text-center text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-[#d1d1d1]">
+                                                {visibleParcels.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan={8} className="py-8 px-4 text-center">
+                                                            <p className="text-xs text-neutral-700">No parcels in this category.</p>
+                                                        </td>
+                                                    </tr>
+                                                ) : visibleParcels.map((parcel, index) => {
+                                                    const statusLabel = getStatusLabel(parcel);
+                                                    const statusColor = getStatusColor(statusLabel);
+
+                                                    return (
+                                                        <tr
+                                                            key={parcel.parcelId}
+                                                            className={`transition-colors hover:bg-gray-50 ${index % 2 === 0 ? "bg-white" : "bg-gray-50/50"} align-middle`}
+                                                        >
+                                                            <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                <p className="font-medium text-neutral-800 text-sm">{parcel.receiverName || "N/A"}</p>
+                                                                {parcel.senderName && (
+                                                                    <p className="text-[#5d5d5d] text-xs mt-0.5">From: {parcel.senderName}</p>
+                                                                )}
+                                                            </td>
+                                                            <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                <div className="text-neutral-700 text-sm">
+                                                                    {parcel.recieverPhoneNumber ? formatPhoneNumber(parcel.recieverPhoneNumber) : "N/A"}
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-1.5 px-2">
+                                                                <div className="text-neutral-700 text-sm max-w-[180px] truncate">
+                                                                    {parcel.receiverAddress || "—"}
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                <div className="text-neutral-700 text-sm">
+                                                                    {parcel.senderName || "—"}
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                <span className="text-neutral-700 text-sm">{parcel.shelfName || "—"}</span>
+                                                            </td>
+                                                            <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                <div className="text-neutral-700 text-sm">
+                                                                    {parcel.createdAt ? new Date(parcel.createdAt).toLocaleString() : "—"}
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                <Badge className={`${statusColor} text-xs px-1.5 py-0.5`}>
+                                                                    {statusLabel}
+                                                                </Badge>
+                                                            </td>
+                                                            <td className="py-1.5 px-2 whitespace-nowrap text-center">
+                                                                <Button
+                                                                    onClick={() => setSelectedParcel(parcel)}
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="border border-[#ea690c] text-[#ea690c] hover:bg-orange-50 h-7 px-2 text-xs"
+                                                                >
+                                                                    <Eye className="w-3 h-3 mr-1" />
+                                                                    <span className="hidden sm:inline">View</span>
+                                                                </Button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </>
+                    )}
+
+                    {/* No results */}
+                    {!loading && searched && parcels.length === 0 && !error && (
+                        <div className="text-center py-8">
+                            <p className="text-xs text-neutral-700">No parcels found for this phone number.</p>
+                        </div>
+                    )}
+
+                </main>
+            </div>
+
+            {/* Parcel Details Modal — identical structure to ParcelSearch */}
+            {selectedParcel && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <Card className="w-full max-w-2xl border border-[#d1d1d1] bg-white shadow-lg max-h-[90vh] overflow-y-auto">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <h3 className="text-lg font-bold text-neutral-800">Parcel Details</h3>
+                                <button
+                                    onClick={() => setSelectedParcel(null)}
+                                    className="text-[#9a9a9a] hover:text-neutral-800"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-6">
+
+                                {/* Basic Information */}
+                                <div>
+                                    <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Basic Information</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-xs text-[#5d5d5d] mb-1">Parcel ID</p>
+                                            <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.parcelId}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-[#5d5d5d] mb-1">Status</p>
+                                            <Badge className={getStatusColor(getStatusLabel(selectedParcel))}>
+                                                {getStatusLabel(selectedParcel)}
+                                            </Badge>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-[#5d5d5d] mb-1">Shelf Location</p>
+                                            <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.shelfName || "Not set"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-[#5d5d5d] mb-1">Type</p>
+                                            <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.typeofParcel || "—"}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Recipient Information */}
+                                <div>
+                                    <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Recipient Information</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-xs text-[#5d5d5d] mb-1">Recipient Name</p>
+                                            <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.receiverName || "N/A"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-[#5d5d5d] mb-1">Phone Number</p>
+                                            <p className="font-semibold text-neutral-800 text-sm">
+                                                {selectedParcel.recieverPhoneNumber ? formatPhoneNumber(selectedParcel.recieverPhoneNumber) : "N/A"}
+                                            </p>
+                                        </div>
+                                        {selectedParcel.receiverAddress && (
+                                            <div className="col-span-2">
+                                                <p className="text-xs text-[#5d5d5d] mb-1">Delivery Address</p>
+                                                <p className="text-sm text-neutral-700">{selectedParcel.receiverAddress}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Sender Information */}
+                                {(selectedParcel.senderName || selectedParcel.senderPhoneNumber) && (
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Sender Information</h4>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {selectedParcel.senderName && (
+                                                <div>
+                                                    <p className="text-xs text-[#5d5d5d] mb-1">Sender Name</p>
+                                                    <p className="font-semibold text-neutral-800 text-sm">{selectedParcel.senderName}</p>
+                                                </div>
+                                            )}
+                                            {selectedParcel.senderPhoneNumber && (
+                                                <div>
+                                                    <p className="text-xs text-[#5d5d5d] mb-1">Sender Phone</p>
+                                                    <p className="font-semibold text-neutral-800 text-sm">{formatPhoneNumber(selectedParcel.senderPhoneNumber)}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Costs */}
+                                <div>
+                                    <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Costs</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {selectedParcel.pickUpCost != null && (
+                                            <div>
+                                                <p className="text-xs text-[#5d5d5d] mb-1">Pick Up Cost</p>
+                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.pickUpCost.toFixed(2)}</p>
+                                            </div>
+                                        )}
+                                        {selectedParcel.deliveryCost != null && (
+                                            <div>
+                                                <p className="text-xs text-[#5d5d5d] mb-1">Delivery Cost</p>
+                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.deliveryCost.toFixed(2)}</p>
+                                            </div>
+                                        )}
+                                        {selectedParcel.inboundCost != null && (
+                                            <div>
+                                                <p className="text-xs text-[#5d5d5d] mb-1">Inbound Cost</p>
+                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.inboundCost.toFixed(2)}</p>
+                                            </div>
+                                        )}
+                                        {selectedParcel.storageCost != null && (
+                                            <div>
+                                                <p className="text-xs text-[#5d5d5d] mb-1">Storage Cost</p>
+                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.storageCost.toFixed(2)}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Item Description */}
+                                {selectedParcel.parcelDescription && (
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Item Description</h4>
+                                        <p className="text-sm text-neutral-700">{selectedParcel.parcelDescription}</p>
+                                    </div>
+                                )}
+
+                                {/* Additional Information */}
+                                <div>
+                                    <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Additional Information</h4>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-xs text-[#5d5d5d] mb-1">Has Called</p>
+                                            <Badge className={(selectedParcel as any).hasCalled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
+                                                {(selectedParcel as any).hasCalled ? "Yes" : "No"}
+                                            </Badge>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-[#5d5d5d] mb-1">Inbound Paid</p>
+                                            <Badge className={(selectedParcel as any).inboudPayed ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
+                                                {(selectedParcel as any).inboudPayed ? "Yes" : "No"}
+                                            </Badge>
+                                        </div>
+                                        {selectedParcel.homeDelivery != null && (
+                                            <div>
+                                                <p className="text-xs text-[#5d5d5d] mb-1">Home Delivery</p>
+                                                <Badge className={selectedParcel.homeDelivery ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"}>
+                                                    {selectedParcel.homeDelivery ? "Yes" : "No"}
+                                                </Badge>
+                                            </div>
+                                        )}
+                                        {selectedParcel.createdAt && (
+                                            <div>
+                                                <p className="text-xs text-[#5d5d5d] mb-1">Registered Date</p>
+                                                <p className="font-semibold text-neutral-800 text-sm">
+                                                    {new Date(selectedParcel.createdAt).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Pickup status + action */}
+                                <div className="flex items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        {(selectedParcel as any).pickedUp ? (
+                                            <Badge className="bg-green-100 text-green-800">Picked Up</Badge>
+                                        ) : (
+                                            <Badge className="bg-yellow-100 text-yellow-800">Not Picked Up</Badge>
+                                        )}
+                                        <span className="text-sm text-[#5d5d5d]">
+                                            Has Called: {(selectedParcel as any).hasCalled ? "Yes" : "No"}
+                                        </span>
+                                    </div>
+                                    {!(selectedParcel as any).pickedUp && (
+                                        <Button
+                                            onClick={handleMarkPickedUp}
+                                            disabled={markPickupLoading}
+                                            className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
+                                        >
+                                            {markPickupLoading ? "Updating..." : "Mark Picked Up"}
+                                        </Button>
+                                    )}
+                                </div>
+
+                                <div className="pt-4 border-t border-[#d1d1d1] flex gap-3">
+                                    <Button
+                                        onClick={() => setSelectedParcel(null)}
+                                        variant="outline"
+                                        className="flex-1 border border-[#d1d1d1]"
+                                    >
+                                        Close
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+        </div>
+    );
+};

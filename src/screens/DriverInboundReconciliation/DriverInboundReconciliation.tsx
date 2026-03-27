@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-    Loader, Truck, ChevronDown, ChevronRight, CheckCircle2,
-    Package, Phone, RefreshCw, BadgeCheck, Clock,
+    Loader, CheckCircleIcon, XIcon, PackageIcon,
+    MapPinIcon, Phone, ChevronDownIcon, ChevronRightIcon,
+    UserIcon, RefreshCw, BadgeCheck,
 } from "lucide-react";
-import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
+import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
-import { useToast } from "../../components/ui/toast";
 import { formatCurrency, formatPhoneNumber } from "../../utils/dataHelpers";
 import frontdeskService from "../../services/frontdeskService";
+import { useToast } from "../../components/ui/toast";
 
 interface DriverParcel {
     parcelId: string | null;
@@ -16,26 +17,16 @@ interface DriverParcel {
     receiverPhoneNumber?: string;
     receiverAddress?: string;
     senderName?: string;
-    senderPhoneNumber?: string;
     parcelAmount: number;
-    payed: boolean;
-    returned: boolean;
     delivered: boolean;
+    returned: boolean;
+    pickedUp: boolean;
     paymentMethod?: string | null;
     inboundCost: number;
     deliveryCost: number;
-    storageCost: number;
-    pickUpCost: number;
-    pickedUp: boolean;
-    homeDelivery: boolean;
-    vehicleNumber?: string;
-    driverName?: string;
-    driverPhoneNumber?: string;
-    driverId?: string;
     shelfName?: string;
+    vehicleNumber?: string;
     inboudPayed: boolean;
-    typeofParcel?: string;
-    POD?: boolean;
 }
 
 interface DriverReconciliation {
@@ -52,11 +43,13 @@ interface DriverReconciliation {
 export const DriverInboundReconciliation = () => {
     const { showToast } = useToast();
 
-    const [records, setRecords] = useState<DriverReconciliation[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [pagination, setPagination] = useState({ page: 0, size: 20, totalElements: 0, totalPages: 0 });
-    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-    const [payingId, setPayingId] = useState<string | null>(null);
+    const [records, setRecords]           = useState<DriverReconciliation[]>([]);
+    const [loading, setLoading]           = useState(false);
+    const [pagination, setPagination]     = useState({ page: 0, size: 20, totalElements: 0, totalPages: 0 });
+    const [expandedIds, setExpandedIds]   = useState<Set<string>>(new Set());
+    const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
+    const [payingId, setPayingId]         = useState<string | null>(null);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     const fetchUnpaid = useCallback(async (page = 0) => {
         setLoading(true);
@@ -92,6 +85,22 @@ export const DriverInboundReconciliation = () => {
         });
     };
 
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    };
+
+    const handleSelectAll = () => {
+        if (selectedIds.size === records.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(records.map(r => r.id)));
+        }
+    };
+
     const handleMarkPaid = async (record: DriverReconciliation) => {
         setPayingId(record.id);
         try {
@@ -99,7 +108,9 @@ export const DriverInboundReconciliation = () => {
             if (response.success) {
                 showToast(`${record.riderName} marked as paid`, "success");
                 setRecords(prev => prev.filter(r => r.id !== record.id));
+                setSelectedIds(prev => { const n = new Set(prev); n.delete(record.id); return n; });
                 setPagination(prev => ({ ...prev, totalElements: Math.max(0, prev.totalElements - 1) }));
+                setShowConfirmModal(false);
             } else {
                 showToast(response.message || "Failed to mark as paid", "error");
             }
@@ -110,251 +121,378 @@ export const DriverInboundReconciliation = () => {
         }
     };
 
-    // Summary stats
-    const totalOwed = records.reduce((sum, r) => sum + (r.totalAmount || 0), 0);
-    const totalDrivers = records.length;
-    const totalParcels = records.reduce((sum, r) => sum + (r.parcels?.length || 0), 0);
+    const selectedRecords = records.filter(r => selectedIds.has(r.id));
+    const totalOwed       = selectedRecords.reduce((s, r) => s + (r.totalAmount || 0), 0);
+    const totalParcels    = selectedRecords.reduce((s, r) => s + (r.parcels?.length || 0), 0);
 
     return (
-        <div className="w-full">
-            <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-                <header className="flex items-start justify-between gap-4">
-                    <div>
-                        <h1 className="text-xl font-bold text-neutral-800">Driver Inbound Reconciliation</h1>
-                        <p className="text-xs text-[#5d5d5d] mt-0.5">
-                            Drivers with unpaid inbound cash — review parcels and mark as settled.
-                        </p>
-                    </div>
-                    <Button
-                        onClick={() => fetchUnpaid(pagination.page)}
-                        variant="outline"
-                        size="sm"
-                        disabled={loading}
-                        className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50 flex-shrink-0"
-                    >
-                        <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-                        Refresh
-                    </Button>
-                </header>
+        <div className={`w-full ${showConfirmModal ? "overflow-hidden" : ""}`}>
+            <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                <main className="flex-1 space-y-6">
 
-                {/* Summary cards */}
-                <div className="grid grid-cols-3 gap-3">
-                    <Card className="border-none bg-[#ffefe5]">
-                        <CardContent className="p-4 flex items-center justify-between">
-                            <div>
-                                <p className="text-[11px] font-medium text-[#8b4a1f] uppercase tracking-wide">Total Owed</p>
-                                <p className="mt-1 text-xl font-bold text-[#ea690c]">{formatCurrency(totalOwed)}</p>
-                            </div>
-                            <Truck className="w-7 h-7 text-[#f5a76a]" />
-                        </CardContent>
-                    </Card>
-                    <Card className="border-none bg-[#ffe5e8]">
-                        <CardContent className="p-4 flex items-center justify-between">
-                            <div>
-                                <p className="text-[11px] font-medium text-[#b3261e] uppercase tracking-wide">Drivers Pending</p>
-                                <p className="mt-1 text-xl font-bold text-[#b3261e]">{pagination.totalElements}</p>
-                            </div>
-                            <Clock className="w-7 h-7 text-[#b3261e] opacity-60" />
-                        </CardContent>
-                    </Card>
-                    <Card className="border-none bg-[#e5f0ff]">
-                        <CardContent className="p-4 flex items-center justify-between">
-                            <div>
-                                <p className="text-[11px] font-medium text-blue-700 uppercase tracking-wide">Total Parcels</p>
-                                <p className="mt-1 text-xl font-bold text-blue-700">{totalParcels}</p>
-                            </div>
-                            <Package className="w-7 h-7 text-blue-400" />
-                        </CardContent>
-                    </Card>
-                </div>
+                    {/* Selected summary */}
+                    {selectedIds.size > 0 && (
+                        <Badge className="bg-orange-100 text-orange-700 border-orange-200 px-4 py-2 text-base font-semibold">
+                            {selectedIds.size} Driver{selectedIds.size !== 1 ? "s" : ""} Selected
+                        </Badge>
+                    )}
 
-                {/* Main list */}
-                <div className="space-y-3">
-                    {loading ? (
-                        <div className="text-center py-16">
-                            <Loader className="w-8 h-8 text-[#ea690c] mx-auto mb-3 animate-spin" />
-                            <p className="text-sm text-[#5d5d5d]">Loading driver reconciliations...</p>
-                        </div>
-                    ) : records.length === 0 ? (
-                        <div className="text-center py-16">
-                            <CheckCircle2 className="w-14 h-14 text-green-400 mx-auto mb-3" />
-                            <p className="text-sm font-semibold text-neutral-800">All settled!</p>
-                            <p className="text-xs text-[#5d5d5d] mt-1">No unpaid driver inbound cash found.</p>
-                        </div>
-                    ) : (
-                        records.map(record => {
-                            const isExpanded = expandedIds.has(record.id);
-                            const isPaying = payingId === record.id;
-                            const readyParcels = record.parcels?.filter(p => p.pickedUp || p.delivered) ?? [];
-                            const pendingParcels = record.parcels?.filter(p => !p.pickedUp && !p.delivered) ?? [];
-
-                            return (
-                                <Card key={record.id} className="border border-[#d1d1d1] bg-white overflow-hidden">
-                                    {/* Driver header row */}
-                                    <div
-                                        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                                        onClick={() => toggleExpand(record.id)}
-                                    >
-                                        <button className="text-gray-400 flex-shrink-0">
-                                            {isExpanded
-                                                ? <ChevronDown className="w-4 h-4" />
-                                                : <ChevronRight className="w-4 h-4" />
-                                            }
-                                        </button>
-
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="font-semibold text-sm text-neutral-800">{record.riderName}</span>
-                                                <Badge className="bg-red-100 text-red-700 border-red-200 text-[10px]">
-                                                    Unpaid
-                                                </Badge>
-                                            </div>
-                                            <div className="flex items-center gap-1 mt-0.5">
-                                                <Phone className="w-3 h-3 text-gray-400" />
-                                                <a
-                                                    href={`tel:${record.riderPhoneNumber}`}
-                                                    onClick={e => e.stopPropagation()}
-                                                    className="text-xs text-[#ea690c] hover:underline"
-                                                >
-                                                    {formatPhoneNumber(record.riderPhoneNumber)}
-                                                </a>
-                                            </div>
+                    {/* Summary card */}
+                    {selectedIds.size > 0 && (
+                        <Card className="rounded-lg border border-[#d1d1d1] bg-white shadow-sm">
+                            <CardContent className="p-4 sm:p-6">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div>
+                                            <p className="text-sm text-gray-600 mb-1">Drivers Selected</p>
+                                            <p className="text-2xl font-bold text-[#ea690c]">{selectedIds.size}</p>
                                         </div>
-
-                                        {/* Stats */}
-                                        <div className="hidden sm:flex items-center gap-4 text-xs text-gray-500 flex-shrink-0">
-                                            <span>{record.parcels?.length ?? 0} parcels</span>
-                                            <span className="text-green-600 font-medium">{readyParcels.length} ready</span>
-                                            <span className="text-amber-600 font-medium">{pendingParcels.length} pending</span>
+                                        <div>
+                                            <p className="text-sm text-gray-600 mb-1">Total Parcels</p>
+                                            <p className="text-2xl font-bold text-blue-600">{totalParcels}</p>
                                         </div>
-
-                                        {/* Amount + pay button */}
-                                        <div className="flex items-center gap-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                                            <div className="text-right">
-                                                <p className="text-xs text-gray-500">Total Owed</p>
-                                                <p className="text-base font-bold text-[#ea690c]">{formatCurrency(record.totalAmount)}</p>
-                                            </div>
-                                            <Button
-                                                onClick={() => handleMarkPaid(record)}
-                                                disabled={isPaying}
-                                                size="sm"
-                                                className="bg-green-600 hover:bg-green-700 text-white text-xs h-8 px-3"
-                                            >
-                                                {isPaying
-                                                    ? <Loader className="w-3.5 h-3.5 animate-spin" />
-                                                    : <><BadgeCheck className="w-3.5 h-3.5 mr-1" />Mark Paid</>
-                                                }
-                                            </Button>
+                                        <div>
+                                            <p className="text-sm text-gray-600 mb-1">Total Amount Owed</p>
+                                            <p className="text-2xl font-bold text-green-600">{formatCurrency(totalOwed)}</p>
                                         </div>
                                     </div>
+                                    <Button
+                                        onClick={() => setShowConfirmModal(true)}
+                                        disabled={selectedIds.size === 0}
+                                        className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                                    >
+                                        <BadgeCheck className="w-4 h-4 mr-2" />
+                                        Mark Selected as Paid
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
 
-                                    {/* Expanded parcels table */}
-                                    {isExpanded && (
-                                        <div className="border-t border-[#d1d1d1]">
-                                            {/* Mobile stats */}
-                                            <div className="sm:hidden flex gap-4 px-4 py-2 bg-gray-50 text-xs text-gray-500 border-b border-[#d1d1d1]">
-                                                <span>{record.parcels?.length ?? 0} parcels</span>
-                                                <span className="text-green-600 font-medium">{readyParcels.length} ready</span>
-                                                <span className="text-amber-600 font-medium">{pendingParcels.length} pending</span>
-                                            </div>
+                    {/* Main table */}
+                    <Card className="rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+                        <CardContent className="p-0">
+                            {/* Table header bar */}
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-[#d1d1d1]">
+                                <p className="text-sm font-semibold text-neutral-800">Driver Tracker</p>
+                                <Button
+                                    onClick={() => fetchUnpaid(pagination.page)}
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={loading}
+                                    className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50"
+                                >
+                                    {loading
+                                        ? <Loader className="w-4 h-4 animate-spin" />
+                                        : <><RefreshCw className="w-4 h-4 mr-1" />Refresh</>}
+                                </Button>
+                            </div>
 
-                                            {!record.parcels?.length ? (
-                                                <p className="text-xs text-gray-400 px-4 py-4">No parcel details available.</p>
-                                            ) : (
-                                                <div className="overflow-x-auto">
-                                                    <table className="w-full text-xs">
-                                                        <thead className="bg-gray-50 border-b border-[#d1d1d1]">
-                                                            <tr>
-                                                                <th className="px-4 py-2.5 text-left font-semibold text-gray-600 uppercase tracking-wide">Receiver</th>
-                                                                <th className="px-4 py-2.5 text-left font-semibold text-gray-600 uppercase tracking-wide">Shelf</th>
-                                                                <th className="px-4 py-2.5 text-left font-semibold text-gray-600 uppercase tracking-wide">Inbound</th>
-                                                                <th className="px-4 py-2.5 text-left font-semibold text-gray-600 uppercase tracking-wide">Vehicle</th>
-                                                                <th className="px-4 py-2.5 text-left font-semibold text-gray-600 uppercase tracking-wide">Status</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-[#f0f0f0]">
-                                                            {record.parcels.map((parcel, idx) => {
-                                                                const isReady = parcel.pickedUp || parcel.delivered;
-                                                                const isReturned = parcel.returned;
+                            {loading ? (
+                                <div className="text-center py-12">
+                                    <Loader className="w-10 h-10 text-[#ea690c] mx-auto mb-4 animate-spin" />
+                                    <p className="text-neutral-700 font-semibold text-lg">Loading drivers...</p>
+                                </div>
+                            ) : records.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <PackageIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                                    <p className="text-neutral-800 font-semibold text-lg mb-2">No drivers found</p>
+                                    <p className="text-sm text-gray-500">No unpaid driver inbound cash found.</p>
+                                </div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full border-collapse">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedIds.size === records.length && records.length > 0}
+                                                        onChange={handleSelectAll}
+                                                        className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
+                                                    />
+                                                </th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Driver</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Parcels</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Total Owed</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivered Amount</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white">
+                                            {records.map((record, groupIndex) => {
+                                                const isSelected = selectedIds.has(record.id);
+                                                const isExpanded = expandedIds.has(record.id);
+                                                const deliveredParcels = record.parcels?.filter(p => p.delivered && !p.returned) ?? [];
+                                                const failedParcels    = record.parcels?.filter(p => p.returned) ?? [];
+                                                const allParcels       = record.parcels ?? [];
 
-                                                                return (
-                                                                    <tr key={parcel.parcelId ?? idx} className="hover:bg-gray-50">
-                                                                        <td className="px-4 py-2.5">
-                                                                            <p className="font-medium text-neutral-800">{parcel.receiverName || "N/A"}</p>
-                                                                            {parcel.receiverPhoneNumber && (
+                                                return (
+                                                    <>
+                                                        {/* Driver row */}
+                                                        <tr
+                                                            key={record.id}
+                                                            className={`hover:bg-gray-50 transition-colors ${groupIndex !== records.length - 1 ? "border-b border-gray-200" : ""} ${isSelected ? "bg-orange-50" : ""}`}
+                                                        >
+                                                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isSelected}
+                                                                    onChange={() => toggleSelect(record.id)}
+                                                                    className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-4 border-r border-gray-100">
+                                                                <div className="flex items-center gap-2">
+                                                                    <button
+                                                                        onClick={() => toggleExpand(record.id)}
+                                                                        className="text-gray-500 hover:text-gray-700"
+                                                                    >
+                                                                        {isExpanded
+                                                                            ? <ChevronDownIcon className="w-4 h-4" />
+                                                                            : <ChevronRightIcon className="w-4 h-4" />}
+                                                                    </button>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <UserIcon className="w-4 h-4 text-blue-500" />
+                                                                        <div>
+                                                                            <div className="text-sm font-semibold text-neutral-800">{record.riderName}</div>
+                                                                            {record.riderPhoneNumber && (
                                                                                 <a
-                                                                                    href={`tel:${parcel.receiverPhoneNumber}`}
-                                                                                    className="text-[#ea690c] hover:underline"
+                                                                                    href={`tel:${record.riderPhoneNumber}`}
+                                                                                    className="text-xs text-[#ea690c] hover:underline flex items-center gap-1"
                                                                                 >
-                                                                                    {formatPhoneNumber(parcel.receiverPhoneNumber)}
+                                                                                    <Phone className="w-3 h-3" />
+                                                                                    {formatPhoneNumber(record.riderPhoneNumber)}
                                                                                 </a>
                                                                             )}
-                                                                        </td>
-                                                                        <td className="px-4 py-2.5 text-gray-600">
-                                                                            {parcel.shelfName || "—"}
-                                                                        </td>
-                                                                        <td className="px-4 py-2.5">
-                                                                            <span className="font-semibold text-[#ea690c]">
-                                                                                {formatCurrency(parcel.inboundCost)}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td className="px-4 py-2.5 text-gray-600">
-                                                                            {parcel.vehicleNumber || "—"}
-                                                                        </td>
-                                                                        <td className="px-4 py-2.5">
-                                                                            {isReturned ? (
-                                                                                <Badge className="bg-red-100 text-red-700 border-red-200">Returned</Badge>
-                                                                            ) : isReady ? (
-                                                                                <Badge className="bg-green-100 text-green-700 border-green-200">Ready</Badge>
-                                                                            ) : (
-                                                                                <Badge className="bg-amber-100 text-amber-700 border-amber-200">Pending</Badge>
-                                                                            )}
-                                                                        </td>
-                                                                    </tr>
-                                                                );
-                                                            })}
-                                                        </tbody>
-                                                        <tfoot className="bg-gray-50 border-t-2 border-[#d1d1d1]">
-                                                            <tr>
-                                                                <td colSpan={2} className="px-4 py-2.5 font-semibold text-gray-700">Total</td>
-                                                                <td className="px-4 py-2.5 font-bold text-[#ea690c]">
-                                                                    {formatCurrency(record.parcels.reduce((s, p) => s + (p.inboundCost || 0), 0))}
-                                                                </td>
-                                                                <td colSpan={2} />
-                                                            </tr>
-                                                        </tfoot>
-                                                    </table>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </Card>
-                            );
-                        })
-                    )}
-                </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                                                <div className="text-sm font-semibold text-blue-600">
+                                                                    {deliveredParcels.length} / {record.parcels?.length ?? 0}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">Delivered / Total</div>
+                                                            </td>
+                                                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                                                <div className="text-sm font-bold text-[#ea690c]">
+                                                                    {formatCurrency(record.totalAmount)}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                                                <div className="text-sm font-bold text-green-600">
+                                                                    {formatCurrency(record.amountDelivered)}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-4 whitespace-nowrap">
+                                                                <Badge className={record.payed
+                                                                    ? "bg-green-100 text-green-800 border-green-200 text-xs"
+                                                                    : "bg-red-100 text-red-800 border-red-200 text-xs"}>
+                                                                    {record.payed ? "Paid" : "Unpaid"}
+                                                                </Badge>
+                                                            </td>
+                                                        </tr>
 
-                {/* Pagination */}
-                {!loading && pagination.totalPages > 1 && (
-                    <div className="flex items-center justify-between pt-2">
-                        <p className="text-sm text-gray-500">
-                            {pagination.page * pagination.size + 1}–{Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)} of {pagination.totalElements}
-                        </p>
-                        <div className="flex gap-2">
-                            <Button
-                                onClick={() => fetchUnpaid(pagination.page - 1)}
-                                disabled={pagination.page === 0 || loading}
-                                variant="outline" size="sm"
-                            >Previous</Button>
-                            <Button
-                                onClick={() => fetchUnpaid(pagination.page + 1)}
-                                disabled={pagination.page >= pagination.totalPages - 1 || loading}
-                                variant="outline" size="sm"
-                            >Next</Button>
-                        </div>
-                    </div>
-                )}
+                                                        {/* Expanded parcels */}
+                                                        {isExpanded && (
+                                                            <tr>
+                                                                <td colSpan={6} className="px-0 py-0">
+                                                                    <div className="bg-gray-50 border-t border-gray-200">
+                                                                        <table className="w-full">
+                                                                            <thead className="bg-gray-100">
+                                                                                <tr>
+                                                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Recipient</th>
+                                                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Phone</th>
+                                                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Address</th>
+                                                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Inbound Cost</th>
+                                                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Payment</th>
+                                                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Status</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {allParcels.map((parcel, idx) => {
+                                                                                    let statusLabel = "Pending";
+                                                                                    let statusClass = "bg-yellow-100 text-yellow-800 border-yellow-200";
+                                                                                    if (parcel.returned) { statusLabel = "Returned"; statusClass = "bg-red-100 text-red-800 border-red-200"; }
+                                                                                    else if (parcel.delivered) { statusLabel = "Delivered"; statusClass = "bg-green-100 text-green-800 border-green-200"; }
+                                                                                    else if (parcel.pickedUp) { statusLabel = "Picked Up"; statusClass = "bg-blue-100 text-blue-800 border-blue-200"; }
+                                                                                    return (
+                                                                                    <tr
+                                                                                        key={parcel.parcelId ?? idx}
+                                                                                        className={`${idx !== allParcels.length - 1 ? "border-b border-gray-200" : ""}`}
+                                                                                    >
+                                                                                        <td className="px-4 py-3">
+                                                                                            <div className="text-sm font-semibold text-neutral-800">{parcel.receiverName || "N/A"}</div>
+                                                                                            {parcel.senderName && (
+                                                                                                <div className="text-xs text-gray-500 truncate max-w-[150px]">From: {parcel.senderName}</div>
+                                                                                            )}
+                                                                                        </td>
+                                                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                                                            {parcel.receiverPhoneNumber ? (
+                                                                                                <a href={`tel:${parcel.receiverPhoneNumber}`} className="text-sm text-[#ea690c] hover:underline font-medium">
+                                                                                                    {formatPhoneNumber(parcel.receiverPhoneNumber)}
+                                                                                                </a>
+                                                                                            ) : <span className="text-sm text-gray-400">N/A</span>}
+                                                                                        </td>
+                                                                                        <td className="px-4 py-3">
+                                                                                            {parcel.receiverAddress ? (
+                                                                                                <div className="flex items-start gap-1">
+                                                                                                    <MapPinIcon className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                                                                                    <span className="text-sm text-neutral-700 truncate max-w-[200px]" title={parcel.receiverAddress}>
+                                                                                                        {parcel.receiverAddress}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            ) : <span className="text-gray-400">N/A</span>}
+                                                                                        </td>
+                                                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                                                            <div className="text-sm font-bold text-[#ea690c]">{formatCurrency(parcel.inboundCost)}</div>
+                                                                                        </td>
+                                                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                                                            <Badge className={`${parcel.paymentMethod === "cash" ? "bg-green-100 text-green-800" : parcel.paymentMethod === "momo" ? "bg-purple-100 text-purple-800" : "bg-gray-100 text-gray-800"} border text-xs`}>
+                                                                                                {parcel.paymentMethod || "N/A"}
+                                                                                            </Badge>
+                                                                                        </td>
+                                                                                        <td className="px-4 py-3 whitespace-nowrap">
+                                                                                            <Badge className={`${statusClass} border text-xs`}>{statusLabel}</Badge>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                    );
+                                                                                })}
+                                                                            </tbody>
+                                                                        </table>
+
+                                                                        {/* Failed parcels */}
+                                                                        {failedParcels.length > 0 && (
+                                                                            <div className="border-t-2 border-red-300 bg-red-50 px-4 py-3">
+                                                                                <div className="flex items-center justify-between mb-2">
+                                                                                    <span className="text-sm font-semibold text-red-800">
+                                                                                        Returned parcels: {failedParcels.length}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <table className="w-full text-xs">
+                                                                                    <thead className="bg-red-200 border-b-2 border-red-400">
+                                                                                        <tr>
+                                                                                            <th className="px-2 py-1.5 text-left font-semibold text-red-900">Recipient</th>
+                                                                                            <th className="px-2 py-1.5 text-left font-semibold text-red-900">Phone</th>
+                                                                                            <th className="px-2 py-1.5 text-left font-semibold text-red-900">Address</th>
+                                                                                            <th className="px-2 py-1.5 text-right font-semibold text-red-900">Inbound Cost</th>
+                                                                                            <th className="px-2 py-1.5 text-center font-semibold text-red-900">Status</th>
+                                                                                        </tr>
+                                                                                    </thead>
+                                                                                    <tbody>
+                                                                                        {failedParcels.map((parcel, idx) => (
+                                                                                            <tr key={parcel.parcelId ?? idx} className="border-b border-red-200 bg-red-50/80 hover:bg-red-100/80">
+                                                                                                <td className="px-2 py-1.5 text-red-900">{parcel.receiverName || "N/A"}</td>
+                                                                                                <td className="px-2 py-1.5 text-red-900">{parcel.receiverPhoneNumber ? formatPhoneNumber(parcel.receiverPhoneNumber) : "N/A"}</td>
+                                                                                                <td className="px-2 py-1.5 text-red-900 truncate max-w-[140px]">{parcel.receiverAddress || "N/A"}</td>
+                                                                                                <td className="px-2 py-1.5 text-right text-red-900 font-medium">{formatCurrency(parcel.inboundCost)}</td>
+                                                                                                <td className="px-2 py-1.5 text-center">
+                                                                                                    <Badge className="bg-red-600 text-white border-0 text-[10px] font-semibold">Returned</Badge>
+                                                                                                </td>
+                                                                                            </tr>
+                                                                                        ))}
+                                                                                    </tbody>
+                                                                                </table>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* Pagination */}
+                            {!loading && pagination.totalPages > 1 && (
+                                <div className="px-6 py-4 border-t border-[#d1d1d1] flex items-center justify-between">
+                                    <div className="text-sm text-neutral-700">
+                                        Showing {pagination.page * pagination.size + 1} to {Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)} of {pagination.totalElements}
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <Button onClick={() => fetchUnpaid(pagination.page - 1)} disabled={pagination.page === 0 || loading} variant="outline" size="sm" className="border border-[#d1d1d1]">Previous</Button>
+                                        <Button onClick={() => fetchUnpaid(pagination.page + 1)} disabled={pagination.page >= pagination.totalPages - 1 || loading} variant="outline" size="sm" className="border border-[#d1d1d1]">Next</Button>
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </main>
             </div>
+
+            {/* Confirm modal */}
+            {showConfirmModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <Card className="w-full max-w-2xl rounded-lg border border-[#d1d1d1] bg-white shadow-lg">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="inline-flex items-center gap-2">
+                                    <BadgeCheck className="w-6 h-6 text-[#ea690c]" />
+                                    <h2 className="font-semibold text-[#ea690c] text-lg">Confirm Payment</h2>
+                                </div>
+                                <button onClick={() => setShowConfirmModal(false)} className="text-[#9a9a9a] hover:text-neutral-800">
+                                    <XIcon className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="flex flex-col gap-6">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                    <p className="text-sm font-semibold text-blue-900 mb-2">
+                                        You are about to mark {selectedIds.size} driver(s) as paid
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-4 mt-2">
+                                        <p className="text-sm text-blue-800">Total Parcels: <span className="font-bold">{totalParcels}</span></p>
+                                        <p className="text-sm text-blue-800">Total Amount: <span className="font-bold">{formatCurrency(totalOwed)}</span></p>
+                                    </div>
+                                </div>
+
+                                <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 sticky top-0">
+                                            <tr>
+                                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Driver</th>
+                                                <th className="px-3 py-2 text-left font-semibold text-gray-700">Parcels</th>
+                                                <th className="px-3 py-2 text-right font-semibold text-gray-700">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {selectedRecords.map(r => (
+                                                <tr key={r.id} className="border-b border-gray-100">
+                                                    <td className="px-3 py-2 font-semibold">{r.riderName}</td>
+                                                    <td className="px-3 py-2">{r.parcels?.length ?? 0} parcels</td>
+                                                    <td className="px-3 py-2 text-right font-semibold">{formatCurrency(r.totalAmount)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div className="flex gap-3 pt-4">
+                                    <Button variant="outline" onClick={() => setShowConfirmModal(false)} className="flex-1 border border-[#d1d1d1]">Cancel</Button>
+                                    <Button
+                                        onClick={async () => {
+                                            for (const r of selectedRecords) {
+                                                await handleMarkPaid(r);
+                                            }
+                                        }}
+                                        disabled={!!payingId}
+                                        className="flex-1 bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                                    >
+                                        {payingId
+                                            ? <><Loader className="w-4 h-4 animate-spin mr-2" />Processing...</>
+                                            : "Confirm Payment"}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 };

@@ -76,9 +76,12 @@ class CallCenterService {
    * Get parcels that have not yet been called by the call center.
    * Backend reference: GET /api-call-center/parcels/uncalled
    */
-  async getUncalledParcels(): Promise<ApiResponse> {
+  async getUncalledParcels(officeId?: string): Promise<ApiResponse> {
     try {
-      const response = await this.apiClient.get("/parcels/uncalled");
+      const params = new URLSearchParams();
+      if (officeId) params.append('officeId', officeId);
+      const query = params.toString() ? `?${params.toString()}` : '';
+      const response = await this.apiClient.get(`/parcels/uncalled${query}`);
       return {
         success: true,
         message: "Uncalled parcels retrieved successfully",

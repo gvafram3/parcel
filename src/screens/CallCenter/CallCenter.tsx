@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
     PhoneIcon, CheckCircleIcon, Clock, Loader, X, Package,
-    PhoneCall, MessageSquare, PhoneOff, Truck, PieChart,
+    PhoneCall, MessageSquare, PhoneOff, Truck, PieChart, BuildingIcon,
 } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { Label } from "../../components/ui/label";
 import { useStation } from "../../contexts/StationContext";
+import { useLocation } from "../../contexts/LocationContext";
 import { formatDate } from "../../utils/dataHelpers";
 import { formatPhoneNumber } from "../../utils/dataHelpers";
 import { useToast } from "../../components/ui/toast";
@@ -51,7 +52,22 @@ const OUTCOME_OPTIONS: { value: CallOutcome; label: string; color: string }[] = 
 
 export const CallCenter: React.FC<CallCenterProps> = ({ view = "follow-up" }) => {
     const { currentUser } = useStation();
+    const { stations } = useLocation();
     const { showToast } = useToast();
+
+    // Station selector — auto-select user's own office or first station
+    const [selectedOfficeId, setSelectedOfficeId] = useState<string>("");
+
+    // Auto-select on mount: prefer user's own office, else first station
+    useEffect(() => {
+        if (selectedOfficeId) return; // already set
+        const userOfficeId = (currentUser as any)?.office?.id || (currentUser as any)?.stationId;
+        if (userOfficeId) {
+            setSelectedOfficeId(userOfficeId);
+        } else if (stations.length > 0) {
+            setSelectedOfficeId(stations[0].id);
+        }
+    }, [stations, currentUser, selectedOfficeId]);
 
     // Uncalled parcels queue
     const [parcels, setParcels] = useState<UncalledParcel[]>([]);
@@ -71,7 +87,7 @@ export const CallCenter: React.FC<CallCenterProps> = ({ view = "follow-up" }) =>
     const fetchParcels = useCallback(async (page = 0) => {
         setLoading(true);
         try {
-            const response = await callCenterService.getUncalledParcels();
+            const response = await callCenterService.getUncalledParcels(selectedOfficeId || undefined);
             if (response.success && response.data) {
                 const data = response.data as any;
                 const content: UncalledParcel[] = Array.isArray(data.content) ? data.content : Array.isArray(data) ? data : [];
@@ -92,7 +108,7 @@ export const CallCenter: React.FC<CallCenterProps> = ({ view = "follow-up" }) =>
         } finally {
             setLoading(false);
         }
-    }, [showToast]);
+    }, [showToast, selectedOfficeId]);
 
     const fetchStats = useCallback(async () => {
         setStatsLoading(true);
@@ -107,9 +123,10 @@ export const CallCenter: React.FC<CallCenterProps> = ({ view = "follow-up" }) =>
     }, []);
 
     useEffect(() => {
+        if (!selectedOfficeId) return;
         fetchParcels(0);
         fetchStats();
-    }, [fetchParcels, fetchStats]);
+    }, [fetchParcels, fetchStats, selectedOfficeId]);
 
     const openOutcomeModal = (parcel: UncalledParcel) => {
         setOutcomeParcel(parcel);
@@ -150,10 +167,28 @@ export const CallCenter: React.FC<CallCenterProps> = ({ view = "follow-up" }) =>
         <div className="w-full">
             <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <header className="space-y-1">
-                    <h1 className="text-xl font-bold text-neutral-800">Call Center</h1>
-                    <p className="text-xs text-[#5d5d5d]">
-                        Parcels awaiting call center follow-up — record outcomes after speaking with recipients.
-                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                            <h1 className="text-xl font-bold text-neutral-800">Call Center</h1>
+                            <p className="text-xs text-[#5d5d5d]">
+                                Parcels awaiting call center follow-up — record outcomes after speaking with recipients.
+                            </p>
+                        </div>
+                        {/* Station selector */}
+                        <div className="flex items-center gap-2">
+                            <BuildingIcon className="w-4 h-4 text-[#5d5d5d] flex-shrink-0" />
+                            <select
+                                value={selectedOfficeId}
+                                onChange={e => setSelectedOfficeId(e.target.value)}
+                                className="px-3 py-2 border border-[#d1d1d1] rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#ea690c] min-w-[180px]"
+                            >
+                                <option value="">All Stations</option>
+                                {stations.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
                 </header>
 
                 <main className="flex-1 space-y-6">
