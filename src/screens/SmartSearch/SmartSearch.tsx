@@ -367,18 +367,6 @@ export const SmartSearch = (): JSX.Element => {
                                 <div>
                                     <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Costs</h4>
                                     <div className="grid grid-cols-2 gap-4">
-                                        {selectedParcel.pickUpCost != null && (
-                                            <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Pick Up Cost</p>
-                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.pickUpCost.toFixed(2)}</p>
-                                            </div>
-                                        )}
-                                        {selectedParcel.deliveryCost != null && (
-                                            <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Delivery Cost</p>
-                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.deliveryCost.toFixed(2)}</p>
-                                            </div>
-                                        )}
                                         {selectedParcel.inboundCost != null && (
                                             <div>
                                                 <p className="text-xs text-[#5d5d5d] mb-1">Inbound Cost</p>
