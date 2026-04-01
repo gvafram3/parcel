@@ -959,6 +959,8 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Phone</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Location</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Amount</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Delivery Fee</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Inbound Fee</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Payment</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Actions</th>
                                         </tr>
@@ -1011,6 +1013,16 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
                                               </div>
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap">
+                                              <div className="text-sm font-semibold text-green-600">
+                                                {formatCurrency(parcel.deliveryCost || 0)}
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                              <div className="text-sm font-semibold text-blue-600">
+                                                {formatCurrency(parcel.inboundCost || 0)}
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
                                               <Badge className={`${parcel.paymentMethod === 'cash' ? 'bg-green-100 text-green-800' : parcel.paymentMethod === 'momo' ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-800'} border text-xs`}>
                                                 {parcel.paymentMethod || 'N/A'}
                                               </Badge>
@@ -1030,6 +1042,21 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
                                           </tr>
                                         ))}
                                       </tbody>
+                                      <tfoot className="bg-gray-100 border-t-2 border-gray-300">
+                                        <tr>
+                                          <td colSpan={3} className="px-4 py-2.5 text-xs font-semibold text-gray-700">Totals</td>
+                                          <td className="px-4 py-2.5 text-sm font-bold text-[#ea690c]">
+                                            {formatCurrency(group.deliveredParcels.reduce((s, p) => s + (p.parcelAmount || 0), 0))}
+                                          </td>
+                                          <td className="px-4 py-2.5 text-sm font-bold text-green-600">
+                                            {formatCurrency(group.deliveredParcels.reduce((s, p) => s + (p.deliveryCost || 0), 0))}
+                                          </td>
+                                          <td className="px-4 py-2.5 text-sm font-bold text-blue-600">
+                                            {formatCurrency(group.deliveredParcels.reduce((s, p) => s + (p.inboundCost || 0), 0))}
+                                          </td>
+                                          <td colSpan={2} />
+                                        </tr>
+                                      </tfoot>
                                     </table>
 
                                     {/* Failed (returned) parcels and driver's money (failed fees) */}

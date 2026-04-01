@@ -46,6 +46,7 @@ export const ParcelSearch = (): JSX.Element => {
     const [deliveryCostInput, setDeliveryCostInput] = useState("");
     const [savingDelivery, setSavingDelivery] = useState(false);
     const [showActionMenu, setShowActionMenu] = useState(false);
+    const [showCosts, setShowCosts] = useState(false);
     const actionMenuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -709,6 +710,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                                             setSelectedParcel(parcel);
                                                                             setNewShelfLocation(parcel.shelfId || parcel.shelfNumber || "");
                                                                             setEditingShelf(false);
+                                                                            setShowCosts(false);
                                                                         }}
                                                                         variant="outline"
                                                                         size="sm"
@@ -1078,27 +1080,51 @@ export const ParcelSearch = (): JSX.Element => {
                                     </div>
                                 )}
 
-                                {/* Costs */}
+                                {/* Inbound & Storage — always visible */}
                                 <div>
                                     <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Costs</h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         {selectedParcel.inboundCost !== undefined && (
                                             <div>
                                                 <p className="text-xs text-[#5d5d5d] mb-1">Inbound Cost</p>
-                                                <p className="font-semibold text-[#ea690c] text-sm">
-                                                    GHC {selectedParcel.inboundCost.toFixed(2)}
-                                                </p>
+                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.inboundCost.toFixed(2)}</p>
                                             </div>
                                         )}
                                         {selectedParcel.storageCost !== undefined && (
                                             <div>
                                                 <p className="text-xs text-[#5d5d5d] mb-1">Storage Cost</p>
-                                                <p className="font-semibold text-[#ea690c] text-sm">
-                                                    GHC {selectedParcel.storageCost.toFixed(2)}
-                                                </p>
+                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.storageCost.toFixed(2)}</p>
                                             </div>
                                         )}
                                     </div>
+                                </div>
+
+                                {/* Delivery & Pickup — collapsible */}
+                                <div className="border border-[#d1d1d1] rounded-lg overflow-hidden">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCosts(prev => !prev)}
+                                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                                    >
+                                        <h4 className="text-sm font-semibold text-neutral-800">Delivery & Pickup Fees</h4>
+                                        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showCosts ? "rotate-180" : ""}`} />
+                                    </button>
+                                    {showCosts && (
+                                        <div className="grid grid-cols-2 gap-4 p-4">
+                                            {selectedParcel.deliveryCost !== undefined && (
+                                                <div>
+                                                    <p className="text-xs text-[#5d5d5d] mb-1">Delivery Fee</p>
+                                                    <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.deliveryCost.toFixed(2)}</p>
+                                                </div>
+                                            )}
+                                            {selectedParcel.pickUpCost !== undefined && (
+                                                <div>
+                                                    <p className="text-xs text-[#5d5d5d] mb-1">Pickup Cost</p>
+                                                    <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.pickUpCost.toFixed(2)}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Item Description */}
