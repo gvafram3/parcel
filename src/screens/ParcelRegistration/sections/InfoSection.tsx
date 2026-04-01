@@ -23,6 +23,7 @@ interface ParcelFormData {
     senderPhone?: string;
     recipientName: string;
     recipientPhone: string;
+    alternativePhone?: string;
     receiverAddress?: string;
     itemDescription?: string;
     shelfLocation: string; // Stores shelf ID
@@ -121,6 +122,7 @@ export const InfoSection = ({
     const [senderPhone, setSenderPhone] = useState("");
     const [recipientName, setRecipientName] = useState("");
     const [phoneNumber, setPhoneNumber] = useState("");
+    const [alternativePhone, setAlternativePhone] = useState("");
     const [receiverAddress, setReceiverAddress] = useState("");
     const [itemDescription, setItemDescription] = useState("");
     const [shelf, setShelf] = useState("");
@@ -185,6 +187,7 @@ export const InfoSection = ({
             // Successful save completed - clear all form fields
             setRecipientName("");
             setPhoneNumber("");
+            setAlternativePhone("");
             setReceiverAddress("");
             setSenderName("");
             setSenderPhone("");
@@ -289,6 +292,7 @@ export const InfoSection = ({
             senderPhone: senderPhone.trim() || undefined,
             recipientName: recipientName.trim(),
             recipientPhone: phoneNumber.trim(),
+            alternativePhone: alternativePhone.trim() || undefined,
             receiverAddress: receiverAddress.trim() || undefined,
             itemDescription: itemDescription.trim() || undefined,
             shelfLocation: shelf, // Store shelf ID
@@ -335,6 +339,7 @@ export const InfoSection = ({
         // Clear only parcel information, keep driver locked
         setRecipientName("");
         setPhoneNumber("");
+        setAlternativePhone("");
         setReceiverAddress("");
         setSenderName("");
         setSenderPhone("");
@@ -370,6 +375,7 @@ export const InfoSection = ({
             senderPhone: senderPhone.trim() || undefined,
             recipientName: recipientName.trim(),
             recipientPhone: phoneNumber.trim(),
+            alternativePhone: alternativePhone.trim() || undefined,
             receiverAddress: receiverAddress.trim() || undefined,
             itemDescription: itemDescription.trim() || undefined,
             shelfLocation: shelf, // Store shelf ID
@@ -413,6 +419,7 @@ export const InfoSection = ({
         onSaveAll(parcelData, onParcelSaveSuccess);
         setRecipientName("");
         setPhoneNumber("");
+        setAlternativePhone("");
         setReceiverAddress("");
         setSenderName("");
         setSenderPhone("");
@@ -708,6 +715,28 @@ export const InfoSection = ({
                                     {phoneError && (
                                         <p className="text-xs text-[#e22420] mt-1">{phoneError}</p>
                                     )}
+                                </div>
+
+                                <div className="flex flex-col gap-2">
+                                    <Label className="text-sm font-semibold text-neutral-800">
+                                        Alternative Phone
+                                    </Label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
+                                            +233
+                                        </span>
+                                        <Input
+                                            type="tel"
+                                            value={alternativePhone.startsWith("+233") ? alternativePhone.substring(4) : alternativePhone}
+                                            onChange={(e) => {
+                                                const digits = e.target.value.replace(/\D/g, "").substring(0, 10);
+                                                setAlternativePhone(digits ? normalizePhoneNumber(digits) : "");
+                                            }}
+                                            placeholder="0XXXXXXXXX or XXXXXXXXX"
+                                            className="pl-14 pr-3 w-full rounded-lg border border-[#d1d1d1] bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c]"
+                                            maxLength={10}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -1,8 +1,7 @@
 import { useState } from "react";
 import {
-    SearchIcon, PhoneIcon, PackageIcon, CheckCircleIcon,
-    ClockIcon, MapPinIcon, UserIcon, BanknoteIcon,
-    Loader2Icon, AlertCircleIcon, Home, X, Loader,
+    SearchIcon, PhoneIcon, PackageIcon,
+    MapPinIcon, Loader2Icon, AlertCircleIcon, Home, X, Loader,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -167,83 +166,99 @@ export const SmartSearch = () => {
                             </button>
                         </div>
 
-                        {parcels.map(p => {
-                            const canRequestDelivery = !p.delivered && !p.parcelAssigned && !p.homeDelivery;
-                            const hasDeliveryPending = !p.delivered && !p.parcelAssigned && p.homeDelivery;
+                        <Card className="border border-[#d1d1d1] bg-white overflow-hidden">
+                            <CardContent className="p-0">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full divide-y divide-[#d1d1d1] text-sm">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Recipient</th>
+                                                <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Sender</th>
+                                                <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Shelf</th>
+                                                <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Amount</th>
+                                                <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Status</th>
+                                                <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Updated</th>
+                                                <th className="py-3 px-4 text-center text-xs font-semibold text-neutral-800 uppercase tracking-wider">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-[#d1d1d1]">
+                                            {parcels.map(p => {
+                                                const canRequestDelivery = !p.delivered && !p.parcelAssigned && !p.homeDelivery;
+                                                const hasDeliveryPending = !p.delivered && !p.parcelAssigned && p.homeDelivery;
+                                                const amount = getAmountToPay(p);
 
-                            return (
-                                <Card key={p.parcelId} className="border border-[#d1d1d1] bg-white">
-                                    <CardContent className="p-4">
-                                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                                            <div className="flex-1 space-y-2">
-                                                {/* Name + status */}
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="font-semibold text-neutral-800">{p.receiverName || "—"}</span>
-                                                    {p.delivered ? (
-                                                        <Badge className="bg-green-100 text-green-800 border-green-200 text-xs flex items-center gap-1">
-                                                            <CheckCircleIcon className="w-3 h-3" /> Delivered
-                                                        </Badge>
-                                                    ) : (
-                                                        <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-xs flex items-center gap-1">
-                                                            <ClockIcon className="w-3 h-3" /> In Progress
-                                                        </Badge>
-                                                    )}
-                                                    {p.homeDelivery && (
-                                                        <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs flex items-center gap-1">
-                                                            <Home className="w-3 h-3" /> Home Delivery
-                                                        </Badge>
-                                                    )}
-                                                </div>
-
-                                                {p.parcelDescription && <p className="text-sm text-gray-600">{p.parcelDescription}</p>}
-
-                                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-                                                    {p.shelfName && (
-                                                        <span className="flex items-center gap-1"><PackageIcon className="w-3.5 h-3.5" /> Shelf: {p.shelfName}</span>
-                                                    )}
-                                                    {p.senderName && (
-                                                        <span className="flex items-center gap-1"><UserIcon className="w-3.5 h-3.5" /> From: {p.senderName}</span>
-                                                    )}
-                                                    {p.receiverAddress && (
-                                                        <span className="flex items-center gap-1"><MapPinIcon className="w-3.5 h-3.5" /> {p.receiverAddress}</span>
-                                                    )}
-                                                    {p.updatedAt && (
-                                                        <span>Updated: {formatDate(p.updatedAt)}</span>
-                                                    )}
-                                                </div>
-
-                                                {/* Amount */}
-                                                {getAmountToPay(p) != null && (
-                                                    <div className="flex items-center gap-1.5 text-sm">
-                                                        <BanknoteIcon className="w-4 h-4 text-[#ea690c]" />
-                                                        <span className="font-bold text-[#ea690c]">{formatCurrency(getAmountToPay(p))}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Actions */}
-                                            <div className="flex flex-col gap-2 flex-shrink-0">
-                                                {canRequestDelivery && (
-                                                    <Button
-                                                        onClick={() => openDeliveryModal(p)}
-                                                        size="sm"
-                                                        className="bg-[#ea690c] text-white hover:bg-[#d45d0a] text-xs h-8"
-                                                    >
-                                                        <Home className="w-3.5 h-3.5 mr-1.5" />
-                                                        Request Delivery
-                                                    </Button>
-                                                )}
-                                                {hasDeliveryPending && (
-                                                    <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-xs text-center px-3 py-1.5">
-                                                        Delivery Requested
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            );
-                        })}
+                                                return (
+                                                    <tr key={p.parcelId} className="hover:bg-gray-50">
+                                                        <td className="py-3 px-4">
+                                                            <p className="font-semibold text-neutral-800">{p.receiverName || "—"}</p>
+                                                            {p.receiverAddress && (
+                                                                <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5 truncate max-w-[160px]">
+                                                                    <MapPinIcon className="w-3 h-3 flex-shrink-0" />{p.receiverAddress}
+                                                                </p>
+                                                            )}
+                                                            {p.parcelDescription && (
+                                                                <p className="text-xs text-gray-400 truncate max-w-[160px]">{p.parcelDescription}</p>
+                                                            )}
+                                                        </td>
+                                                        <td className="py-3 px-4">
+                                                            <p className="text-sm text-neutral-700">{p.senderName || "—"}</p>
+                                                        </td>
+                                                        <td className="py-3 px-4 text-sm text-gray-600">
+                                                            {p.shelfName || "—"}
+                                                        </td>
+                                                        <td className="py-3 px-4">
+                                                            {amount != null
+                                                                ? <span className="font-bold text-[#ea690c]">{formatCurrency(amount)}</span>
+                                                                : <span className="text-gray-400">—</span>
+                                                            }
+                                                        </td>
+                                                        <td className="py-3 px-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                {p.delivered ? (
+                                                                    <Badge className="bg-green-100 text-green-800 border-green-200 text-xs w-fit">Delivered</Badge>
+                                                                ) : (
+                                                                    <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-xs w-fit">In Progress</Badge>
+                                                                )}
+                                                                {p.homeDelivery && (
+                                                                    <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs w-fit flex items-center gap-1">
+                                                                        <Home className="w-3 h-3" /> Home Delivery
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-3 px-4 text-xs text-gray-500 whitespace-nowrap">
+                                                            {formatDate(p.updatedAt ?? p.createdAt)}
+                                                        </td>
+                                                        <td className="py-3 px-4 text-center">
+                                                            {canRequestDelivery && (
+                                                                <Button
+                                                                    onClick={() => openDeliveryModal(p)}
+                                                                    size="sm"
+                                                                    className="bg-[#ea690c] text-white hover:bg-[#d45d0a] text-xs h-8"
+                                                                >
+                                                                    <Home className="w-3.5 h-3.5 mr-1.5" />
+                                                                    Request Delivery
+                                                                </Button>
+                                                            )}
+                                                            {hasDeliveryPending && (
+                                                                <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-xs px-3 py-1.5">
+                                                                    Delivery Requested
+                                                                </Badge>
+                                                            )}
+                                                            {p.delivered && (
+                                                                <Badge className="bg-green-50 text-green-700 border-green-200 text-xs px-3 py-1.5">
+                                                                    Delivered
+                                                                </Badge>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </div>
                 )}
             </div>

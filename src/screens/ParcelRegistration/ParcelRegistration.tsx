@@ -401,6 +401,7 @@ interface ParcelFormData {
   senderPhone?: string;
   recipientName: string;
   recipientPhone: string;
+  alternativePhone?: string;
   receiverAddress?: string;
   itemDescription?: string;
   shelfLocation: string; // Stores shelf ID
@@ -578,7 +579,8 @@ export const ParcelRegistration = (): JSX.Element => {
           senderPhoneNumber: parcelData.senderPhone || "", // API requires this field
           receiverName: parcelData.recipientName,
           receiverAddress: parcelData.receiverAddress || undefined,
-          recieverPhoneNumber: parcelData.recipientPhone, // Note: API has typo "reciever"
+          recieverPhoneNumber: parcelData.recipientPhone,
+          alternativePhoneNumber: parcelData.alternativePhone || undefined,
           parcelDescription: parcelData.itemDescription || undefined,
           driverName: parcelData.driverName || "",
           driverPhoneNumber: parcelData.driverPhone || "",
