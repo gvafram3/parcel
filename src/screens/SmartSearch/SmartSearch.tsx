@@ -6,7 +6,7 @@ import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
 import { searchParcelsByPhone, type CustomerParcel } from "../../services/customerService";
 import frontdeskService from "../../services/frontdeskService";
-import { formatPhoneNumber } from "../../utils/dataHelpers";
+import { formatPhoneNumber, validatePhoneNumber, normalizePhoneNumber } from "../../utils/dataHelpers";
 import { useToast } from "../../components/ui/toast";
 
 type Tab = "all" | "pending" | "pickedup" | "delivered";
@@ -46,6 +46,10 @@ export const SmartSearch = (): JSX.Element => {
     const [showDeliveryFees, setShowDeliveryFees] = useState(false);
     const [activeTab, setActiveTab]     = useState<Tab>("all");
     const [markPickupLoading, setMarkPickupLoading] = useState(false);
+    const [showPickupModal, setShowPickupModal] = useState(false);
+    const [pickupIsOwner, setPickupIsOwner] = useState(true);
+    const [pickupName, setPickupName] = useState("");
+    const [pickupPhone, setPickupPhone] = useState("");
 
     const handleSearch = async (e?: React.FormEvent) => {
         e?.preventDefault();
@@ -73,15 +77,15 @@ export const SmartSearch = (): JSX.Element => {
         if (!selectedParcel) return;
         setMarkPickupLoading(true);
         try {
-            const res = await frontdeskService.updateParcel(selectedParcel.parcelId, {
-                pickedUp: true,
-                hasCalled: true,
-            });
+            const name  = pickupIsOwner ? (selectedParcel.receiverName || "") : pickupName.trim();
+            const phone = pickupIsOwner ? (selectedParcel.recieverPhoneNumber || "") : normalizePhoneNumber(pickupPhone.trim());
+            const res = await frontdeskService.markParcelPickedUp(selectedParcel.parcelId, name || undefined, phone || undefined);
             if (res.success) {
                 showToast("Parcel marked as picked up", "success");
                 const updated = { ...selectedParcel, pickedUp: true, hasCalled: true } as any;
                 setParcels(prev => prev.map(p => p.parcelId === selectedParcel.parcelId ? updated : p));
                 setSelectedParcel(updated);
+                setShowPickupModal(false);
             } else {
                 showToast(res.message || "Failed to update parcel", "error");
             }
@@ -507,13 +511,10 @@ export const SmartSearch = (): JSX.Element => {
                                     </div>
                                     {!(selectedParcel as any).pickedUp && (
                                         <Button
-                                            onClick={handleMarkPickedUp}
-                                            disabled={markPickupLoading}
+                                            onClick={() => { setPickupIsOwner(true); setPickupName(""); setPickupPhone(""); setShowPickupModal(true); }}
                                             className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
                                         >
-                                            {markPickupLoading
-                                                ? <><Loader className="w-4 h-4 animate-spin mr-2" />Updating...</>
-                                                : <><CheckCircle className="w-4 h-4 mr-2" />Mark Picked Up</>}
+                                            <CheckCircle className="w-4 h-4 mr-2" />Mark Picked Up
                                         </Button>
                                     )}
                                 </div>
@@ -535,6 +536,79 @@ export const SmartSearch = (): JSX.Element => {
                                     )}
                                     <Button onClick={() => setSelectedParcel(null)} variant="outline" className="flex-1 border border-[#d1d1d1]">
                                         Close
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
+            {/* Pickup Modal */}
+            {showPickupModal && selectedParcel && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-xl">
+                        <CardContent className="p-6">
+                            <div className="flex items-start justify-between mb-4 pb-4 border-b border-[#d1d1d1]">
+                                <div>
+                                    <h3 className="text-base font-bold text-neutral-800">Mark as Picked Up</h3>
+                                    <p className="text-xs text-[#5d5d5d] mt-0.5">{selectedParcel.receiverName || selectedParcel.parcelId}</p>
+                                </div>
+                                <button onClick={() => setShowPickupModal(false)} className="text-gray-400 hover:text-neutral-800 p-1 hover:bg-gray-100 rounded">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <label className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-colors ${pickupIsOwner ? "border-[#ea690c] bg-orange-50" : "border-[#d1d1d1] hover:bg-gray-50"}`}>
+                                        <input type="radio" checked={pickupIsOwner} onChange={() => setPickupIsOwner(true)} className="w-4 h-4 text-[#ea690c]" />
+                                        <div>
+                                            <p className="text-sm font-medium text-neutral-800">Owner</p>
+                                            <p className="text-xs text-gray-400">Receiver picked up</p>
+                                        </div>
+                                    </label>
+                                    <label className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-colors ${!pickupIsOwner ? "border-[#ea690c] bg-orange-50" : "border-[#d1d1d1] hover:bg-gray-50"}`}>
+                                        <input type="radio" checked={!pickupIsOwner} onChange={() => setPickupIsOwner(false)} className="w-4 h-4 text-[#ea690c]" />
+                                        <div>
+                                            <p className="text-sm font-medium text-neutral-800">Someone Else</p>
+                                            <p className="text-xs text-gray-400">Third party pickup</p>
+                                        </div>
+                                    </label>
+                                </div>
+                                {pickupIsOwner && (
+                                    <div className="bg-gray-50 rounded-lg p-3 border border-[#f0f0f0] space-y-1 text-xs text-gray-600">
+                                        <p>Name: <span className="font-medium text-neutral-800">{selectedParcel.receiverName || "N/A"}</span></p>
+                                        <p>Phone: <span className="font-medium text-neutral-800">{selectedParcel.recieverPhoneNumber || "N/A"}</span></p>
+                                    </div>
+                                )}
+                                {!pickupIsOwner && (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-neutral-800 mb-1.5">Full Name <span className="text-[#e22420]">*</span></label>
+                                            <Input value={pickupName} onChange={e => setPickupName(e.target.value)} placeholder="Name of person picking up" className="border-[#d1d1d1] focus:border-[#ea690c]" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-neutral-800 mb-1.5">Phone Number <span className="text-[#e22420]">*</span></label>
+                                            <Input
+                                                value={pickupPhone}
+                                                onChange={e => setPickupPhone(e.target.value)}
+                                                placeholder="e.g. 0541234567"
+                                                className={`border focus:border-[#ea690c] ${pickupPhone && !validatePhoneNumber(pickupPhone) ? "border-red-400" : "border-[#d1d1d1]"}`}
+                                            />
+                                            {pickupPhone && !validatePhoneNumber(pickupPhone) && (
+                                                <p className="text-xs text-red-500 mt-1">Enter a valid Ghana phone number (e.g. 0541234567)</p>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                                <div className="flex gap-3 pt-1">
+                                    <Button onClick={() => setShowPickupModal(false)} variant="outline" className="flex-1 border-[#d1d1d1]" disabled={markPickupLoading}>Cancel</Button>
+                                    <Button
+                                        onClick={handleMarkPickedUp}
+                                        disabled={markPickupLoading || (!pickupIsOwner && (!pickupName.trim() || !validatePhoneNumber(pickupPhone)))}
+                                        className="flex-1 bg-[#ea690c] text-white hover:bg-[#d45d0a] disabled:opacity-50"
+                                    >
+                                        {markPickupLoading ? <><Loader className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Confirm Pickup"}
                                     </Button>
                                 </div>
                             </div>
