@@ -132,6 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     const navigate = useNavigate();
     const { currentUser, logout } = useStation();
     const [showAccountMenu, setShowAccountMenu] = useState(false);
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
     const routeInfo = routeTitles[location.pathname] || {
@@ -165,6 +166,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     };
 
     return (
+        <>
         <nav className="sticky top-0 z-10 border-b border-[#d1d1d1] bg-white">
             <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
                 {/* Left Section - Menu and Title */}
@@ -333,9 +335,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                     <div className="border-t border-[#d1d1d1] p-2">
                                         <button
                                             onClick={() => {
-                                                logout();
-                                                navigate("/login");
                                                 setShowAccountMenu(false);
+                                                setShowLogoutConfirm(true);
                                             }}
                                             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#e22420] hover:bg-red-50 transition-colors"
                                         >
@@ -352,5 +353,30 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                 </div>
             </div>
         </nav>
+
+            {/* Logout Confirm Modal */}
+            {showLogoutConfirm && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl border border-[#d1d1d1] w-full max-w-sm p-6">
+                        <h3 className="text-base font-bold text-neutral-800 mb-1">Confirm Logout</h3>
+                        <p className="text-sm text-[#5d5d5d] mb-5">Are you sure you want to log out?</p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowLogoutConfirm(false)}
+                                className="flex-1 px-4 py-2.5 rounded-lg border border-[#d1d1d1] text-sm font-medium text-neutral-700 hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => { logout(); navigate("/login"); }}
+                                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                            >
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };

@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-    Loader, PhoneCall, X, Package, CheckCircle2,
-    PhoneOff, Truck, RefreshCw, MessageSquare,
+    Loader, PhoneCall, X, CheckCircle2,
+    RefreshCw, MessageSquare, MapPin, ChevronDown,
 } from "lucide-react";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
-import { Badge } from "../../../components/ui/badge";
 import { Label } from "../../../components/ui/label";
 import { useToast } from "../../../components/ui/toast";
+import { useLocation } from "../../../contexts/LocationContext";
 import { formatPhoneNumber, formatDate } from "../../../utils/dataHelpers";
-import callCenterService, { type CallCenterStatsResponse } from "../../../services/callCenterService";
+import callCenterService from "../../../services/callCenterService";
 
 type CallOutcome = "REACHED" | "UNREACHABLE" | "DELIVERED";
 
@@ -32,12 +32,12 @@ const OUTCOME_OPTIONS: { value: CallOutcome; label: string; desc: string; color:
 
 export const PostDeliveryFollowUp = () => {
     const { showToast } = useToast();
+    const { stations } = useLocation();
 
+    const [selectedOfficeId, setSelectedOfficeId] = useState("");
     const [parcels, setParcels] = useState<UncalledParcel[]>([]);
     const [loading, setLoading] = useState(false);
     const [pagination, setPagination] = useState({ page: 0, size: 20, totalElements: 0, totalPages: 0 });
-    const [stats, setStats] = useState<CallCenterStatsResponse | null>(null);
-    const [statsLoading, setStatsLoading] = useState(false);
 
     // Modal
     const [outcomeParcel, setOutcomeParcel] = useState<UncalledParcel | null>(null);
@@ -46,12 +46,18 @@ export const PostDeliveryFollowUp = () => {
     const [submitting, setSubmitting] = useState(false);
 
     const fetchParcels = useCallback(async (page = 0) => {
+        if (!selectedOfficeId) return;
         setLoading(true);
         try {
-            const response = await callCenterService.getUncalledParcels();
+            const response = await callCenterService.getDeliveredUncalled({
+                page,
+                size: 20,
+                officeId: selectedOfficeId,
+                followUpStatus: "PENDING",
+            });
             if (response.success && response.data) {
                 const data = response.data as any;
-                const content: UncalledParcel[] = Array.isArray(data.content) ? data.content : Array.isArray(data) ? data : [];
+                const content: UncalledParcel[] = Array.isArray(data.content) ? data.content : [];
                 setParcels(content);
                 setPagination({
                     page: data.number ?? page,
@@ -69,21 +75,12 @@ export const PostDeliveryFollowUp = () => {
         } finally {
             setLoading(false);
         }
-    }, [showToast]);
-
-    const fetchStats = useCallback(async () => {
-        setStatsLoading(true);
-        try {
-            const res = await callCenterService.getStats();
-            if (res.success && res.data) setStats(res.data);
-        } catch { /* non-critical */ }
-        finally { setStatsLoading(false); }
-    }, []);
+    }, [selectedOfficeId, showToast]);
 
     useEffect(() => {
-        fetchParcels(0);
-        fetchStats();
-    }, [fetchParcels, fetchStats]);
+        if (selectedOfficeId) fetchParcels(0);
+        else setParcels([]);
+    }, [selectedOfficeId, fetchParcels]);
 
     const openModal = (parcel: UncalledParcel) => {
         setOutcomeParcel(parcel);
@@ -105,7 +102,6 @@ export const PostDeliveryFollowUp = () => {
                 setOutcomeParcel(null);
                 setParcels(prev => prev.filter(p => p.parcelId !== outcomeParcel.parcelId));
                 setPagination(prev => ({ ...prev, totalElements: Math.max(0, prev.totalElements - 1) }));
-                fetchStats();
             } else {
                 showToast(response.message || "Failed to record outcome", "error");
             }
@@ -115,9 +111,6 @@ export const PostDeliveryFollowUp = () => {
             setSubmitting(false);
         }
     };
-
-    const getOfficeName = (p: UncalledParcel) =>
-        typeof p.officeId === "object" && p.officeId ? (p.officeId as { name?: string }).name ?? "N/A" : p.officeName ?? "N/A";
 
     return (
         <div className="w-full">
@@ -129,50 +122,59 @@ export const PostDeliveryFollowUp = () => {
                     </p>
                 </header>
 
-                {/* Stats */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <Card className="border-none bg-[#ffefe5]">
-                        <CardContent className="p-4">
-                            <p className="text-[11px] font-medium text-[#8b4a1f] uppercase tracking-wide">Queue</p>
-                            <p className="mt-1 text-2xl font-bold text-[#ea690c]">{loading ? "—" : pagination.totalElements}</p>
-                            <p className="text-[11px] text-[#8b4a1f] mt-0.5">Awaiting follow-up</p>
-                        </CardContent>
-                    </Card>
-                    <Card className="border-none bg-[#e5f6e9]">
-                        <CardContent className="p-4">
-                            <p className="text-[11px] font-medium text-green-700 uppercase tracking-wide">Reached</p>
-                            <p className="mt-1 text-2xl font-bold text-green-700">{statsLoading ? "—" : (stats?.reached ?? "—")}</p>
-                            <p className="text-[11px] text-green-600 mt-0.5">Yesterday</p>
-                        </CardContent>
-                    </Card>
-                    <Card className="border-none bg-[#ffe5e8]">
-                        <CardContent className="p-4">
-                            <p className="text-[11px] font-medium text-[#b3261e] uppercase tracking-wide">Unreachable</p>
-                            <p className="mt-1 text-2xl font-bold text-[#b3261e]">{statsLoading ? "—" : (stats?.unreachable ?? "—")}</p>
-                            <p className="text-[11px] text-[#b3261e] mt-0.5">Yesterday</p>
-                        </CardContent>
-                    </Card>
-                    <Card className="border-none bg-[#e5f0ff]">
-                        <CardContent className="p-4">
-                            <p className="text-[11px] font-medium text-blue-700 uppercase tracking-wide">Delivered</p>
-                            <p className="mt-1 text-2xl font-bold text-blue-700">{statsLoading ? "—" : (stats?.totalDeliveredYesterday ?? "—")}</p>
-                            <p className="text-[11px] text-blue-600 mt-0.5">Yesterday total</p>
-                        </CardContent>
-                    </Card>
-                </div>
+                {/* Station selector */}
+                <Card className="border border-[#d1d1d1] bg-white">
+                    <CardContent className="p-4">
+                        <div className="flex flex-col sm:flex-row gap-3 items-end">
+                            <div className="flex-1">
+                                <Label className="text-xs text-[#5d5d5d] mb-1.5 block">Select Station</Label>
+                                <div className="relative">
+                                    <select
+                                        value={selectedOfficeId}
+                                        onChange={e => setSelectedOfficeId(e.target.value)}
+                                        className="w-full h-9 pl-3 pr-8 border border-[#d1d1d1] rounded-md text-sm bg-white appearance-none focus:outline-none focus:ring-1 focus:ring-[#ea690c]"
+                                    >
+                                        <option value="">— Choose a station —</option>
+                                        {stations.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-2 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
+                                </div>
+                            </div>
+                            <Button
+                                onClick={() => fetchParcels(0)}
+                                disabled={!selectedOfficeId || loading}
+                                variant="outline"
+                                size="sm"
+                                className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50 h-9"
+                            >
+                                <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+                                Refresh
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {selectedOfficeId && !loading && (
+                    <p className="text-sm text-gray-500">
+                        <span className="font-semibold text-neutral-800">{pagination.totalElements}</span> parcels awaiting follow-up
+                    </p>
+                )}
 
                 {/* Table */}
                 <Card className="border border-[#d1d1d1] bg-white">
                     <CardContent className="p-0">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-[#d1d1d1]">
                             <p className="text-sm font-semibold text-neutral-800">Uncalled Parcels</p>
-                            <Button onClick={() => fetchParcels(0)} variant="outline" size="sm" disabled={loading} className="border-[#ea690c] text-[#ea690c] hover:bg-orange-50">
-                                <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
-                                Refresh
-                            </Button>
                         </div>
 
-                        {loading ? (
+                        {!selectedOfficeId ? (
+                            <div className="text-center py-16">
+                                <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                <p className="text-sm text-[#5d5d5d]">Select a station to load the queue.</p>
+                            </div>
+                        ) : loading ? (
                             <div className="text-center py-16">
                                 <Loader className="w-8 h-8 text-[#ea690c] mx-auto mb-3 animate-spin" />
                                 <p className="text-sm text-[#5d5d5d]">Loading parcels...</p>
@@ -191,7 +193,6 @@ export const PostDeliveryFollowUp = () => {
                                             <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Recipient</th>
                                             <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Phone</th>
                                             <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Address</th>
-                                            <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Station</th>
                                             <th className="py-3 px-4 text-left text-xs font-semibold text-neutral-800 uppercase tracking-wider">Registered</th>
                                             <th className="py-3 px-4 text-center text-xs font-semibold text-neutral-800 uppercase tracking-wider">Actions</th>
                                         </tr>
@@ -211,7 +212,6 @@ export const PostDeliveryFollowUp = () => {
                                                 <td className="py-3 px-4 text-sm text-gray-600 max-w-[180px] truncate" title={p.receiverAddress}>
                                                     {p.receiverAddress || "—"}
                                                 </td>
-                                                <td className="py-3 px-4 text-sm text-gray-600">{getOfficeName(p)}</td>
                                                 <td className="py-3 px-4 text-sm text-gray-600">
                                                     {p.createdAt ? formatDate(new Date(p.createdAt).toISOString()) : "—"}
                                                 </td>

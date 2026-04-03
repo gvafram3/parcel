@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, MapPin, BarChart3, PhoneIcon, CarIcon, ScrollTextIcon, CheckCircleIcon, HomeIcon, ZapIcon } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
@@ -28,9 +28,9 @@ const navItems = [
     { label: "Package Assignments", path: "/package-assignments", icon: ClipboardListIcon, roles: ["MANAGER", "FRONTDESK"] },
 
     // Call Center (CALLER)
-    { label: "Pre-Delivery Queue", path: "/call-center", icon: PhoneIcon, roles: ["CALLER"] },
-    { label: "Home Delivery Watchlist", path: "/call-center/home-delivery", icon: HomeIcon, roles: ["CALLER"] },
-    { label: "Post-Delivery Follow-up", path: "/call-center/follow-up", icon: CheckCircleIcon, roles: ["CALLER"] },
+    { label: "Pre-Delivery", path: "/call-center", icon: PhoneIcon, roles: ["CALLER"] },
+    { label: "Home Delivery", path: "/call-center/home-delivery", icon: HomeIcon, roles: ["CALLER"] },
+    { label: "Post-Delivery", path: "/call-center/follow-up", icon: CheckCircleIcon, roles: ["CALLER"] },
     { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER", "FRONTDESK",] },
     // Reconciliation not shown to CALLER per latest requirement
     { label: "Driver Tracker", path: "/driver-tracker", icon: CarIcon, roles: ["MANAGER", "FRONTDESK"] },
@@ -46,6 +46,7 @@ const navItems = [
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
     const location = useLocation();
     const { userRole, currentUser, logout } = useStation();
+    const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
     // Filter nav items based on user role
     const filteredNavItems = navItems.filter(item =>
@@ -123,10 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                 {/* Logout Button Only - User info shown in navbar - Fixed at bottom */}
                 <div className="border-t border-[#d1d1d1] p-4 flex-shrink-0">
                     <button
-                        onClick={() => {
-                            logout();
-                            window.location.href = "/login";
-                        }}
+                        onClick={() => setShowLogoutConfirm(true)}
                         className="flex w-full items-center gap-3 rounded-xl bg-red-50 px-4 py-3 font-medium text-[#e22420] transition-colors hover:bg-red-100"
                     >
                         <LogOut size={20} />
@@ -134,6 +132,30 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                     </button>
                 </div>
             </aside>
+
+            {/* Logout Confirm Modal */}
+            {showLogoutConfirm && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl border border-[#d1d1d1] w-full max-w-sm p-6">
+                        <h3 className="text-base font-bold text-neutral-800 mb-1">Confirm Logout</h3>
+                        <p className="text-sm text-[#5d5d5d] mb-5">Are you sure you want to log out?</p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowLogoutConfirm(false)}
+                                className="flex-1 px-4 py-2.5 rounded-lg border border-[#d1d1d1] text-sm font-medium text-neutral-700 hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => { logout(); window.location.href = "/login"; }}
+                                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                            >
+                                Logout
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

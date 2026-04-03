@@ -71,7 +71,7 @@ export const PreDeliveryQueue = () => {
                 setPagination({
                     page: data.number ?? page,
                     size: data.size ?? 20,
-                    totalElements: content.length,
+                    totalElements: data.totalElements ?? content.length,
                     totalPages: data.totalPages ?? 1,
                 });
             } else {
@@ -205,7 +205,7 @@ export const PreDeliveryQueue = () => {
                 {/* Stats */}
                 {selectedOfficeId && !loading && (
                     <p className="text-sm text-gray-500">
-                        <span className="font-semibold text-neutral-800">{pagination.totalElements}</span> parcels in this view
+                        <span className="font-semibold text-neutral-800">{pagination.totalElements}</span> {tab === "uncalled" ? "parcels awaiting contact" : "called station-pickup parcels"}
                     </p>
                 )}
 
