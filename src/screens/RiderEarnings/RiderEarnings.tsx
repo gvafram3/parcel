@@ -40,6 +40,12 @@ export const RiderEarnings = (): JSX.Element => {
 
     useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
 
+    // Rider earns 60% of deliveryCost only — no share of inboundCost (that belongs to the driver)
+    const getRiderEarning = (a: RiderAssignmentResponse) => {
+        const p = a.parcel;
+        return (p.deliveryCost || 0) * RIDER_SHARE;
+    };
+
     const getAmount = (a: RiderAssignmentResponse) => {
         const p = a.parcel;
         return (p.deliveryCost || 0) + (p.pickUpCost || 0) + (p.inboundCost || 0) + (p.storageCost || 0);
@@ -61,10 +67,10 @@ export const RiderEarnings = (): JSX.Element => {
         }), [deliveredAssignments, todayStart, todayEnd]);
 
     const todayTotal = useMemo(() =>
-        todayAssignments.reduce((s, a) => s + getAmount(a), 0), [todayAssignments]);
+        todayAssignments.reduce((s, a) => s + getRiderEarning(a), 0), [todayAssignments]);
 
     const overallTotal = useMemo(() =>
-        deliveredAssignments.reduce((s, a) => s + getAmount(a), 0), [deliveredAssignments]);
+        deliveredAssignments.reduce((s, a) => s + getRiderEarning(a), 0), [deliveredAssignments]);
 
     const filteredAssignments = useMemo(() => {
         if (!startDate && !endDate) return deliveredAssignments;
@@ -121,7 +127,7 @@ export const RiderEarnings = (): JSX.Element => {
                 {/* Header */}
                 <div>
                     <h1 className="text-2xl font-bold text-neutral-800">My Earnings</h1>
-                    <p className="text-sm text-gray-500 mt-0.5">You earn 60% of each delivery amount</p>
+                    <p className="text-sm text-gray-500 mt-0.5">You earn 60% of the delivery cost per parcel</p>
                 </div>
 
                 {/* Summary Cards */}
@@ -131,7 +137,7 @@ export const RiderEarnings = (): JSX.Element => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs text-gray-500 mb-1">Today's Earnings</p>
-                                    <p className="text-xl font-bold text-[#ea690c]">{formatCurrency(todayTotal * RIDER_SHARE)}</p>
+                                    <p className="text-xl font-bold text-[#ea690c]">{formatCurrency(todayTotal)}</p>
                                     <p className="text-xs text-gray-400 mt-0.5">{todayAssignments.length} deliveries</p>
                                 </div>
                                 <div className="w-10 h-10 bg-orange-50 rounded-full flex items-center justify-center">
@@ -145,7 +151,7 @@ export const RiderEarnings = (): JSX.Element => {
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-xs text-gray-500 mb-1">Total Earnings</p>
-                                    <p className="text-xl font-bold text-green-600">{formatCurrency(overallTotal * RIDER_SHARE)}</p>
+                                    <p className="text-xl font-bold text-green-600">{formatCurrency(overallTotal)}</p>
                                     <p className="text-xs text-gray-400 mt-0.5">{deliveredAssignments.length} deliveries</p>
                                 </div>
                                 <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center">
@@ -217,7 +223,7 @@ export const RiderEarnings = (): JSX.Element => {
                                         <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">Date</th>
                                         <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">Deliveries</th>
                                         <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">Total Amount</th>
-                                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">Your Share (60%)</th>
+                                        <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200">Your Earnings (60% of delivery)</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-100">
@@ -231,7 +237,7 @@ export const RiderEarnings = (): JSX.Element => {
                                                     <Badge className="bg-orange-100 text-[#ea690c] border-0 text-xs font-semibold">{items.length}</Badge>
                                                 </td>
                                                 <td className="px-4 py-3 text-right text-sm text-gray-600">{formatCurrency(dayTotal)}</td>
-                                                <td className="px-4 py-3 text-right font-bold text-sm text-[#ea690c]">{formatCurrency(dayTotal * RIDER_SHARE)}</td>
+                                                <td className="px-4 py-3 text-right font-bold text-sm text-[#ea690c]">{formatCurrency(items.reduce((s, a) => s + getRiderEarning(a), 0))}</td>
                                             </tr>
                                         );
                                     })}
@@ -241,7 +247,7 @@ export const RiderEarnings = (): JSX.Element => {
                                         <td className="px-4 py-2.5 text-sm font-semibold text-gray-700">Total</td>
                                         <td className="px-4 py-2.5 text-center text-sm font-semibold text-gray-700">{filteredAssignments.length}</td>
                                         <td className="px-4 py-2.5 text-right text-sm font-semibold text-gray-700">{formatCurrency(filteredAssignments.reduce((s, a) => s + getAmount(a), 0))}</td>
-                                        <td className="px-4 py-2.5 text-right font-bold text-green-600">{formatCurrency(filteredAssignments.reduce((s, a) => s + getAmount(a), 0) * RIDER_SHARE)}</td>
+                                        <td className="px-4 py-2.5 text-right font-bold text-green-600">{formatCurrency(filteredAssignments.reduce((s, a) => s + getRiderEarning(a), 0))}</td>
                                     </tr>
                                 </tfoot>
                             </table>

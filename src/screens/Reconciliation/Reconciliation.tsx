@@ -454,7 +454,8 @@ export const Reconciliation = (): JSX.Element => {
                             type="checkbox"
                             checked={selectedRiders.size === riderGroups.length && riderGroups.length > 0}
                             onChange={handleSelectAll}
-                            className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
+                            disabled
+                            className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c] opacity-40 cursor-not-allowed"
                           />
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Rider</th>
@@ -469,20 +470,22 @@ export const Reconciliation = (): JSX.Element => {
                       {riderGroups.map((group, groupIndex) => {
                         const isSelected = selectedRiders.has(group.assignmentId);
                         const isExpanded = expandedRiders.has(group.assignmentId);
+                        const isDisabled = selectedRiders.size > 0 && !isSelected;
 
                         return (
                           <>
                             {/* Rider Group Header Row */}
                             <tr
                               key={group.assignmentId}
-                              className={`hover:bg-gray-50 transition-colors ${groupIndex !== riderGroups.length - 1 ? 'border-b border-gray-200' : ''} ${isSelected ? 'bg-orange-50' : ''}`}
+                              className={`transition-colors ${groupIndex !== riderGroups.length - 1 ? 'border-b border-gray-200' : ''} ${isSelected ? 'bg-orange-50' : isDisabled ? 'bg-gray-50 opacity-50' : 'hover:bg-gray-50'}`}
                             >
                               <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
-                                  onChange={() => handleToggleRiderSelection(group.assignmentId)}
-                                  className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c]"
+                                  onChange={() => !isDisabled && handleToggleRiderSelection(group.assignmentId)}
+                                  disabled={isDisabled}
+                                  className="rounded border-gray-300 text-[#ea690c] focus:ring-[#ea690c] disabled:opacity-40 disabled:cursor-not-allowed"
                                 />
                               </td>
                               <td className="px-4 py-4 border-r border-gray-100">

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import {
   PackageIcon,
   SearchIcon,
@@ -85,19 +84,13 @@ export const TrackParcel = (): JSX.Element => {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Top bar */}
       <header className="bg-white border-b border-slate-200/80 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 bg-[#ea690c] rounded-lg flex items-center justify-center">
               <PackageIcon className="w-5 h-5 text-white" />
             </div>
             <span className="font-bold text-neutral-800">Mealex & Mailex</span>
           </div>
-          <Link
-            to="/login"
-            className="text-sm text-slate-500 hover:text-[#ea690c] transition-colors"
-          >
-            Staff login
-          </Link>
         </div>
       </header>
 

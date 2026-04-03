@@ -789,6 +789,79 @@ class FrontdeskService {
      * Endpoint: POST /addresses
      * Body: { name, cost }
      */
+    /**
+     * Get unpaid driver assignments
+     * GET /api-frontdesk/driver-assignments/unpaid
+     */
+    async getUnpaidDriverAssignments(page = 0, size = 20, driverPhoneNumber?: string): Promise<ApiResponse> {
+        try {
+            const params = new URLSearchParams();
+            params.append('page', String(page));
+            params.append('size', String(size));
+            if (driverPhoneNumber) params.append('driverPhoneNumber', driverPhoneNumber);
+            const response = await this.apiClient.get(`/driver-assignments/unpaid?${params.toString()}`);
+            return { success: true, data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to load driver assignments.' };
+        }
+    }
+
+    /**
+     * Mark driver assignments as paid
+     * PUT /api-frontdesk/driver-assignments/pay
+     * Body: array of assignment IDs
+     */
+    async payDriverAssignments(assignmentIds: string[]): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.put('/driver-assignments/pay', assignmentIds);
+            return { success: true, message: 'Marked as paid', data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to mark as paid.' };
+        }
+    }
+
+    /**
+     * Get unpaid driver reconciliations (old endpoint)
+     * Endpoint: GET /driver-reconciliations/unpaid
+     */
+    async getUnpaidDriverReconciliations(page = 0, size = 20): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.get(`/driver-reconciliations/unpaid?page=${page}&size=${size}`);
+            return { success: true, message: 'Driver reconciliations retrieved', data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to load driver reconciliations.' };
+        }
+    }
+
+    /**
+     * Mark a driver reconciliation as paid
+     * Endpoint: PUT /driver-reconciliations/{reconciliationId}/pay
+     */
+    async payDriverReconciliation(reconciliationId: string): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.put(`/driver-reconciliations/${reconciliationId}/pay`);
+            return { success: true, message: 'Marked as paid', data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to mark as paid.' };
+        }
+    }
+
+    /**
+     * Mark a parcel as picked up
+     * POST /api-frontdesk/parcel/picked-up
+     */
+    async markParcelPickedUp(parcelId: string, whoPickedUpName?: string, whoPickedUpTelephoneNumber?: string): Promise<ApiResponse> {
+        try {
+            const body: { parcelId: string; whoPickedUpName?: string; whoPickedUpTelephoneNumber?: string } = { parcelId };
+            if (whoPickedUpName) body.whoPickedUpName = whoPickedUpName;
+            if (whoPickedUpTelephoneNumber) body.whoPickedUpTelephoneNumber = whoPickedUpTelephoneNumber;
+            const response = await this.apiClient.post('/parcel/picked-up', body);
+            return { success: true, message: 'Parcel marked as picked up', data: response.data };
+        } catch (error: any) {
+            return { success: false, message: error.response?.data?.message || 'Failed to mark parcel as picked up.' };
+        }
+    }
+
     async addAddress(name: string, cost: number): Promise<ApiResponse> {
         try {
             const body = { name: name.trim(), cost: Number(cost) || 0 };
@@ -821,4 +894,8 @@ export type {
     PageableRequest,
     RiderResponse,
 };
+
+
+
+
 

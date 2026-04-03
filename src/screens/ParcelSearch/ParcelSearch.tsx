@@ -1,12 +1,12 @@
-import { useState, useMemo, useEffect } from "react";
-import { SearchIcon, FilterIcon, Download, X, Edit, Loader, Eye } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { SearchIcon, FilterIcon, Download, X, Edit, Loader, Eye, Home, MoreHorizontal, ChevronDown } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Badge } from "../../components/ui/badge";
 import { useStation } from "../../contexts/StationContext";
 import { useShelf } from "../../contexts/ShelfContext";
-import { formatPhoneNumber, phoneMatchesSearch } from "../../utils/dataHelpers";
+import { formatPhoneNumber, phoneMatchesSearch, validatePhoneNumber, normalizePhoneNumber } from "../../utils/dataHelpers";
 import frontdeskService, { ParcelResponse } from "../../services/frontdeskService";
 import { useToast } from "../../components/ui/toast";
 import authService from "../../services/authService";
@@ -41,6 +41,28 @@ export const ParcelSearch = (): JSX.Element => {
     const [editingShelf, setEditingShelf] = useState(false);
     const [newShelfLocation, setNewShelfLocation] = useState("");
     const [markPickupLoading, setMarkPickupLoading] = useState(false);
+    const [showPickupModal, setShowPickupModal] = useState(false);
+    const [pickupParcel, setPickupParcel] = useState<ParcelResponse | null>(null);
+    const [pickupIsOwner, setPickupIsOwner] = useState(true);
+    const [pickupName, setPickupName] = useState("");
+    const [pickupPhone, setPickupPhone] = useState("");
+    const [requestDelivery, setRequestDelivery] = useState(false);
+    const [deliveryAddress, setDeliveryAddress] = useState("");
+    const [deliveryCostInput, setDeliveryCostInput] = useState("");
+    const [savingDelivery, setSavingDelivery] = useState(false);
+    const [showActionMenu, setShowActionMenu] = useState(false);
+    const [showCosts, setShowCosts] = useState(false);
+    const actionMenuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
+                setShowActionMenu(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     // NEW helper: determine human status label including pickup/hasCalled
     const getStatusLabel = (p: ParcelResponse): string => {
@@ -233,23 +255,50 @@ export const ParcelSearch = (): JSX.Element => {
         }
     };
 
-    const handleMarkPickedUp = async () => {
+    const handleRequestDelivery = async () => {
         if (!selectedParcel) return;
+        if (!deliveryAddress.trim()) {
+            showToast("Please enter a delivery address", "warning");
+            return;
+        }
+        setSavingDelivery(true);
+        try {
+            const response = await frontdeskService.updateParcel(selectedParcel.parcelId, {
+                homeDelivery: true,
+                hasCalled: true,
+                receiverAddress: deliveryAddress.trim(),
+                deliveryCost: parseFloat(deliveryCostInput) || 0,
+            });
+            if (response.success) {
+                showToast("Home delivery requested successfully", "success");
+                setRequestDelivery(false);
+                setDeliveryAddress("");
+                setDeliveryCostInput("");
+                await refreshParcels({}, pagination.page, pagination.size);
+                setSelectedParcel(null);
+            } else {
+                showToast(response.message || "Failed to request delivery", "error");
+            }
+        } catch {
+            showToast("Failed to request delivery", "error");
+        } finally {
+            setSavingDelivery(false);
+        }
+    };
+
+    const handleMarkPickedUp = async () => {
+        if (!pickupParcel) return;
         setMarkPickupLoading(true);
         try {
-            const parcelId = selectedParcel.parcelId;
-            const response = await frontdeskService.updateParcel(parcelId, {
-                hasCalled: true,
-                pickedUp: true,
-            });
-
+            const parcelId = pickupParcel.parcelId;
+            const name  = pickupIsOwner ? (pickupParcel.receiverName || "") : pickupName.trim();
+            const phone = pickupIsOwner ? (pickupParcel.recieverPhoneNumber || "") : normalizePhoneNumber(pickupPhone.trim());
+            const response = await frontdeskService.markParcelPickedUp(parcelId, name || undefined, phone || undefined);
             if (response.success) {
                 showToast("Parcel marked as picked up", "success");
-
-                // Refresh parcels and update selectedParcel with fresh data if available
+                setShowPickupModal(false);
+                setPickupParcel(null);
                 await refreshParcels({}, pagination.page, pagination.size);
-                const refreshed = parcels.find((p) => p.parcelId === parcelId) || null;
-                setSelectedParcel(refreshed);
             } else {
                 showToast(response.message || "Failed to update parcel status", "error");
             }
@@ -662,6 +711,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                                             setSelectedParcel(parcel);
                                                                             setNewShelfLocation(parcel.shelfId || parcel.shelfNumber || "");
                                                                             setEditingShelf(false);
+                                                                            setShowCosts(false);
                                                                         }}
                                                                         variant="outline"
                                                                         size="sm"
@@ -755,6 +805,138 @@ export const ParcelSearch = (): JSX.Element => {
                     )}
                 </main>
             </div>
+
+            {/* Pickup Modal */}
+            {showPickupModal && pickupParcel && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-xl">
+                        <CardContent className="p-6">
+                            <div className="flex items-start justify-between mb-4 pb-4 border-b border-[#d1d1d1]">
+                                <div>
+                                    <h3 className="text-base font-bold text-neutral-800">Mark as Picked Up</h3>
+                                    <p className="text-xs text-[#5d5d5d] mt-0.5">{pickupParcel.receiverName || pickupParcel.parcelId}</p>
+                                </div>
+                                <button onClick={() => setShowPickupModal(false)} className="text-gray-400 hover:text-neutral-800 p-1 hover:bg-gray-100 rounded">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="space-y-4">
+                                {/* Owner toggle */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <label className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-colors ${pickupIsOwner ? "border-[#ea690c] bg-orange-50" : "border-[#d1d1d1] hover:bg-gray-50"}`}>
+                                        <input type="radio" checked={pickupIsOwner} onChange={() => setPickupIsOwner(true)} className="w-4 h-4 text-[#ea690c]" />
+                                        <div>
+                                            <p className="text-sm font-medium text-neutral-800">Owner</p>
+                                            <p className="text-xs text-gray-400">Receiver picked up</p>
+                                        </div>
+                                    </label>
+                                    <label className={`flex items-center gap-2 p-3 border-2 rounded-lg cursor-pointer transition-colors ${!pickupIsOwner ? "border-[#ea690c] bg-orange-50" : "border-[#d1d1d1] hover:bg-gray-50"}`}>
+                                        <input type="radio" checked={!pickupIsOwner} onChange={() => setPickupIsOwner(false)} className="w-4 h-4 text-[#ea690c]" />
+                                        <div>
+                                            <p className="text-sm font-medium text-neutral-800">Someone Else</p>
+                                            <p className="text-xs text-gray-400">Third party pickup</p>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                {/* Owner details (read-only) */}
+                                {pickupIsOwner && (
+                                    <div className="bg-gray-50 rounded-lg p-3 border border-[#f0f0f0] space-y-1 text-xs text-gray-600">
+                                        <p>Name: <span className="font-medium text-neutral-800">{pickupParcel.receiverName || "N/A"}</span></p>
+                                        <p>Phone: <span className="font-medium text-neutral-800">{pickupParcel.recieverPhoneNumber || "N/A"}</span></p>
+                                    </div>
+                                )}
+
+                                {/* Third party fields */}
+                                {!pickupIsOwner && (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-neutral-800 mb-1.5">Full Name <span className="text-[#e22420]">*</span></label>
+                                            <Input value={pickupName} onChange={e => setPickupName(e.target.value)} placeholder="Name of person picking up" className="border-[#d1d1d1] focus:border-[#ea690c]" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-neutral-800 mb-1.5">Phone Number <span className="text-[#e22420]">*</span></label>
+                                            <Input
+                                                value={pickupPhone}
+                                                onChange={e => setPickupPhone(e.target.value)}
+                                                placeholder="e.g. 0541234567"
+                                                className={`border focus:border-[#ea690c] ${pickupPhone && !validatePhoneNumber(pickupPhone) ? "border-red-400" : "border-[#d1d1d1]"}`}
+                                            />
+                                            {pickupPhone && !validatePhoneNumber(pickupPhone) && (
+                                                <p className="text-xs text-red-500 mt-1">Enter a valid Ghana phone number (e.g. 0541234567)</p>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+
+                                <div className="flex gap-3 pt-1">
+                                    <Button onClick={() => setShowPickupModal(false)} variant="outline" className="flex-1 border-[#d1d1d1]" disabled={markPickupLoading}>Cancel</Button>
+                                    <Button
+                                        onClick={handleMarkPickedUp}
+                                        disabled={markPickupLoading || (!pickupIsOwner && (!pickupName.trim() || !validatePhoneNumber(pickupPhone)))}
+                                        className="flex-1 bg-[#ea690c] text-white hover:bg-[#d45d0a] disabled:opacity-50"
+                                    >
+                                        {markPickupLoading ? <><Loader className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Confirm Pickup"}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
+            {/* Request Delivery Modal */}
+            {selectedParcel && requestDelivery && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-xl">
+                        <CardContent className="p-6">
+                            <div className="flex items-start justify-between mb-4 pb-4 border-b border-[#d1d1d1]">
+                                <div>
+                                    <h3 className="text-base font-bold text-neutral-800">Request Home Delivery</h3>
+                                    <p className="text-xs text-[#5d5d5d] mt-0.5">{selectedParcel.receiverName || selectedParcel.parcelId}</p>
+                                </div>
+                                <button onClick={() => setRequestDelivery(false)} className="text-gray-400 hover:text-neutral-800 p-1 hover:bg-gray-100 rounded">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-neutral-800 mb-1.5">
+                                        Delivery Address <span className="text-[#e22420]">*</span>
+                                    </label>
+                                    <Input
+                                        value={deliveryAddress}
+                                        onChange={e => setDeliveryAddress(e.target.value)}
+                                        placeholder="Enter full delivery address"
+                                        className="border-[#d1d1d1] focus:border-[#ea690c]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-neutral-800 mb-1.5">Delivery Fee (GHC)</label>
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        value={deliveryCostInput}
+                                        onChange={e => setDeliveryCostInput(e.target.value)}
+                                        placeholder="e.g. 15.00"
+                                        className="border-[#d1d1d1] focus:border-[#ea690c]"
+                                    />
+                                </div>
+                                <div className="flex gap-3 pt-1">
+                                    <Button onClick={() => setRequestDelivery(false)} variant="outline" className="flex-1 border-[#d1d1d1]" disabled={savingDelivery}>Cancel</Button>
+                                    <Button
+                                        onClick={handleRequestDelivery}
+                                        disabled={savingDelivery || !deliveryAddress.trim()}
+                                        className="flex-1 bg-[#ea690c] text-white hover:bg-[#d45d0a] disabled:opacity-50"
+                                    >
+                                        {savingDelivery ? <><Loader className="w-4 h-4 animate-spin mr-2" />Saving...</> : "Confirm Request"}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {/* Shelf Update Modal */}
             {selectedParcel && editingShelf && (
@@ -978,43 +1160,51 @@ export const ParcelSearch = (): JSX.Element => {
                                     </div>
                                 )}
 
-                                {/* Costs */}
+                                {/* Inbound & Storage — always visible */}
                                 <div>
                                     <h4 className="text-sm font-semibold text-neutral-800 mb-3 pb-2 border-b border-[#d1d1d1]">Costs</h4>
                                     <div className="grid grid-cols-2 gap-4">
-                                        {selectedParcel.pickUpCost !== undefined && (
-                                            <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Pick Up Cost</p>
-                                                <p className="font-semibold text-[#ea690c] text-sm">
-                                                    GHC {selectedParcel.pickUpCost.toFixed(2)}
-                                                </p>
-                                            </div>
-                                        )}
-                                        {selectedParcel.deliveryCost !== undefined && (
-                                            <div>
-                                                <p className="text-xs text-[#5d5d5d] mb-1">Delivery Cost</p>
-                                                <p className="font-semibold text-[#ea690c] text-sm">
-                                                    GHC {selectedParcel.deliveryCost.toFixed(2)}
-                                                </p>
-                                            </div>
-                                        )}
                                         {selectedParcel.inboundCost !== undefined && (
                                             <div>
                                                 <p className="text-xs text-[#5d5d5d] mb-1">Inbound Cost</p>
-                                                <p className="font-semibold text-[#ea690c] text-sm">
-                                                    GHC {selectedParcel.inboundCost.toFixed(2)}
-                                                </p>
+                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.inboundCost.toFixed(2)}</p>
                                             </div>
                                         )}
                                         {selectedParcel.storageCost !== undefined && (
                                             <div>
                                                 <p className="text-xs text-[#5d5d5d] mb-1">Storage Cost</p>
-                                                <p className="font-semibold text-[#ea690c] text-sm">
-                                                    GHC {selectedParcel.storageCost.toFixed(2)}
-                                                </p>
+                                                <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.storageCost.toFixed(2)}</p>
                                             </div>
                                         )}
                                     </div>
+                                </div>
+
+                                {/* Delivery & Pickup — collapsible */}
+                                <div className="border border-[#d1d1d1] rounded-lg overflow-hidden">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCosts(prev => !prev)}
+                                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                                    >
+                                        <h4 className="text-sm font-semibold text-neutral-800">Delivery & Pickup Fees</h4>
+                                        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${showCosts ? "rotate-180" : ""}`} />
+                                    </button>
+                                    {showCosts && (
+                                        <div className="grid grid-cols-2 gap-4 p-4">
+                                            {selectedParcel.deliveryCost !== undefined && (
+                                                <div>
+                                                    <p className="text-xs text-[#5d5d5d] mb-1">Delivery Fee</p>
+                                                    <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.deliveryCost.toFixed(2)}</p>
+                                                </div>
+                                            )}
+                                            {selectedParcel.pickUpCost !== undefined && (
+                                                <div>
+                                                    <p className="text-xs text-[#5d5d5d] mb-1">Pickup Cost</p>
+                                                    <p className="font-semibold text-[#ea690c] text-sm">GHC {selectedParcel.pickUpCost.toFixed(2)}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Item Description */}
@@ -1091,31 +1281,67 @@ export const ParcelSearch = (): JSX.Element => {
                                     {!selectedParcel.pickedUp && (
                                         <div>
                                             <Button
-                                                onClick={handleMarkPickedUp}
-                                                disabled={markPickupLoading}
+                                                onClick={() => {
+                                                    setPickupIsOwner(true);
+                                                    setPickupName("");
+                                                    setPickupPhone("");
+                                                    setPickupParcel(selectedParcel);
+                                                    setSelectedParcel(null);
+                                                    setShowPickupModal(true);
+                                                }}
                                                 className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90"
                                             >
-                                                {markPickupLoading ? "Updating..." : "Mark Picked Up"}
+                                                Mark Picked Up
                                             </Button>
                                         </div>
                                     )}
                                 </div>
 
                                 <div className="pt-4 border-t border-[#d1d1d1] flex gap-3">
-                                    <Button
-                                        onClick={() => {
-                                            setEditingShelf(true);
-                                        }}
-                                        variant="outline"
-                                        className="flex-1 border border-[#ea690c] text-[#ea690c] hover:bg-orange-50"
-                                    >
-                                        <Edit className="w-4 h-4 mr-2" />
-                                        Update Shelf Location
-                                    </Button>
+                                    <div className="relative flex-1" ref={actionMenuRef}>
+                                        <Button
+                                            onClick={() => setShowActionMenu(prev => !prev)}
+                                            variant="outline"
+                                            className="w-full border border-[#ea690c] text-[#ea690c] hover:bg-orange-50"
+                                        >
+                                            <MoreHorizontal className="w-4 h-4 mr-2" />
+                                            Actions
+                                            <ChevronDown className="w-4 h-4 ml-2" />
+                                        </Button>
+                                        {showActionMenu && (
+                                            <div className="absolute bottom-full mb-1 left-0 w-full bg-white border border-[#d1d1d1] rounded-lg shadow-lg z-10 overflow-hidden">
+                                                <button
+                                                    onClick={() => { setEditingShelf(true); setShowActionMenu(false); }}
+                                                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-neutral-800 hover:bg-gray-50 text-left"
+                                                >
+                                                    <Edit className="w-4 h-4 text-[#ea690c]" />
+                                                    Update Shelf Location
+                                                </button>
+                                                {!selectedParcel.delivered && !selectedParcel.parcelAssigned && !selectedParcel.homeDelivery && (
+                                                    <button
+                                                        onClick={() => { setRequestDelivery(true); setDeliveryAddress(selectedParcel.receiverAddress || ""); setDeliveryCostInput(selectedParcel.deliveryCost ? String(selectedParcel.deliveryCost) : ""); setShowActionMenu(false); }}
+                                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-neutral-800 hover:bg-gray-50 text-left"
+                                                    >
+                                                        <Home className="w-4 h-4 text-blue-500" />
+                                                        Request Home Delivery
+                                                    </button>
+                                                )}
+                                                {selectedParcel.homeDelivery && !selectedParcel.delivered && !selectedParcel.parcelAssigned && (
+                                                    <button
+                                                        onClick={async () => { setShowActionMenu(false); const res = await frontdeskService.updateParcel(selectedParcel.parcelId, { homeDelivery: false, deliveryCost: 0, receiverAddress: "" }); if (res.success) { showToast("Home delivery cancelled", "success"); await refreshParcels({}, pagination.page, pagination.size); setSelectedParcel(null); } else showToast(res.message || "Failed", "error"); }}
+                                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 text-left"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                        Cancel Home Delivery
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                     <Button
                                         onClick={() => setSelectedParcel(null)}
                                         variant="outline"
-                                        className="flex-1 border border-[#d1d1d1]"
+                                        className="border border-[#d1d1d1]"
                                     >
                                         Close
                                     </Button>

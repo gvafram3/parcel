@@ -107,6 +107,45 @@ class AdminService {
    * Matches admin route:
    *   GET /api-admin/reconciliations/by-date?officeId=...&date=...
    */
+  async getUserActions(page: number = 0, size: number = 20): Promise<ApiResponse> {
+    try {
+      const response = await this.apiClient.get(
+        `/user-actions?page=${page}&size=${size}`
+      );
+      return { success: true, message: "User actions retrieved", data: response.data };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || "Failed to fetch user actions.",
+      };
+    }
+  }
+
+  async searchParcels(filters: {
+    officeId?: string;
+    isDelivered?: boolean;
+    isParcelAssigned?: boolean;
+    isPOD?: boolean;
+    hasCalled?: boolean;
+    page?: number;
+    size?: number;
+  }): Promise<ApiResponse> {
+    try {
+      const params = new URLSearchParams();
+      params.append('page', String(filters.page ?? 0));
+      params.append('size', String(filters.size ?? 20));
+      if (filters.officeId) params.append('officeId', filters.officeId);
+      if (filters.isDelivered !== undefined) params.append('isDelivered', String(filters.isDelivered));
+      if (filters.isParcelAssigned !== undefined) params.append('isParcelAssigned', String(filters.isParcelAssigned));
+      if (filters.isPOD !== undefined) params.append('isPOD', String(filters.isPOD));
+      if (filters.hasCalled !== undefined) params.append('hasCalled', String(filters.hasCalled));
+      const response = await this.apiClient.get(`/parcels?${params.toString()}`);
+      return { success: true, data: response.data };
+    } catch (error: any) {
+      return { success: false, message: error.response?.data?.message || 'Failed to search parcels.' };
+    }
+  }
+
   async getOfficeReconciliationsByDate(
     officeId: string,
     dateInMillis: number

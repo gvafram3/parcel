@@ -28,7 +28,8 @@ import { Reconciliation } from "./screens/Reconciliation";
 import { ReconciliationConfirmation } from "./screens/ReconciliationConfirmation";
 import { FinancialDashboard } from "./screens/FinancialDashboard/FinancialDashboard";
 import { ShelfManagement } from "./screens/ShelfManagement/ShelfManagement";
-import { CallCenter } from "./screens/CallCenter/CallCenter";
+import { PreDeliveryQueue } from "./screens/CallCenter/PreDeliveryQueue/PreDeliveryQueue";
+import { PostDeliveryFollowUp } from "./screens/CallCenter/PostDeliveryFollowUp/PostDeliveryFollowUp";
 import { ParcelSearch } from "./screens/ParcelSearch/ParcelSearch";
 import { ParcelEdit } from "./screens/ParcelEdit";
 import { AdminDashboard } from "./screens/Admin/AdminDashboard/AdminDashboard";
@@ -37,15 +38,18 @@ import { UserManagement } from "./screens/Admin/UserManagement/UserManagement";
 import { SystemParcelOverview } from "./screens/Admin/SystemParcelOverview/SystemParcelOverview";
 import { FinancialReports } from "./screens/Admin/FinancialReports/FinancialReports";
 import { AdminReconciliation } from "./screens/Admin/AdminReconciliation/AdminReconciliation";
+import { AdminFinancialDashboard } from "./screens/Admin/AdminFinancialDashboard/AdminFinancialDashboard";
 import { Preferences } from "./screens/Preferences/Preferences";
 import { Help } from "./screens/Help/Help";
 import { TrackParcel } from "./screens/TrackParcel/TrackParcel";
 import { ParcelTransfer } from "./screens/ParcelTransfer";
+import { DriverInboundReconciliation } from "./screens/DriverInboundReconciliation/DriverInboundReconciliation";
+import { SystemLogs } from "./screens/Admin/SystemLogs/SystemLogs";
+import { HomeDeliveryWatchlist } from "./screens/CallCenter/HomeDeliveryWatchlist/HomeDeliveryWatchlist";
+import { SmartSearch } from "./screens/SmartSearch/SmartSearch";
 
 export const App = (): JSX.Element => {
   // Some environments cache component prop types aggressively; this keeps routing flexible.
-  const CallCenterScreen = CallCenter as React.FC<any>;
-
   return (
     <StationProvider>
       <LocationProvider>
@@ -68,6 +72,17 @@ export const App = (): JSX.Element => {
                       {/* Root - Redirect to login */}
                       <Route path="/" element={<Navigate to="/login" replace />} />
 
+
+                      <Route
+                        path="/smart-search"
+                        element={
+                          <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", "ADMIN", "CALLER"]}>
+                            <MainLayout>
+                              <SmartSearch />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
 
                       <Route
                         path="/parcel-search"
@@ -114,50 +129,33 @@ export const App = (): JSX.Element => {
                         element={
                           <ProtectedRoute allowedRoles={["CALLER", "FRONTDESK", "MANAGER", "ADMIN"]}>
                             <MainLayout>
-                              <CallCenter />
+                              <PreDeliveryQueue />
                             </MainLayout>
                           </ProtectedRoute>
                         }
                       />
                       <Route
-                        path="/call-center/all-deliveries"
+                        path="/call-center/follow-up"
                         element={
                           <ProtectedRoute allowedRoles={["CALLER"]}>
                             <MainLayout>
-                              <CallCenterScreen view="all-deliveries" />
+                              <PostDeliveryFollowUp />
                             </MainLayout>
                           </ProtectedRoute>
                         }
                       />
                       <Route
-                        path="/call-center/active-deliveries"
+                        path="/call-center/home-delivery"
                         element={
                           <ProtectedRoute allowedRoles={["CALLER"]}>
                             <MainLayout>
-                              <CallCenterScreen view="active-deliveries" />
-                            </MainLayout>
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/call-center/history"
-                        element={
-                          <ProtectedRoute allowedRoles={["CALLER"]}>
-                            <MainLayout>
-                              <CallCenterScreen view="history" />
+                              <HomeDeliveryWatchlist />
                             </MainLayout>
                           </ProtectedRoute>
                         }
                       />
                       {/* Call Center demo page (no auth, UI only) */}
-                      <Route
-                        path="/call-center-demo"
-                        element={
-                          <MainLayout>
-                            <CallCenter />
-                          </MainLayout>
-                        }
-                      />
+
                       <Route
                         path="/parcel-costs-pod"
                         element={
@@ -239,6 +237,16 @@ export const App = (): JSX.Element => {
                             <RiderLayout>
                               <RiderEarnings />
                             </RiderLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/driver-tracker"
+                        element={
+                          <ProtectedRoute allowedRoles={["MANAGER", "ADMIN", "FRONTDESK"]}>
+                            <MainLayout>
+                              <DriverInboundReconciliation />
+                            </MainLayout>
                           </ProtectedRoute>
                         }
                       />
@@ -345,6 +353,28 @@ export const App = (): JSX.Element => {
                           <ProtectedRoute allowedRoles={["ADMIN"]}>
                             <MainLayout>
                               <AdminReconciliation />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+
+                      <Route
+                        path="/admin/financial"
+                        element={
+                          <ProtectedRoute allowedRoles={["ADMIN"]}>
+                            <MainLayout>
+                              <AdminFinancialDashboard />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+
+                      <Route
+                        path="/admin/system-logs"
+                        element={
+                          <ProtectedRoute allowedRoles={["ADMIN"]}>
+                            <MainLayout>
+                              <SystemLogs />
                             </MainLayout>
                           </ProtectedRoute>
                         }

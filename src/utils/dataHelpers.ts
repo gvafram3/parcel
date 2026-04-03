@@ -123,7 +123,8 @@ export const phoneMatchesSearch = (phone: string | undefined, searchTerm: string
 /**
  * Format phone number for display
  */
-export const formatPhoneNumber = (phone: string): string => {
+export const formatPhoneNumber = (phone: string | null | undefined): string => {
+    if (!phone) return "";
     // Format: +233 XX XXX XXXX
     if (phone.startsWith("+233") && phone.length === 13) {
         return `${phone.slice(0, 4)} ${phone.slice(4, 6)} ${phone.slice(6, 9)} ${phone.slice(9)}`;

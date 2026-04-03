@@ -9,6 +9,7 @@ import {
     UserIcon,
     AlertCircleIcon,
     X,
+    XCircleIcon,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -25,9 +26,11 @@ interface ParcelCardProps {
     parcel: ParcelResponse;
     isSelected: boolean;
     onToggle: () => void;
+    onCancel: () => void;
+    showCancel: boolean;
 }
 
-const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
+const ParcelCard = ({ parcel, isSelected, onToggle, onCancel, showCancel }: ParcelCardProps) => {
     let statusLabel = "Ready";
     let statusColor = "bg-green-100 text-green-800";
     if (parcel.delivered) {
@@ -73,6 +76,15 @@ const ParcelCard = ({ parcel, isSelected, onToggle }: ParcelCardProps) => {
                             </div>
                         </div>
                         <Badge className={statusColor}>{statusLabel}</Badge>
+                        {showCancel && (
+                            <button
+                                onClick={e => { e.stopPropagation(); onCancel(); }}
+                                className="ml-1 text-gray-400 hover:text-red-500 transition-colors"
+                                title="Cancel delivery"
+                            >
+                                <XCircleIcon className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
 
                     <div className="flex flex-col gap-2">
@@ -161,6 +173,9 @@ export const ParcelSelection = (): JSX.Element => {
     const [selectedRider, setSelectedRider] = useState<string | null>(null);
     const [isAssigning, setIsAssigning] = useState(false);
     const [filterMode, setFilterMode] = useState<'ready' | 'assigned'>('ready');
+    const [cancelParcel, setCancelParcel] = useState<ParcelResponse | null>(null);
+    const [cancelConfirmText, setCancelConfirmText] = useState("");
+    const [isCancelling, setIsCancelling] = useState(false);
 
     const filterParcelsByMode = (parcels: ParcelResponse[], mode: 'ready' | 'assigned') => {
         if (mode === 'assigned') {
@@ -285,6 +300,29 @@ export const ParcelSelection = (): JSX.Element => {
         }
     };
 
+    const handleCancelDelivery = async () => {
+        if (!cancelParcel || cancelConfirmText.trim().toLowerCase() !== "cancel") return;
+        setIsCancelling(true);
+        try {
+            const response = await frontdeskService.updateParcel(cancelParcel.parcelId, {
+                parcelAssigned: false,
+                homeDelivery: false,
+            });
+            if (response.success) {
+                showToast("Delivery cancelled successfully", "success");
+                setAllParcels(prev => prev.filter(p => p.parcelId !== cancelParcel.parcelId));
+                setCancelParcel(null);
+                setCancelConfirmText("");
+            } else {
+                showToast(response.message || "Failed to cancel delivery", "error");
+            }
+        } catch {
+            showToast("Failed to cancel delivery. Please try again.", "error");
+        } finally {
+            setIsCancelling(false);
+        }
+    };
+
     const selectedRiderData = riders.find((r) => r.userId === selectedRider);
 
     return (
@@ -337,7 +375,7 @@ export const ParcelSelection = (): JSX.Element => {
                                 disabled={selectedParcels.size === 0}
                                 className="w-full sm:w-auto bg-[#ea690c] text-white hover:bg-[#ea690c]/90 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Continue to Rider Selection ({selectedParcels.size})
+                                {filterMode === 'assigned' ? `Reassign (${selectedParcels.size})` : `Continue to Rider Selection (${selectedParcels.size})`}
                             </Button>
                         </CardContent>
                     </Card>
@@ -373,6 +411,8 @@ export const ParcelSelection = (): JSX.Element => {
                                     parcel={parcel}
                                     isSelected={selectedParcels.has(parcel.parcelId)}
                                     onToggle={() => toggleParcel(parcel.parcelId)}
+                                    onCancel={() => { setCancelParcel(parcel); setCancelConfirmText(""); }}
+                                    showCancel={filterMode === 'ready'}
                                 />
                             ))}
                         </div>
@@ -443,14 +483,23 @@ export const ParcelSelection = (): JSX.Element => {
                                                 const isSelected = selectedRider === rider.userId;
                                                 const riderName = rider.name || rider.email || "Unknown";
 
+                                                // Check if ANY selected parcel is already assigned to this rider
+                                                const selectedParcelsList = filteredParcels.filter(p => selectedParcels.has(p.parcelId));
+                                                const isSameRider = selectedParcelsList.some(
+                                                    p => p.riderInfo?.riderId === rider.userId || (p as any).riderId === rider.userId
+                                                );
+
                                                 return (
                                                     <div
                                                         key={rider.userId}
-                                                        onClick={() => setSelectedRider(rider.userId)}
-                                                        className={`flex flex-col gap-4 p-4 rounded-lg border cursor-pointer transition-colors ${isSelected
-                                                            ? "border-[#ea690c] bg-orange-50"
-                                                            : "border-[#d1d1d1] bg-white hover:bg-gray-50"
-                                                            }`}
+                                                        onClick={() => !isSameRider && setSelectedRider(rider.userId)}
+                                                        className={`flex flex-col gap-4 p-4 rounded-lg border transition-colors ${
+                                                            isSameRider
+                                                                ? "border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed"
+                                                                : isSelected
+                                                                ? "border-[#ea690c] bg-orange-50 cursor-pointer"
+                                                                : "border-[#d1d1d1] bg-white hover:bg-gray-50 cursor-pointer"
+                                                        }`}
                                                     >
                                                         <div className="flex items-start justify-between">
                                                             <div className="flex items-center gap-3">
@@ -476,7 +525,9 @@ export const ParcelSelection = (): JSX.Element => {
                                                                 </div>
                                                             </div>
 
-                                                            {isSelected && (
+                                                            {isSameRider ? (
+                                                                <Badge className="bg-gray-200 text-gray-600 border-gray-300 text-xs">Currently assigned</Badge>
+                                                            ) : isSelected && (
                                                                 <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#ea690c]">
                                                                     <CheckIcon className="w-4 h-4 text-white" />
                                                                 </div>
@@ -546,13 +597,80 @@ export const ParcelSelection = (): JSX.Element => {
                                                             Assigning...
                                                         </>
                                                     ) : (
-                                                        `Assign ${selectedParcels.size} Parcel(s) to ${selectedRiderData?.name || "Rider"}`
+                                                        `${filterMode === 'assigned' ? 'Reassign' : 'Assign'} ${selectedParcels.size} Parcel(s) to ${selectedRiderData?.name || "Rider"}`
                                                     )}
                                                 </Button>
                                             </div>
                                         )}
                                     </>
                                 )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+            {cancelParcel && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <Card className="w-full max-w-md border border-[#d1d1d1] bg-white shadow-lg">
+                        <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <XCircleIcon className="w-5 h-5 text-red-500" />
+                                    <h3 className="text-lg font-bold text-neutral-800">Cancel Delivery</h3>
+                                </div>
+                                <button
+                                    onClick={() => { setCancelParcel(null); setCancelConfirmText(""); }}
+                                    className="text-[#9a9a9a] hover:text-neutral-800"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                                    <p className="text-sm font-semibold text-red-800">{cancelParcel.receiverName || cancelParcel.parcelId}</p>
+                                    {cancelParcel.receiverAddress && (
+                                        <p className="text-xs text-red-600 mt-0.5">{cancelParcel.receiverAddress}</p>
+                                    )}
+                                </div>
+
+                                <p className="text-sm text-neutral-700">
+                                    This will remove the parcel from the delivery queue. This action cannot be undone.
+                                </p>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-neutral-800 mb-1">
+                                        Type <span className="font-mono text-red-600">cancel</span> to confirm
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={cancelConfirmText}
+                                        onChange={e => setCancelConfirmText(e.target.value)}
+                                        placeholder="Type cancel here..."
+                                        className="w-full px-3 py-2 border border-[#d1d1d1] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                                        autoFocus
+                                    />
+                                </div>
+
+                                <div className="flex gap-3 pt-1">
+                                    <Button
+                                        onClick={() => { setCancelParcel(null); setCancelConfirmText(""); }}
+                                        variant="outline"
+                                        className="flex-1 border border-[#d1d1d1]"
+                                        disabled={isCancelling}
+                                    >
+                                        Go Back
+                                    </Button>
+                                    <Button
+                                        onClick={handleCancelDelivery}
+                                        disabled={cancelConfirmText.trim().toLowerCase() !== "cancel" || isCancelling}
+                                        className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                                    >
+                                        {isCancelling
+                                            ? <><Loader className="w-4 h-4 animate-spin mr-2" />Cancelling...</>
+                                            : "Confirm Cancel"}
+                                    </Button>
+                                </div>
                             </div>
                         </CardContent>
                     </Card>

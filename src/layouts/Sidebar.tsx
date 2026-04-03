@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, MapPin, PhoneIcon } from "lucide-react";
+import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, MapPin, BarChart3, PhoneIcon, CarIcon, ScrollTextIcon, CheckCircleIcon, HomeIcon, ZapIcon } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 
 interface SidebarProps {
@@ -9,29 +9,32 @@ interface SidebarProps {
 }
 
 const navItems = [
+
     // Admin Only - System Management
     // { label: "Admin Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, roles: ["ADMIN"] },
     { label: "Station Management", path: "/admin/stations", icon: Building2, roles: ["ADMIN"] },
     { label: "User Management", path: "/admin/users", icon: Users, roles: ["ADMIN"] },
     { label: "System Parcels", path: "/admin/parcels", icon: Package, roles: ["ADMIN"] },
     { label: "Admin Reconciliation", path: "/admin/reconciliation", icon: DollarSignIcon, roles: ["ADMIN"] },
-    // { label: "Financial Reports", path: "/admin/financial-reports", icon: BarChart3, roles: ["ADMIN"] },
+    { label: "System Logs", path: "/admin/system-logs", icon: ScrollTextIcon, roles: ["ADMIN"] },
+    { label: "Financial Dashboard", path: "/admin/financial", icon: BarChart3, roles: ["ADMIN"] },
 
     // Station Manager, Front Desk & Call Center - Core Operations
-    { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["FRONTDESK", "MANAGER", "ADMIN"] },
+    { label: "Parcel Search", path: "/parcel-search", icon: SearchIcon, roles: ["FRONTDESK", "MANAGER",] },
+    { label: "Smart Search", path: "/smart-search", icon: ZapIcon, roles: ["FRONTDESK", "MANAGER", "ADMIN", "CALLER"] },
     { label: "Parcel Intake", path: "/parcel-intake", icon: InboxIcon, roles: ["FRONTDESK", "MANAGER"] },
     // { label: "Parcel Transfer", path: "/parcel-transfer", icon: ClipboardListIcon, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Pickup Request", path: "/pickup-request", icon: MapPin, roles: ["FRONTDESK", "MANAGER"] },
     { label: "Package Assignments", path: "/package-assignments", icon: ClipboardListIcon, roles: ["MANAGER", "FRONTDESK"] },
 
-    // Call Center (CALLER) - Post-delivery follow-ups (design-based)
-    { label: "Follow-up", path: "/call-center", icon: PhoneIcon, roles: ["CALLER"] },
-    { label: "All Deliveries", path: "/call-center/all-deliveries", icon: Package, roles: ["CALLER"] },
-    { label: "Active Deliveries", path: "/call-center/active-deliveries", icon: TruckIcon, roles: ["CALLER"] },
-    { label: "History", path: "/call-center/history", icon: ClipboardListIcon, roles: ["CALLER"] },
-    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER"] },
+    // Call Center (CALLER)
+    { label: "Pre-Delivery Queue", path: "/call-center", icon: PhoneIcon, roles: ["CALLER"] },
+    { label: "Home Delivery Watchlist", path: "/call-center/home-delivery", icon: HomeIcon, roles: ["CALLER"] },
+    { label: "Post-Delivery Follow-up", path: "/call-center/follow-up", icon: CheckCircleIcon, roles: ["CALLER"] },
+    { label: "Active Deliveries", path: "/active-deliveries", icon: TruckIcon, roles: ["MANAGER", "FRONTDESK",] },
     // Reconciliation not shown to CALLER per latest requirement
-    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["MANAGER", "FRONTDESK", "ADMIN"] },
+    { label: "Driver Tracker", path: "/driver-tracker", icon: CarIcon, roles: ["MANAGER", "FRONTDESK"] },
+    { label: "Reconciliation", path: "/reconciliation", icon: DollarSignIcon, roles: ["MANAGER",] },
     // Station Manager & Front Desk - Management
     // { label: "Financial Dashboard", path: "/financial-dashboard", icon: LayoutDashboard, roles: ["MANAGER", "FRONTDESK"] },
     { label: "Shelf and Address", path: "/shelf-management", icon: Layers, roles: ["MANAGER",] },
