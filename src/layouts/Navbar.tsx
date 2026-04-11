@@ -242,8 +242,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                     <div className="font-medium text-sm text-neutral-800">
                                         {currentUser.name}
                                     </div>
-                                    <div className="text-xs text-[#5d5d5d] capitalize">
-                                        {getRoleLabel(currentUser.role)}
+                                    <div className="text-xs text-[#5d5d5d]">
+                                        {currentUser.office?.name || getRoleLabel(currentUser.role)}
                                     </div>
                                 </div>
                             </div>
@@ -292,8 +292,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                                 <div className="font-semibold text-neutral-800 text-sm">
                                                     {currentUser.name}
                                                 </div>
-                                                <div className="text-xs text-[#5d5d5d] capitalize">
-                                                    {getRoleLabel(currentUser.role)}
+                                                <div className="text-xs text-[#5d5d5d]">
+                                                    {currentUser.office?.name || getRoleLabel(currentUser.role)}
                                                 </div>
                                             </div>
                                         </div>

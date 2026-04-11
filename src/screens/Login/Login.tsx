@@ -126,6 +126,7 @@ export const Login = (): JSX.Element => {
           email: userData.email,
           role: normalizedRole as any,
           stationId: userData.stationId, // Will be undefined for admin
+          office: userData.office, // Include office information from login response
         });
 
         // Set station only if user has a stationId (not admin)

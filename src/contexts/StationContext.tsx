@@ -9,12 +9,27 @@ interface Station {
     location: string;
 }
 
+interface Office {
+    id: string;
+    name: string;
+    code: string;
+    address?: string;
+    phoneNumber?: string | null;
+    location?: {
+        id: string;
+        name: string;
+        region: string;
+        country: string;
+    };
+}
+
 interface User {
     id: string;
     name: string;
     email: string;
     role: UserRole;
     stationId?: string; // Optional for admin users
+    office?: Office; // Office information from login
 }
 
 interface StationContextType {
@@ -27,6 +42,8 @@ interface StationContextType {
     userRole: UserRole | null;
     isAuthenticated: boolean;
     isAdmin: boolean;
+    userOfficeId: string | null; // Helper to get user's office ID
+    userOfficeName: string | null; // Helper to get user's office name
 }
 
 const StationContext = createContext<StationContextType | undefined>(undefined);
@@ -121,6 +138,8 @@ export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     const isAdmin = currentUser?.role === "ADMIN";
+    const userOfficeId = currentUser?.office?.id || currentUser?.stationId || null;
+    const userOfficeName = currentUser?.office?.name || null;
 
     return (
         <StationContext.Provider
@@ -134,6 +153,8 @@ export const StationProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 userRole: currentUser?.role || null,
                 isAuthenticated: currentUser !== null,
                 isAdmin,
+                userOfficeId,
+                userOfficeName,
             }}
         >
             {children}

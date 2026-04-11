@@ -236,6 +236,11 @@ class AuthService {
         localStorage.removeItem(this.tokenKey);
         localStorage.removeItem(this.refreshTokenKey);
         localStorage.removeItem(this.userKey);
+        
+        // Clear cached stations/locations on logout
+        localStorage.removeItem('cached_locations');
+        localStorage.removeItem('cached_stations');
+        localStorage.removeItem('cached_locations_timestamp');
     }
 
     /**

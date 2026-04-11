@@ -244,8 +244,15 @@ export const Reconciliation = (): JSX.Element => {
       });
 
     groups.forEach(group => {
-      // Expected amount = delivered amount + failed amount, both rounded to whole numbers
-      group.expectedAmount = Math.round(group.totalDeliveredAmount + group.totalFailedAmount);
+      // Expected amount = delivered amount + failed amount + all delivery fees + all inbound fees
+      group.expectedAmount = Math.round(
+        group.totalDeliveredAmount + 
+        group.totalFailedAmount + 
+        group.deliveredDeliveryCost + 
+        group.deliveredInboundCost + 
+        group.failedDeliveryCost + 
+        group.failedInboundCost
+      );
     });
 
     return groups;
@@ -533,12 +540,12 @@ export const Reconciliation = (): JSX.Element => {
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
                                 <div className="text-sm font-bold text-green-600">
-                                  {formatCurrency(group.deliveryCost)}
+                                  {formatCurrency(group.deliveredDeliveryCost)}
                                 </div>
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap">
                                 <div className="text-sm font-bold text-blue-600">
-                                  {formatCurrency(group.inboundCost)}
+                                  {formatCurrency(group.deliveredInboundCost)}
                                 </div>
                               </td>
                             </tr>
@@ -554,6 +561,8 @@ export const Reconciliation = (): JSX.Element => {
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Phone</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Location</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Amount</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Delivery Fee</th>
+                                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Inbound Fee</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Payment</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Actions</th>
                                           <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700">Details</th>
@@ -604,6 +613,16 @@ export const Reconciliation = (): JSX.Element => {
                                             <td className="px-4 py-3 whitespace-nowrap">
                                               <div className="text-sm font-bold text-[#ea690c]">
                                                 {formatCurrency(parcel.parcelAmount)}
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                              <div className="text-sm font-semibold text-green-600">
+                                                {formatCurrency(parcel.deliveryCost || 0)}
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                              <div className="text-sm font-semibold text-blue-600">
+                                                {formatCurrency(parcel.inboundCost || 0)}
                                               </div>
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap">
