@@ -888,8 +888,9 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Rider</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivered Parcels</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Total Amount</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Stats</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivered Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Delivery Cost</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-b-2 border-gray-300">Inbound Cost</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white">
@@ -941,16 +942,21 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
                                   {formatCurrency(group.totalDeliveredAmount)}
                                 </div>
                               </td>
+                              <td className="px-4 py-4 whitespace-nowrap border-r border-gray-100">
+                                <div className="text-sm font-bold text-green-600">
+                                  {formatCurrency(group.deliveredParcels.reduce((s, p) => s + (p.deliveryCost || 0), 0))}
+                                </div>
+                              </td>
                               <td className="px-4 py-4 whitespace-nowrap">
-                                <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
-                                  {group.totalDeliveredCount} Delivered
-                                </Badge>
+                                <div className="text-sm font-bold text-blue-600">
+                                  {formatCurrency(group.deliveredParcels.reduce((s, p) => s + (p.inboundCost || 0), 0))}
+                                </div>
                               </td>
                             </tr>
                             {/* Expanded Parcels Rows */}
                             {isExpanded && (
                               <tr>
-                                <td colSpan={4} className="px-0 py-0">
+                                <td colSpan={5} className="px-0 py-0">
                                   <div className="bg-gray-50 border-top border-gray-200">
                                     <table className="w-full">
                                       <thead className="bg-gray-100">
@@ -1042,21 +1048,6 @@ export const ReconciliationHistory = ({ embedded = false }: ReconciliationHistor
                                           </tr>
                                         ))}
                                       </tbody>
-                                      <tfoot className="bg-gray-100 border-t-2 border-gray-300">
-                                        <tr>
-                                          <td colSpan={3} className="px-4 py-2.5 text-xs font-semibold text-gray-700">Totals</td>
-                                          <td className="px-4 py-2.5 text-sm font-bold text-[#ea690c]">
-                                            {formatCurrency(group.deliveredParcels.reduce((s, p) => s + (p.parcelAmount || 0), 0))}
-                                          </td>
-                                          <td className="px-4 py-2.5 text-sm font-bold text-green-600">
-                                            {formatCurrency(group.deliveredParcels.reduce((s, p) => s + (p.deliveryCost || 0), 0))}
-                                          </td>
-                                          <td className="px-4 py-2.5 text-sm font-bold text-blue-600">
-                                            {formatCurrency(group.deliveredParcels.reduce((s, p) => s + (p.inboundCost || 0), 0))}
-                                          </td>
-                                          <td colSpan={2} />
-                                        </tr>
-                                      </tfoot>
                                     </table>
 
                                     {/* Failed (returned) parcels and driver's money (failed fees) */}
