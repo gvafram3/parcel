@@ -3,6 +3,7 @@ import authService from './authService';
 import { API_ENDPOINTS } from '../config/api';
 
 const API_BASE_URL_ADMIN = API_ENDPOINTS.ADMIN;
+const API_BASE_URL_FRONTDESK = API_ENDPOINTS.FRONTDESK;
 
 interface ParcelSearchFilters {
     isPOD?: boolean;
@@ -39,6 +40,29 @@ interface ApiParcel {
     delivered?: boolean;
     parcelAssigned?: boolean;
     fragile?: boolean;
+    parcelTransfer?: boolean;
+    destinationOfficeId?: string;
+    vehicleNumber?: string;
+}
+
+interface CreateTransferParcelRequest {
+    senderName: string;
+    senderPhoneNumber: string;
+    receiverName: string;
+    receiverPhoneNumber: string;
+    receiverAddress?: string;
+    driverName: string;
+    driverPhoneNumber?: string;
+    vehicleNumber: string;
+    inboundCost: number;
+    deliveryCost: number;
+    itemValue?: number;
+    pod: boolean;
+    parcelTransfer: boolean;
+    officeId: string;
+    fromOfficeId: string;
+    toOfficeId: string;
+    parcelDescription?: string;
 }
 
 interface PageParcelResponse {
@@ -61,11 +85,20 @@ interface ParcelResponse {
 
 class ParcelService {
     private apiClientAdmin: AxiosInstance;
+    private apiClientFrontdesk: AxiosInstance;
 
     constructor() {
         // Admin API Client
         this.apiClientAdmin = axios.create({
             baseURL: API_BASE_URL_ADMIN,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        // Frontdesk API Client
+        this.apiClientFrontdesk = axios.create({
+            baseURL: API_BASE_URL_FRONTDESK,
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -83,8 +116,32 @@ class ParcelService {
             (error) => Promise.reject(error)
         );
 
+        // Add request interceptor to include token for Frontdesk API
+        this.apiClientFrontdesk.interceptors.request.use(
+            (config) => {
+                const token = authService.getToken();
+                if (token) {
+                    config.headers.Authorization = `Bearer ${token}`;
+                }
+                return config;
+            },
+            (error) => Promise.reject(error)
+        );
+
         // Add response interceptor to handle errors for Admin API
         this.apiClientAdmin.interceptors.response.use(
+            (response) => response,
+            (error) => {
+                if (error.response?.status === 401) {
+                    authService.logout();
+                    window.location.href = '/login';
+                }
+                return Promise.reject(error);
+            }
+        );
+
+        // Add response interceptor to handle errors for Frontdesk API
+        this.apiClientFrontdesk.interceptors.response.use(
             (response) => response,
             (error) => {
                 if (error.response?.status === 401) {
@@ -160,9 +217,90 @@ class ParcelService {
             };
         }
     }
+
+    /**
+     * Create a transfer parcel (using Frontdesk API)
+     */
+    async createTransferParcel(parcelData: CreateTransferParcelRequest): Promise<{ success: boolean; message: string; data?: any }> {
+        try {
+            const response = await this.apiClientFrontdesk.post('/parcel', parcelData);
+
+            return {
+                success: true,
+                message: 'Transfer parcel created successfully',
+                data: response.data,
+            };
+        } catch (error: any) {
+            console.error('Create transfer parcel error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to create transfer parcel. Please try again.',
+            };
+        }
+    }
+
+    /**
+     * Get all incoming transfer parcels (in-transit) (using Frontdesk API)
+     */
+    async getInTransitParcels(): Promise<{ success: boolean; message: string; data?: ApiParcel[] }> {
+        try {
+            const response = await this.apiClientFrontdesk.get<ApiParcel[]>('/parcels/transfer/in-transit');
+
+            return {
+                success: true,
+                message: 'In-transit parcels retrieved successfully',
+                data: response.data,
+            };
+        } catch (error: any) {
+            console.error('Get in-transit parcels error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to retrieve in-transit parcels. Please try again.',
+            };
+        }
+    }
+
+    /**
+     * Get all outgoing transfer parcels (using Frontdesk API)
+     */
+    async getOutgoingParcels(): Promise<{ success: boolean; message: string; data?: ApiParcel[] }> {
+        try {
+            const response = await this.apiClientFrontdesk.get<ApiParcel[]>('/parcels/transfer/outgoing');
+
+            return {
+                success: true,
+                message: 'Outgoing parcels retrieved successfully',
+                data: response.data,
+            };
+        } catch (error: any) {
+            console.error('Get outgoing parcels error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to retrieve outgoing parcels. Please try again.',
+            };
+        }
+    }
+
+    /**
+     * Delete a parcel (using Frontdesk API)
+     */
+    async deleteParcel(parcelId: string): Promise<{ success: boolean; message: string }> {
+        try {
+            await this.apiClientFrontdesk.delete(`/parcel/${parcelId}`);
+
+            return {
+                success: true,
+                message: 'Parcel deleted successfully',
+            };
+        } catch (error: any) {
+            console.error('Delete parcel error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to delete parcel. Please try again.',
+            };
+        }
+    }
 }
 
 export default new ParcelService();
-export type { ApiParcel, PageParcelResponse, ParcelSearchFilters, PageableRequest };
-
-
+export type { ApiParcel, PageParcelResponse, ParcelSearchFilters, PageableRequest, CreateTransferParcelRequest };

@@ -13,38 +13,47 @@ import {
   TrashIcon,
   Edit2Icon,
   PrinterIcon,
+  PackageIcon,
 } from "lucide-react";
-import locationService from "../../services/locationService";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import authService from "../../services/authService";
 import { useToast } from "../../components/ui/toast";
 import { useStation } from "../../contexts/StationContext";
+import { useLocation } from "../../contexts/LocationContext";
+import { API_ENDPOINTS } from "../../config/api";
+import { normalizePhoneNumber, validatePhoneNumber } from "../../utils/dataHelpers";
 
 type ParcelTransferMode = "LOCAL" | "ONLINE";
 
 interface ParcelTransferFormState {
-  destinationStationId: string;
+  toOfficeId: string;
   mode: ParcelTransferMode;
   senderName: string;
-  senderPhone: string;
+  senderPhoneNumber: string;
   receiverName: string;
-  receiverPhone: string;
-  receiverAddress: string;
+  recieverPhoneNumber: string;
+  alternativePhoneNumber: string;
+  deliveryAddress: string;
+  parcelDescription: string;
   driverName: string;
-  driverPhone: string;
+  driverPhoneNumber: string;
   vehicleNumber: string;
-  packageFee: string;
-  transportationFee: string;
-  itemValue: string; // for ONLINE mode
+  inboundCost: string;
+  itemCost: string;
   pod: boolean;
 }
 
 interface BulkParcel {
   id: string;
   receiverName: string;
-  receiverPhone: string;
-  receiverAddress: string;
-  packageFee: string;
-  itemValue: string;
+  recieverPhoneNumber: string;
+  alternativePhoneNumber: string;
+  deliveryAddress: string;
+  parcelDescription: string;
+  inboundCost: string;
+  itemCost: string;
+  pod: boolean;
 }
 
 interface ValidationErrors {
@@ -64,23 +73,27 @@ interface Station {
 export const ParcelTransfer = (): JSX.Element => {
   const { showToast } = useToast();
   const { currentUser } = useStation();
+  const { stations: cachedStations, loading: loadingStations } = useLocation();
+  const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [form, setForm] = useState<ParcelTransferFormState>({
-    destinationStationId: "",
+    toOfficeId: "",
     mode: "LOCAL",
     senderName: "",
-    senderPhone: "",
+    senderPhoneNumber: "",
     receiverName: "",
-    receiverPhone: "",
-    receiverAddress: "",
+    recieverPhoneNumber: "",
+    alternativePhoneNumber: "",
+    deliveryAddress: "",
+    parcelDescription: "",
     driverName: "",
-    driverPhone: "",
+    driverPhoneNumber: "",
     vehicleNumber: "",
-    packageFee: "",
-    transportationFee: "",
-    itemValue: "",
+    inboundCost: "",
+    itemCost: "",
     pod: false,
   });
+  const [submitting, setSubmitting] = useState(false);
   const [bulkMode, setBulkMode] = useState(false);
   const [bulkParcels, setBulkParcels] = useState<BulkParcel[]>([]);
   const [errors, setErrors] = useState<ValidationErrors>({});
@@ -88,42 +101,20 @@ export const ParcelTransfer = (): JSX.Element => {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState("");
   const printRef = useRef<HTMLDivElement>(null);
-  const [stations, setStations] = useState<Station[]>([]);
-  const [loadingStations, setLoadingStations] = useState(true);
+  
+  // Filter out current user's station from cached stations
+  const stations = (() => {
+    const userData = authService.getUser();
+    const userStationId = userData?.stationId || userData?.office?.id;
+    return userStationId 
+      ? cachedStations.filter((station) => station.id !== userStationId)
+      : cachedStations;
+  })();
 
   // Fetch stations on mount
   useEffect(() => {
-    const fetchStations = async () => {
-      setLoadingStations(true);
-      try {
-        const response = await locationService.getAllStations();
-        if (response.success && response.data) {
-          // Get current user's station ID from stationId or office.id
-          const userData = authService.getUser();
-          const userStationId = userData?.stationId || userData?.office?.id;
-          
-          console.log('Full user data:', userData);
-          console.log('User station ID:', userStationId);
-          
-          // Filter out current user's station
-          const filteredStations = userStationId 
-            ? response.data.filter((station) => station.id !== userStationId)
-            : response.data;
-          
-          console.log('All stations:', response.data.map(s => ({ id: s.id, name: s.name })));
-          console.log('Filtered stations:', filteredStations.map(s => ({ id: s.id, name: s.name })));
-          
-          setStations(filteredStations);
-        } else {
-          showToast("Failed to load stations", "error");
-        }
-      } catch (error) {
-        showToast("Error loading stations", "error");
-      } finally {
-        setLoadingStations(false);
-      }
-    };
-    fetchStations();
+    // Stations are now loaded from LocationContext cache
+    // No need to fetch again
   }, []);
 
   // Auto-save draft to localStorage
@@ -156,34 +147,49 @@ export const ParcelTransfer = (): JSX.Element => {
     };
 
   const totalAmount = (() => {
-    const pkg = parseFloat(form.packageFee || "0") || 0;
-    const transport = parseFloat(form.transportationFee || "0") || 0;
-    const item = form.mode === "ONLINE" ? parseFloat(form.itemValue || "0") || 0 : 0;
-    return pkg + transport + item;
+    if (bulkMode) {
+      return bulkParcels.reduce((sum, parcel) => {
+        const inbound = parseFloat(parcel.inboundCost || "0") || 0;
+        const item = form.mode === "ONLINE" ? parseFloat(parcel.itemCost || "0") || 0 : 0;
+        return sum + inbound + item;
+      }, 0);
+    }
+    
+    const inbound = parseFloat(form.inboundCost || "0") || 0;
+    const item = form.mode === "ONLINE" ? parseFloat(form.itemCost || "0") || 0 : 0;
+    return inbound + item;
   })();
 
   const validateStep = (currentStep: number): boolean => {
     const newErrors: ValidationErrors = {};
 
     if (currentStep === 1) {
-      if (!form.destinationStationId) newErrors.destinationStationId = "Destination station is required";
+      if (!form.toOfficeId) newErrors.toOfficeId = "Destination station is required";
       if (!form.senderName) newErrors.senderName = "Sender name is required";
-      if (!form.senderPhone) newErrors.senderPhone = "Sender phone is required";
+      if (!form.senderPhoneNumber) newErrors.senderPhoneNumber = "Sender phone is required";
       if (!form.driverName) newErrors.driverName = "Driver name is required";
       if (!form.vehicleNumber) newErrors.vehicleNumber = "Vehicle number is required";
       
       if (!bulkMode) {
         if (!form.receiverName) newErrors.receiverName = "Receiver name is required";
-        if (!form.receiverPhone) newErrors.receiverPhone = "Receiver phone is required";
+        if (!form.recieverPhoneNumber) newErrors.recieverPhoneNumber = "Receiver phone is required";
       } else {
         if (bulkParcels.length === 0) newErrors.bulkParcels = "Add at least one parcel";
       }
     }
 
     if (currentStep === 2) {
-      if (!form.packageFee) newErrors.packageFee = "Package fee is required";
-      if (!form.transportationFee) newErrors.transportationFee = "Transportation fee is required";
-      if (form.mode === "ONLINE" && !form.itemValue) newErrors.itemValue = "Item value is required for online parcels";
+      if (bulkMode) {
+        const missingPrices = bulkParcels.some(p => !p.inboundCost || (form.mode === "ONLINE" && !p.itemCost));
+        if (missingPrices) {
+          newErrors.bulkPricing = form.mode === "ONLINE" 
+            ? "All parcels must have transportation cost and item cost"
+            : "All parcels must have transportation cost";
+        }
+      } else {
+        if (!form.inboundCost) newErrors.inboundCost = "Transportation cost is required";
+        if (form.mode === "ONLINE" && !form.itemCost) newErrors.itemCost = "Item cost is required for online parcels";
+      }
     }
 
     setErrors(newErrors);
@@ -197,7 +203,7 @@ export const ParcelTransfer = (): JSX.Element => {
   };
 
   const addBulkParcel = () => {
-    if (!form.receiverName || !form.receiverPhone) {
+    if (!form.receiverName || !form.recieverPhoneNumber) {
       setErrors({ bulkAdd: "Receiver name and phone are required" });
       return;
     }
@@ -205,10 +211,13 @@ export const ParcelTransfer = (): JSX.Element => {
     const newParcel: BulkParcel = {
       id: Date.now().toString(),
       receiverName: form.receiverName,
-      receiverPhone: form.receiverPhone,
-      receiverAddress: form.receiverAddress,
-      packageFee: form.packageFee,
-      itemValue: form.itemValue,
+      recieverPhoneNumber: form.recieverPhoneNumber,
+      alternativePhoneNumber: form.alternativePhoneNumber,
+      deliveryAddress: form.deliveryAddress,
+      parcelDescription: form.parcelDescription,
+      inboundCost: "",
+      itemCost: "",
+      pod: form.mode === "ONLINE",
     };
     
     setBulkParcels([...bulkParcels, newParcel]);
@@ -216,12 +225,20 @@ export const ParcelTransfer = (): JSX.Element => {
     setForm(prev => ({
       ...prev,
       receiverName: "",
-      receiverPhone: "",
-      receiverAddress: "",
-      packageFee: "",
-      itemValue: "",
+      recieverPhoneNumber: "",
+      alternativePhoneNumber: "",
+      deliveryAddress: "",
+      parcelDescription: "",
     }));
     setErrors({});
+  };
+
+  const updateBulkParcelPrice = (id: string, field: 'inboundCost' | 'itemCost', value: string) => {
+    setBulkParcels(bulkParcels.map(p => p.id === id ? { ...p, [field]: value } : p));
+  };
+
+  const updateBulkParcelPOD = (id: string, value: boolean) => {
+    setBulkParcels(bulkParcels.map(p => p.id === id ? { ...p, pod: value } : p));
   };
 
   const removeBulkParcel = (id: string) => {
@@ -230,6 +247,108 @@ export const ParcelTransfer = (): JSX.Element => {
 
   const clearDraft = () => {
     localStorage.removeItem('parcelTransferDraft');
+  };
+
+  const submitParcelTransfer = async () => {
+    const userData = authService.getUser();
+    const fromOfficeId = userData?.stationId || userData?.office?.id;
+
+    if (!fromOfficeId) {
+      showToast("Error: User station not found", "error");
+      return;
+    }
+
+    const token = authService.getToken();
+    if (!token) {
+      showToast("Error: Authentication token not found", "error");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      if (bulkMode) {
+        // Submit multiple parcels
+        const promises = bulkParcels.map((parcel) => {
+          const payload = {
+            senderName: form.senderName,
+            senderPhoneNumber: form.senderPhoneNumber,
+            receiverName: parcel.receiverName,
+            recieverPhoneNumber: parcel.recieverPhoneNumber,
+            alternativePhoneNumber: parcel.alternativePhoneNumber || undefined,
+            deliveryAddress: parcel.deliveryAddress,
+            parcelDescription: parcel.parcelDescription,
+            driverName: form.driverName,
+            driverPhoneNumber: form.driverPhoneNumber,
+            vehicleNumber: form.vehicleNumber,
+            deliveryCost: 0,
+            inboundCost: parseFloat(parcel.inboundCost || "0"),
+            itemCost: parcel.pod ? parseFloat(parcel.itemCost || "0") : 0,
+            pod: parcel.pod,
+            fromOfficeId,
+            toOfficeId: form.toOfficeId,
+            typeofParcel: parcel.pod ? "ONLINE" : "PARCEL",
+            hasArrivedAtOffice: false,
+            parcelTransfer: true,
+          };
+
+          return axios.post(`${API_ENDPOINTS.FRONTDESK}/parcel`, payload, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+        });
+
+        await Promise.all(promises);
+        showToast(`Successfully registered ${bulkParcels.length} parcels`, "success");
+      } else {
+        // Submit single parcel
+        const payload = {
+          senderName: form.senderName,
+          senderPhoneNumber: form.senderPhoneNumber,
+          receiverName: form.receiverName,
+          recieverPhoneNumber: form.recieverPhoneNumber,
+          alternativePhoneNumber: form.alternativePhoneNumber || undefined,
+          deliveryAddress: form.deliveryAddress,
+          parcelDescription: form.parcelDescription,
+          driverName: form.driverName,
+          driverPhoneNumber: form.driverPhoneNumber,
+          vehicleNumber: form.vehicleNumber,
+          deliveryCost: 0,
+          inboundCost: parseFloat(form.inboundCost || "0"),
+          itemCost: form.pod ? parseFloat(form.itemCost || "0") : 0,
+          pod: form.pod,
+          fromOfficeId,
+          toOfficeId: form.toOfficeId,
+          typeofParcel: form.pod ? "ONLINE" : "PARCEL",
+          hasArrivedAtOffice: false,
+          parcelTransfer: true,
+        };
+
+        console.log("Parcel Transfer Payload:", payload);
+        console.log("POD Status:", form.pod, "| Item Cost Field Value:", form.itemCost, "| Parsed Item Cost:", form.pod ? parseFloat(form.itemCost || "0") : 0);
+
+        await axios.post(`${API_ENDPOINTS.FRONTDESK}/parcel`, payload, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        showToast("Parcel registered successfully", "success");
+      }
+
+      return true;
+    } catch (error: any) {
+      console.error("Parcel transfer error:", error);
+      showToast(
+        error.response?.data?.message || "Failed to register parcel. Please try again.",
+        "error"
+      );
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const editStep = (stepNumber: number) => {
@@ -249,39 +368,87 @@ export const ParcelTransfer = (): JSX.Element => {
     return `${prefix}${timestamp}${random}`;
   };
 
-  const handleFinish = () => {
-    // Generate tracking number
-    const tracking = generateTrackingNumber();
-    setTrackingNumber(tracking);
+  const handleFinish = async () => {
+    // Submit to API
+    const success = await submitParcelTransfer();
     
-    // For now we just log; backend integration will be added later
-    // eslint-disable-next-line no-console
-    console.log("Parcel transfer payload:", bulkMode ? { ...form, bulkParcels, trackingNumber: tracking } : { ...form, trackingNumber: tracking });
-    
-    // Show print preview
-    setShowPrintPreview(true);
+    if (success) {
+      // Generate tracking number
+      const tracking = generateTrackingNumber();
+      setTrackingNumber(tracking);
+      
+      // Clear draft after successful submission
+      clearDraft();
+      
+      // Show print preview
+      setShowPrintPreview(true);
+    }
   };
 
   const handlePrint = () => {
-    window.print();
+    const printContent = printRef.current;
+    if (!printContent) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Print Parcel Label</title>
+          <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            body {
+              font-family: Arial, sans-serif;
+              padding: 20px;
+            }
+            @media print {
+              body {
+                padding: 0;
+              }
+              .page-break {
+                page-break-after: always;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          ${printContent.innerHTML}
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+    printWindow.focus();
+    
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 250);
   };
 
   const handleNewTransfer = () => {
     // Reset form
     setForm({
-      destinationStationId: "",
+      toOfficeId: "",
       mode: "LOCAL",
       senderName: "",
-      senderPhone: "",
+      senderPhoneNumber: "",
       receiverName: "",
-      receiverPhone: "",
-      receiverAddress: "",
+      recieverPhoneNumber: "",
+      alternativePhoneNumber: "",
+      deliveryAddress: "",
+      parcelDescription: "",
       driverName: "",
-      driverPhone: "",
+      driverPhoneNumber: "",
       vehicleNumber: "",
-      packageFee: "",
-      transportationFee: "",
-      itemValue: "",
+      inboundCost: "",
+      itemCost: "",
       pod: false,
     });
     setBulkParcels([]);
@@ -293,21 +460,56 @@ export const ParcelTransfer = (): JSX.Element => {
   };
 
   const currentStationLabel =
-    stations.find((s) => s.id === form.destinationStationId)?.name ||
+    stations.find((s) => s.id === form.toOfficeId)?.name ||
     "Select a destination";
 
   return (
     <div className="w-full">
+      {/* Loading Modal */}
+      {loadingStations && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl border border-[#d1d1d1] p-6 max-w-sm w-full mx-4">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 border-4 border-[#ea690c] border-t-transparent rounded-full animate-spin" />
+              <div className="text-center">
+                <p className="text-lg font-semibold text-neutral-800 mb-1">Loading Stations</p>
+                <p className="text-sm text-gray-600">Please wait while we fetch available stations...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         {/* Header */}
         <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-xl font-bold text-neutral-800">
-              Initiate Parcel Transfer
-            </h1>
-            <p className="text-xs text-[#5d5d5d]">
-              Register a parcel for transfer to another station
-            </p>
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <h1 className="text-xl font-bold text-neutral-800">
+                Initiate Parcel Transfer
+              </h1>
+              <p className="text-xs text-[#5d5d5d]">
+                Register a parcel for transfer to another station
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => navigate("/incoming-parcels")}
+                variant="outline"
+                className="flex items-center gap-2 border-[#ea690c] text-[#ea690c] hover:bg-orange-50"
+              >
+                <PackageIcon className="h-4 w-4" />
+                <span>View Incoming</span>
+              </Button>
+              <Button
+                onClick={() => navigate("/outgoing-parcels")}
+                variant="outline"
+                className="flex items-center gap-2 border-[#d1d1d1] text-neutral-700 hover:bg-gray-50"
+              >
+                <PackageIcon className="h-4 w-4" />
+                <span>View Outgoing</span>
+              </Button>
+            </div>
           </div>
           
           {/* Draft indicator */}
@@ -377,10 +579,10 @@ export const ParcelTransfer = (): JSX.Element => {
                     Destination Station <span className="text-[#e22420]">*</span>
                   </Label>
                   <select
-                    className={`w-full rounded border bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-[#ea690c] ${errors.destinationStationId ? 'border-red-500' : 'border-[#d1d1d1]'}`}
-                    value={form.destinationStationId}
+                    className={`w-full rounded border bg-white px-3 py-2 text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-[#ea690c] ${errors.toOfficeId ? 'border-red-500' : 'border-[#d1d1d1]'}`}
+                    value={form.toOfficeId}
                     onChange={(e) =>
-                      handleChange("destinationStationId")(e.target.value)
+                      handleChange("toOfficeId")(e.target.value)
                     }
                     disabled={loadingStations}
                   >
@@ -393,39 +595,19 @@ export const ParcelTransfer = (): JSX.Element => {
                       </option>
                     ))}
                   </select>
-                  {errors.destinationStationId && (
-                    <p className="text-xs text-red-600">{errors.destinationStationId}</p>
+                  {errors.toOfficeId && (
+                    <p className="text-xs text-red-600">{errors.toOfficeId}</p>
                   )}
                 </div>
               </section>
 
-              {/* Parcel type and Bulk mode */}
+              {/* Bulk mode toggle */}
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-neutral-800">
-                  Parcel Type
-                </h2>
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-neutral-800">
+                    Transfer Mode
+                  </h2>
                   <label className="inline-flex items-center gap-2 text-sm text-neutral-800">
-                    <input
-                      type="radio"
-                      name="parcelType"
-                      value="LOCAL"
-                      checked={form.mode === "LOCAL"}
-                      onChange={() => handleChange("mode")("LOCAL")}
-                    />
-                    Local Parcel
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-neutral-800">
-                    <input
-                      type="radio"
-                      name="parcelType"
-                      value="ONLINE"
-                      checked={form.mode === "ONLINE"}
-                      onChange={() => handleChange("mode")("ONLINE")}
-                    />
-                    Online Parcel
-                  </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-neutral-800 ml-auto">
                     <input
                       type="checkbox"
                       checked={bulkMode}
@@ -435,13 +617,6 @@ export const ParcelTransfer = (): JSX.Element => {
                     Bulk Transfer Mode
                   </label>
                 </div>
-                {form.mode === "ONLINE" && (
-                  <p className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                    Sender&apos;s name should be the name of the online company
-                    (e.g. Jumia, Alibaba). The recipient will pay the item cost
-                    plus delivery and driver cost on delivery.
-                  </p>
-                )}
               </section>
 
               {/* Sender details */}
@@ -468,14 +643,25 @@ export const ParcelTransfer = (): JSX.Element => {
                     <Label className="text-xs font-semibold text-neutral-800">
                       Sender Phone number <span className="text-[#e22420]">*</span>
                     </Label>
-                    <Input
-                      placeholder="+233 24 245 8248"
-                      value={form.senderPhone}
-                      onChange={(e) => handleChange("senderPhone")(e.target.value)}
-                      className={`border ${errors.senderPhone ? 'border-red-500' : 'border-[#d1d1d1]'}`}
-                    />
-                    {errors.senderPhone && (
-                      <p className="text-xs text-red-600">{errors.senderPhone}</p>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
+                        +233
+                      </span>
+                      <Input
+                        type="tel"
+                        placeholder="0XXXXXXXXX or XXXXXXXXX"
+                        value={form.senderPhoneNumber?.startsWith("+233") ? form.senderPhoneNumber.substring(4) : (form.senderPhoneNumber || "")}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").substring(0, 10);
+                          const normalized = normalizePhoneNumber(digits);
+                          handleChange("senderPhoneNumber")(normalized);
+                        }}
+                        className={`pl-14 pr-3 border ${errors.senderPhoneNumber ? 'border-red-500' : 'border-[#d1d1d1]'}`}
+                        maxLength={10}
+                      />
+                    </div>
+                    {errors.senderPhoneNumber && (
+                      <p className="text-xs text-red-600">{errors.senderPhoneNumber}</p>
                     )}
                   </div>
                 </div>
@@ -521,25 +707,70 @@ export const ParcelTransfer = (): JSX.Element => {
                       Receiver Phone number{" "}
                       <span className="text-[#e22420]">*</span>
                     </Label>
-                    <Input
-                      placeholder="+233 24 245 8248"
-                      value={form.receiverPhone}
-                      onChange={(e) => handleChange("receiverPhone")(e.target.value)}
-                      className={`border ${errors.receiverPhone ? 'border-red-500' : 'border-[#d1d1d1]'}`}
-                    />
-                    {errors.receiverPhone && (
-                      <p className="text-xs text-red-600">{errors.receiverPhone}</p>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
+                        +233
+                      </span>
+                      <Input
+                        type="tel"
+                        placeholder="0XXXXXXXXX or XXXXXXXXX"
+                        value={form.recieverPhoneNumber?.startsWith("+233") ? form.recieverPhoneNumber.substring(4) : (form.recieverPhoneNumber || "")}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").substring(0, 10);
+                          const normalized = normalizePhoneNumber(digits);
+                          handleChange("recieverPhoneNumber")(normalized);
+                        }}
+                        className={`pl-14 pr-3 border ${errors.recieverPhoneNumber ? 'border-red-500' : 'border-[#d1d1d1]'}`}
+                        maxLength={10}
+                      />
+                    </div>
+                    {errors.recieverPhoneNumber && (
+                      <p className="text-xs text-red-600">{errors.recieverPhoneNumber}</p>
                     )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-neutral-800">
+                      Alternative Phone
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
+                        +233
+                      </span>
+                      <Input
+                        type="tel"
+                        placeholder="0XXXXXXXXX or XXXXXXXXX"
+                        value={form.alternativePhoneNumber?.startsWith("+233") ? form.alternativePhoneNumber.substring(4) : (form.alternativePhoneNumber || "")}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").substring(0, 10);
+                          const normalized = digits ? normalizePhoneNumber(digits) : "";
+                          handleChange("alternativePhoneNumber")(normalized);
+                        }}
+                        className="pl-14 pr-3 border border-[#d1d1d1]"
+                        maxLength={10}
+                      />
+                    </div>
                   </div>
                   <div className="space-y-1.5 md:col-span-2">
                     <Label className="text-xs font-semibold text-neutral-800">
-                      Receiver Address
+                      Delivery Address
                     </Label>
                     <Textarea
                       rows={2}
                       placeholder="Enter address"
-                      value={form.receiverAddress}
-                      onChange={(e) => handleChange("receiverAddress")(e.target.value)}
+                      value={form.deliveryAddress}
+                      onChange={(e) => handleChange("deliveryAddress")(e.target.value)}
+                      className="border border-[#d1d1d1]"
+                    />
+                  </div>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label className="text-xs font-semibold text-neutral-800">
+                      Parcel Description
+                    </Label>
+                    <Textarea
+                      rows={2}
+                      placeholder="Describe the item(s) being sent"
+                      value={form.parcelDescription}
+                      onChange={(e) => handleChange("parcelDescription")(e.target.value)}
                       className="border border-[#d1d1d1]"
                     />
                   </div>
@@ -564,10 +795,16 @@ export const ParcelTransfer = (): JSX.Element => {
                           <div key={parcel.id} className="flex items-center justify-between rounded-lg border border-[#d1d1d1] bg-gray-50 px-3 py-2">
                             <div className="flex-1">
                               <p className="text-xs font-medium text-neutral-800">
-                                {idx + 1}. {parcel.receiverName} - {parcel.receiverPhone}
+                                {idx + 1}. {parcel.receiverName} - {parcel.recieverPhoneNumber}
                               </p>
-                              {parcel.receiverAddress && (
-                                <p className="text-[11px] text-[#5d5d5d]">{parcel.receiverAddress}</p>
+                              {parcel.alternativePhoneNumber && (
+                                <p className="text-[11px] text-[#5d5d5d]">Alt: {parcel.alternativePhoneNumber}</p>
+                              )}
+                              {parcel.deliveryAddress && (
+                                <p className="text-[11px] text-[#5d5d5d]">{parcel.deliveryAddress}</p>
+                              )}
+                              {parcel.parcelDescription && (
+                                <p className="text-[11px] text-[#5d5d5d] italic">Item: {parcel.parcelDescription}</p>
                               )}
                             </div>
                             <button
@@ -608,12 +845,23 @@ export const ParcelTransfer = (): JSX.Element => {
                     <Label className="text-xs font-semibold text-neutral-800">
                       Driver Phone
                     </Label>
-                    <Input
-                      placeholder="+233 24 245 8248"
-                      value={form.driverPhone}
-                      onChange={(e) => handleChange("driverPhone")(e.target.value)}
-                      className="border border-[#d1d1d1]"
-                    />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
+                        +233
+                      </span>
+                      <Input
+                        type="tel"
+                        placeholder="0XXXXXXXXX or XXXXXXXXX"
+                        value={form.driverPhoneNumber?.startsWith("+233") ? form.driverPhoneNumber.substring(4) : (form.driverPhoneNumber || "")}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").substring(0, 10);
+                          const normalized = normalizePhoneNumber(digits);
+                          handleChange("driverPhoneNumber")(normalized);
+                        }}
+                        className="pl-14 pr-3 border border-[#d1d1d1]"
+                        maxLength={10}
+                      />
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-neutral-800">
@@ -655,113 +903,202 @@ export const ParcelTransfer = (): JSX.Element => {
                 </span>
               </div>
 
-              {/* POD toggle explanation */}
-              <section className="space-y-2">
+              {/* Parcel Type Selection */}
+              <section className="space-y-3">
                 <h2 className="text-sm font-semibold text-neutral-800">
-                  Payment on Delivery (POD)
+                  Parcel Type
                 </h2>
-                <p className="text-xs text-[#5d5d5d]">
-                  For online parcels, the recipient pays the item value plus
-                  delivery and transportation fee upon successful delivery.
-                </p>
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="inline-flex items-center gap-2 text-sm text-neutral-800">
+                    <input
+                      type="radio"
+                      name="parcelType"
+                      value="LOCAL"
+                      checked={form.mode === "LOCAL"}
+                      onChange={() => {
+                        handleChange("mode")("LOCAL");
+                        handleChange("pod")(false);
+                      }}
+                    />
+                    Local Parcel
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-neutral-800">
+                    <input
+                      type="radio"
+                      name="parcelType"
+                      value="ONLINE"
+                      checked={form.mode === "ONLINE"}
+                      onChange={() => {
+                        handleChange("mode")("ONLINE");
+                        handleChange("pod")(true);
+                      }}
+                    />
+                    Online Parcel (POD)
+                  </label>
+                </div>
+                {form.mode === "ONLINE" && (
+                  <p className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                    Online parcels automatically enable POD. Sender&apos;s name should be the name of the online company
+                    (e.g. Jumia, Alibaba). The recipient will pay the item cost plus delivery cost on delivery.
+                  </p>
+                )}
               </section>
 
-              {/* Fees */}
-              <section className="space-y-4">
-                <h3 className="text-sm font-semibold text-neutral-800">
-                  Delivery Fee
-                </h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-neutral-800">
-                      Package Fee <span className="text-[#e22420]">*</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      placeholder="eg. 100"
-                      value={form.packageFee}
-                      onChange={(e) => handleChange("packageFee")(e.target.value)}
-                      className={`border ${errors.packageFee ? 'border-red-500' : 'border-[#d1d1d1]'}`}
-                    />
-                    {errors.packageFee && (
-                      <p className="text-xs text-red-600">{errors.packageFee}</p>
-                    )}
+              {errors.bulkPricing && (
+                <p className="text-xs text-red-600 bg-red-50 p-3 rounded">{errors.bulkPricing}</p>
+              )}
+
+              {/* Bulk mode: Individual parcel pricing */}
+              {bulkMode ? (
+                <section className="space-y-4">
+                  <h3 className="text-sm font-semibold text-neutral-800">
+                    Set Prices for Each Parcel
+                  </h3>
+                  <div className="space-y-4">
+                    {bulkParcels.map((parcel, idx) => (
+                      <div key={parcel.id} className="border border-[#d1d1d1] rounded-lg p-4 bg-gray-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-semibold text-neutral-800">
+                            Parcel {idx + 1}: {parcel.receiverName}
+                          </h4>
+                          <span className="text-xs text-[#5d5d5d]">{parcel.recieverPhoneNumber}</span>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold text-neutral-800">
+                              Transportation Cost <span className="text-[#e22420]">*</span>
+                            </Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              placeholder="eg. 30"
+                              value={parcel.inboundCost}
+                              onChange={(e) => updateBulkParcelPrice(parcel.id, 'inboundCost', e.target.value)}
+                              className="border border-[#d1d1d1]"
+                            />
+                          </div>
+                          {form.mode === "ONLINE" && (
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-semibold text-neutral-800">
+                                Item Cost <span className="text-[#e22420]">*</span>
+                              </Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                placeholder="eg. 350"
+                                value={parcel.itemCost}
+                                onChange={(e) => updateBulkParcelPrice(parcel.id, 'itemCost', e.target.value)}
+                                className="border border-[#d1d1d1]"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-2 text-right">
+                          <span className="text-xs text-[#5d5d5d]">Subtotal: </span>
+                          <span className="text-sm font-bold text-[#ea690c]">
+                            GHC {(
+                              (parseFloat(parcel.inboundCost || "0") || 0) +
+                              (form.mode === "ONLINE" ? (parseFloat(parcel.itemCost || "0") || 0) : 0)
+                            ).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                </section>
+              ) : (
+                /* Single parcel pricing */
+                <section className="space-y-4">
+                  <h3 className="text-sm font-semibold text-neutral-800">
+                    Pricing
+                  </h3>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-neutral-800">
-                      Transportation Fee <span className="text-[#e22420]">*</span>
+                      Transportation Cost <span className="text-[#e22420]">*</span>
                     </Label>
                     <Input
                       type="number"
                       min="0"
                       placeholder="eg. 30"
-                      value={form.transportationFee}
+                      value={form.inboundCost}
                       onChange={(e) =>
-                        handleChange("transportationFee")(e.target.value)
+                        handleChange("inboundCost")(e.target.value)
                       }
-                      className={`border ${errors.transportationFee ? 'border-red-500' : 'border-[#d1d1d1]'}`}
+                      className={`border ${errors.inboundCost ? 'border-red-500' : 'border-[#d1d1d1]'}`}
                     />
-                    {errors.transportationFee && (
-                      <p className="text-xs text-red-600">{errors.transportationFee}</p>
+                    {errors.inboundCost && (
+                      <p className="text-xs text-red-600">{errors.inboundCost}</p>
                     )}
                   </div>
-                </div>
 
-                {form.mode === "ONLINE" && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-neutral-800">
-                      Item Value (Cost of Product){" "}
-                      <span className="text-[#e22420]">*</span>
-                    </Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      placeholder="eg. 350"
-                      value={form.itemValue}
-                      onChange={(e) => handleChange("itemValue")(e.target.value)}
-                      className={`border ${errors.itemValue ? 'border-red-500' : 'border-[#d1d1d1]'}`}
-                    />
-                    {errors.itemValue && (
-                      <p className="text-xs text-red-600">{errors.itemValue}</p>
-                    )}
-                    <p className="text-[11px] text-[#5d5d5d]">
-                      This amount will be collected from the recipient together
-                      with the delivery and transportation fee.
-                    </p>
-                  </div>
-                )}
-              </section>
+                  {form.mode === "ONLINE" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-neutral-800">
+                        Item Cost (Cost of Product){" "}
+                        <span className="text-[#e22420]">*</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="eg. 350"
+                        value={form.itemCost}
+                        onChange={(e) => handleChange("itemCost")(e.target.value)}
+                        className={`border ${errors.itemCost ? 'border-red-500' : 'border-[#d1d1d1]'}`}
+                      />
+                      {errors.itemCost && (
+                        <p className="text-xs text-red-600">{errors.itemCost}</p>
+                      )}
+                      <p className="text-[11px] text-[#5d5d5d]">
+                        This amount will be collected from the recipient upon delivery.
+                      </p>
+                    </div>
+                  )}
+                </section>
+              )}
 
               {/* Summary */}
               <section className="space-y-2">
                 <h3 className="text-sm font-semibold text-neutral-800">
                   Summary
                 </h3>
-                <div className="flex flex-col gap-1 text-xs text-[#5d5d5d]">
-                  <div className="flex justify-between">
-                    <span>Package fee</span>
-                    <span>GHC {parseFloat(form.packageFee || "0").toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Transportation fee</span>
-                    <span>
-                      GHC {parseFloat(form.transportationFee || "0").toFixed(2)}
-                    </span>
-                  </div>
-                  {form.mode === "ONLINE" && (
-                    <div className="flex justify-between">
-                      <span>Item value</span>
-                      <span>
-                        GHC {parseFloat(form.itemValue || "0").toFixed(2)}
-                      </span>
+                {bulkMode ? (
+                  <div className="space-y-2">
+                    {bulkParcels.map((parcel, idx) => {
+                      const parcelTotal = 
+                        (parseFloat(parcel.inboundCost || "0") || 0) +
+                        (parcel.pod ? (parseFloat(parcel.itemCost || "0") || 0) : 0);
+                      return (
+                        <div key={parcel.id} className="flex justify-between text-xs text-[#5d5d5d] border-b border-gray-200 pb-1">
+                          <span>Parcel {idx + 1} ({parcel.receiverName})</span>
+                          <span>GHC {parcelTotal.toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
+                    <div className="mt-2 flex justify-between text-sm font-semibold text-neutral-900">
+                      <span>Total Amount ({bulkParcels.length} parcels)</span>
+                      <span>GHC {totalAmount.toFixed(2)}</span>
                     </div>
-                  )}
-                  <div className="mt-2 flex justify-between text-sm font-semibold text-neutral-900">
-                    <span>Total Amount</span>
-                    <span>GHC {totalAmount.toFixed(2)}</span>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex flex-col gap-1 text-xs text-[#5d5d5d]">
+                    <div className="flex justify-between">
+                      <span>Transportation cost</span>
+                      <span>GHC {parseFloat(form.inboundCost || "0").toFixed(2)}</span>
+                    </div>
+                    {form.pod && (
+                      <div className="flex justify-between">
+                        <span>Item cost (POD)</span>
+                        <span>
+                          GHC {parseFloat(form.itemCost || "0").toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="mt-2 flex justify-between text-sm font-semibold text-neutral-900">
+                      <span>Total Amount</span>
+                      <span>GHC {totalAmount.toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
               </section>
 
               {/* Navigation */}
@@ -838,7 +1175,7 @@ export const ParcelTransfer = (): JSX.Element => {
                       Phone Number
                     </p>
                     <p className="text-sm text-neutral-900">
-                      {form.senderPhone || "—"}
+                      {form.senderPhoneNumber || "—"}
                     </p>
                   </div>
                   <div>
@@ -863,11 +1200,21 @@ export const ParcelTransfer = (): JSX.Element => {
                     {bulkParcels.map((parcel, idx) => (
                       <div key={parcel.id} className="rounded bg-gray-50 p-2">
                         <p className="text-xs font-medium text-neutral-900">
-                          {idx + 1}. {parcel.receiverName} - {parcel.receiverPhone}
+                          {idx + 1}. {parcel.receiverName} - {parcel.recieverPhoneNumber}
                         </p>
-                        {parcel.receiverAddress && (
-                          <p className="text-[11px] text-[#5d5d5d]">{parcel.receiverAddress}</p>
+                        {parcel.alternativePhoneNumber && (
+                          <p className="text-[11px] text-[#5d5d5d]">Alt: {parcel.alternativePhoneNumber}</p>
                         )}
+                        {parcel.deliveryAddress && (
+                          <p className="text-[11px] text-[#5d5d5d]">{parcel.deliveryAddress}</p>
+                        )}
+                        {parcel.parcelDescription && (
+                          <p className="text-[11px] text-[#5d5d5d] italic">Item: {parcel.parcelDescription}</p>
+                        )}
+                        <div className="mt-1 text-[11px] text-[#5d5d5d]">
+                          Transport: GHC {parseFloat(parcel.inboundCost || "0").toFixed(2)}
+                          {parcel.pod && ` | Item (POD): GHC ${parseFloat(parcel.itemCost || "0").toFixed(2)}`}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -884,15 +1231,28 @@ export const ParcelTransfer = (): JSX.Element => {
                         Phone Number
                       </p>
                       <p className="text-sm text-neutral-900">
-                        {form.receiverPhone || "—"}
+                        {form.recieverPhoneNumber || "—"}
                       </p>
+                      {form.alternativePhoneNumber && (
+                        <p className="text-xs text-[#5d5d5d] mt-0.5">
+                          Alt: {form.alternativePhoneNumber}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <p className="text-[11px] uppercase text-[#9a9a9a]">Address</p>
                       <p className="text-sm text-neutral-900">
-                        {form.receiverAddress || "—"}
+                        {form.deliveryAddress || "—"}
                       </p>
                     </div>
+                    {form.parcelDescription && (
+                      <div className="md:col-span-3">
+                        <p className="text-[11px] uppercase text-[#9a9a9a]">Parcel Description</p>
+                        <p className="text-sm text-neutral-900">
+                          {form.parcelDescription}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </section>
@@ -917,7 +1277,7 @@ export const ParcelTransfer = (): JSX.Element => {
                       Phone Number
                     </p>
                     <p className="text-sm text-neutral-900">
-                      {form.driverPhone || "—"}
+                      {form.driverPhoneNumber || "—"}
                     </p>
                   </div>
                   <div>
@@ -939,32 +1299,63 @@ export const ParcelTransfer = (): JSX.Element => {
                   </h2>
                   <Edit2Icon className="h-4 w-4 text-[#ea690c]" />
                 </div>
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span>Package fee</span>
-                    <span>
-                      GHC {parseFloat(form.packageFee || "0").toFixed(2)}
-                    </span>
+                {bulkMode ? (
+                  <div className="space-y-2">
+                    {bulkParcels.map((parcel, idx) => {
+                      const parcelTotal = 
+                        (parseFloat(parcel.inboundCost || "0") || 0) +
+                        (parcel.pod ? (parseFloat(parcel.itemCost || "0") || 0) : 0);
+                      return (
+                        <div key={parcel.id} className="border-b border-gray-200 pb-2">
+                          <p className="text-xs font-medium text-neutral-800 mb-1">
+                            Parcel {idx + 1}: {parcel.receiverName}
+                          </p>
+                          <div className="space-y-0.5 text-[11px]">
+                            <div className="flex justify-between">
+                              <span>Transportation cost</span>
+                              <span>GHC {parseFloat(parcel.inboundCost || "0").toFixed(2)}</span>
+                            </div>
+                            {parcel.pod && (
+                              <div className="flex justify-between">
+                                <span>Item cost (POD)</span>
+                                <span>GHC {parseFloat(parcel.itemCost || "0").toFixed(2)}</span>
+                              </div>
+                            )}
+                            <div className="flex justify-between font-semibold text-[#ea690c]">
+                              <span>Subtotal</span>
+                              <span>GHC {parcelTotal.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="mt-2 flex justify-between text-sm font-semibold text-neutral-900">
+                      <span>Total Amount ({bulkParcels.length} parcels)</span>
+                      <span>GHC {totalAmount.toFixed(2)}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Transportation fee</span>
-                    <span>
-                      GHC {parseFloat(form.transportationFee || "0").toFixed(2)}
-                    </span>
-                  </div>
-                  {form.mode === "ONLINE" && (
+                ) : (
+                  <div className="space-y-1">
                     <div className="flex justify-between">
-                      <span>Item value</span>
+                      <span>Package fee</span>
                       <span>
-                        GHC {parseFloat(form.itemValue || "0").toFixed(2)}
+                        GHC {parseFloat(form.inboundCost || "0").toFixed(2)}
                       </span>
                     </div>
-                  )}
-                  <div className="mt-2 flex justify-between text-sm font-semibold text-neutral-900">
-                    <span>Total Amount</span>
-                    <span>GHC {totalAmount.toFixed(2)}</span>
+                    {form.pod && (
+                      <div className="flex justify-between">
+                        <span>Item cost (POD)</span>
+                        <span>
+                          GHC {parseFloat(form.itemCost || "0").toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="mt-2 flex justify-between text-sm font-semibold text-neutral-900">
+                      <span>Total Amount</span>
+                      <span>GHC {totalAmount.toFixed(2)}</span>
+                    </div>
                   </div>
-                </div>
+                )}
               </section>
 
               {/* Navigation */}
@@ -979,10 +1370,20 @@ export const ParcelTransfer = (): JSX.Element => {
                 </Button>
                 <Button
                   onClick={handleFinish}
-                  className="flex w-full items-center justify-center gap-2 bg-green-600 text-white hover:bg-green-700 sm:w-auto"
+                  disabled={submitting}
+                  className="flex w-full items-center justify-center gap-2 bg-green-600 text-white hover:bg-green-700 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span>Finish & Print Label</span>
-                  <CheckCircleIcon className="h-4 w-4" />
+                  {submitting ? (
+                    <>
+                      <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Finish & Print Label</span>
+                      <CheckCircleIcon className="h-4 w-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>
@@ -1013,42 +1414,46 @@ export const ParcelTransfer = (): JSX.Element => {
                 </div>
               </div>
               
-              <div className="p-6">
+              <div className="p-6" ref={printRef}>
                 {bulkMode ? (
                   <div className="space-y-6">
                     {bulkParcels.map((parcel, idx) => (
-                      <div key={parcel.id} ref={idx === 0 ? printRef : null}>
+                      <div key={parcel.id}>
                         <ParcelLabel
                           trackingNumber={`${trackingNumber}-${idx + 1}`}
                           form={form}
                           receiver={{
                             name: parcel.receiverName,
-                            phone: parcel.receiverPhone,
-                            address: parcel.receiverAddress,
+                            phone: parcel.recieverPhoneNumber,
+                            address: parcel.deliveryAddress,
                           }}
-                          packageFee={parcel.packageFee}
-                          itemValue={parcel.itemValue}
+                          parcelDescription={parcel.parcelDescription}
+                          inboundCost={parcel.inboundCost}
+                          itemCost={parcel.itemCost}
+                          pod={parcel.pod}
                           currentStationLabel={currentStationLabel}
-                          totalAmount={parseFloat(parcel.packageFee || "0") + parseFloat(form.transportationFee || "0") + (form.mode === "ONLINE" ? parseFloat(parcel.itemValue || "0") : 0)}
+                          totalAmount={(parseFloat(parcel.inboundCost || "0") || 0) + (parcel.pod ? (parseFloat(parcel.itemCost || "0") || 0) : 0)}
                         />
                         {idx < bulkParcels.length - 1 && (
-                          <div className="border-t-2 border-dashed border-gray-300 my-6" />
+                          <div className="page-break border-t-2 border-dashed border-gray-300 my-6" />
                         )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div ref={printRef}>
+                  <div>
                     <ParcelLabel
                       trackingNumber={trackingNumber}
                       form={form}
                       receiver={{
                         name: form.receiverName,
-                        phone: form.receiverPhone,
-                        address: form.receiverAddress,
+                        phone: form.recieverPhoneNumber,
+                        address: form.deliveryAddress,
                       }}
-                      packageFee={form.packageFee}
-                      itemValue={form.itemValue}
+                      parcelDescription={form.parcelDescription}
+                      inboundCost={form.inboundCost}
+                      itemCost={form.itemCost}
+                      pod={form.pod}
                       currentStationLabel={currentStationLabel}
                       totalAmount={totalAmount}
                     />
@@ -1073,8 +1478,10 @@ interface ParcelLabelProps {
     phone: string;
     address: string;
   };
-  packageFee: string;
-  itemValue: string;
+  parcelDescription: string;
+  inboundCost: string;
+  itemCost: string;
+  pod: boolean;
   currentStationLabel: string;
   totalAmount: number;
 }
@@ -1083,8 +1490,10 @@ const ParcelLabel: React.FC<ParcelLabelProps> = ({
   trackingNumber,
   form,
   receiver,
-  packageFee,
-  itemValue,
+  parcelDescription,
+  inboundCost,
+  itemCost,
+  pod,
   currentStationLabel,
   totalAmount,
 }) => {
@@ -1130,7 +1539,7 @@ const ParcelLabel: React.FC<ParcelLabelProps> = ({
         <div className="border-2 border-black p-3">
           <p className="text-xs font-bold text-black mb-2">SENDER</p>
           <p className="text-sm font-semibold text-black">{form.senderName}</p>
-          <p className="text-xs text-black">{form.senderPhone}</p>
+          <p className="text-xs text-black">{form.senderPhoneNumber}</p>
         </div>
         <div className="border-2 border-black p-3">
           <p className="text-xs font-bold text-black mb-2">RECEIVER</p>
@@ -1147,6 +1556,14 @@ const ParcelLabel: React.FC<ParcelLabelProps> = ({
         </div>
       )}
 
+      {/* Item Description */}
+      {parcelDescription && (
+        <div className="border-2 border-black p-3 mb-4">
+          <p className="text-xs font-bold text-black mb-1">ITEM DESCRIPTION:</p>
+          <p className="text-sm text-black">{parcelDescription}</p>
+        </div>
+      )}
+
       {/* Transport & Driver Info */}
       <div className="border border-black p-2 mb-4">
         <p className="text-xs font-bold text-black">VEHICLE:</p>
@@ -1156,7 +1573,7 @@ const ParcelLabel: React.FC<ParcelLabelProps> = ({
       <div className="border border-black p-2 mb-4">
         <p className="text-xs font-bold text-black">DRIVER:</p>
         <p className="text-sm text-black">
-          {form.driverName} {form.driverPhone && `- ${form.driverPhone}`}
+          {form.driverName} {form.driverPhoneNumber && `- ${form.driverPhoneNumber}`}
         </p>
       </div>
 
@@ -1165,22 +1582,16 @@ const ParcelLabel: React.FC<ParcelLabelProps> = ({
         <p className="text-xs font-bold text-black mb-2">PAYMENT DETAILS</p>
         <div className="space-y-1 text-sm">
           <div className="flex justify-between">
-            <span className="text-black">Package Fee:</span>
+            <span className="text-black">Transportation Cost:</span>
             <span className="font-semibold text-black">
-              GHC {parseFloat(packageFee || "0").toFixed(2)}
+              GHC {parseFloat(inboundCost || "0").toFixed(2)}
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-black">Transport Fee:</span>
-            <span className="font-semibold text-black">
-              GHC {parseFloat(form.transportationFee || "0").toFixed(2)}
-            </span>
-          </div>
-          {form.mode === "ONLINE" && (
+          {pod && (
             <div className="flex justify-between">
-              <span className="text-black">Item Value:</span>
+              <span className="text-black">Item Cost (POD):</span>
               <span className="font-semibold text-black">
-                GHC {parseFloat(itemValue || "0").toFixed(2)}
+                GHC {parseFloat(itemCost || "0").toFixed(2)}
               </span>
             </div>
           )}
@@ -1196,7 +1607,7 @@ const ParcelLabel: React.FC<ParcelLabelProps> = ({
       {/* Parcel Type Badge */}
       <div className="text-center">
         <span className="inline-block bg-black text-white px-4 py-2 text-sm font-bold">
-          {form.mode === "LOCAL" ? "LOCAL PARCEL" : "ONLINE PARCEL - POD"}
+          {pod ? "POD PARCEL" : "REGULAR PARCEL"}
         </span>
       </div>
 

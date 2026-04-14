@@ -43,6 +43,8 @@ import { Preferences } from "./screens/Preferences/Preferences";
 import { Help } from "./screens/Help/Help";
 import { TrackParcel } from "./screens/TrackParcel/TrackParcel";
 import { ParcelTransfer } from "./screens/ParcelTransfer";
+import { OutgoingParcels } from "./screens/OutgoingParcels";
+import { IncomingParcels } from "./screens/IncomingParcels";
 import { DriverInboundReconciliation } from "./screens/DriverInboundReconciliation/DriverInboundReconciliation";
 import { SystemLogs } from "./screens/Admin/SystemLogs/SystemLogs";
 import { HomeDeliveryWatchlist } from "./screens/CallCenter/HomeDeliveryWatchlist/HomeDeliveryWatchlist";
@@ -110,6 +112,26 @@ export const App = (): JSX.Element => {
                           <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", "ADMIN"]}>
                             <MainLayout>
                               <ParcelTransfer />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/outgoing-parcels"
+                        element={
+                          <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", "ADMIN"]}>
+                            <MainLayout>
+                              <OutgoingParcels />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/incoming-parcels"
+                        element={
+                          <ProtectedRoute allowedRoles={["FRONTDESK", "MANAGER", "ADMIN"]}>
+                            <MainLayout>
+                              <IncomingParcels />
                             </MainLayout>
                           </ProtectedRoute>
                         }

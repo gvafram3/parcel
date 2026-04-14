@@ -5,7 +5,7 @@ import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Badge } from "../../../components/ui/badge";
 import { Label } from "../../../components/ui/label";
-import { formatPhoneNumber } from "../../../utils/dataHelpers";
+import { formatPhoneNumber, normalizePhoneNumber, validatePhoneNumber } from "../../../utils/dataHelpers";
 import { useLocation } from "../../../contexts/LocationContext";
 import { useUser } from "../../../contexts/UserContext";
 import { useToast } from "../../../components/ui/toast";
@@ -119,53 +119,6 @@ export const UserManagement = (): JSX.Element => {
         setUserToDelete(null);
     };
 
-    // Format phone number to match API pattern: ^(\+233|0)[2-9][0-9]{8}$
-    // Pattern means: starts with +233 or 0, then digit 2-9, then 8 more digits
-    const formatPhoneInput = (phone: string): string => {
-        // Remove all non-digit characters except +
-        let cleaned = phone.replace(/[^\d+]/g, '');
-
-        // If it already starts with +233, validate and return
-        if (cleaned.startsWith('+233')) {
-            const digits = cleaned.substring(4); // Get digits after +233
-            // Must have 9 digits total, first digit must be 2-9
-            if (digits.length === 9 && /^[2-9]\d{8}$/.test(digits)) {
-                return cleaned;
-            }
-        }
-
-        // If it starts with 0, replace with +233
-        if (cleaned.startsWith('0')) {
-            const digits = cleaned.substring(1); // Get digits after 0
-            // Must have 9 digits total, first digit must be 2-9
-            if (digits.length === 9 && /^[2-9]\d{8}$/.test(digits)) {
-                return '+233' + digits;
-            }
-        }
-
-        // If it starts with 233 (without +), add +
-        if (cleaned.startsWith('233') && !cleaned.startsWith('+')) {
-            const digits = cleaned.substring(3); // Get digits after 233
-            if (digits.length === 9 && /^[2-9]\d{8}$/.test(digits)) {
-                return '+' + cleaned;
-            }
-        }
-
-        // If it's just 9 digits starting with 2-9, add +233
-        if (/^[2-9]\d{8}$/.test(cleaned)) {
-            return '+233' + cleaned;
-        }
-
-        // Return as is if it doesn't match pattern (validation will catch it)
-        return cleaned.startsWith('+') ? cleaned : (cleaned.startsWith('0') ? cleaned : '+233' + cleaned);
-    };
-
-    // Validate phone number against API pattern
-    const validatePhoneNumber = (phone: string): boolean => {
-        const pattern = /^(\+233|0)[2-9][0-9]{8}$/;
-        return pattern.test(phone);
-    };
-
     const handleAddUser = async () => {
         // Validation
         if (!formData.name.trim()) {
@@ -190,11 +143,11 @@ export const UserManagement = (): JSX.Element => {
         }
 
         // Format and validate phone number
-        const formattedPhone = formatPhoneInput(formData.phoneNumber);
-        if (!validatePhoneNumber(formattedPhone)) {
-            showToast("Phone number must be in format: +233XXXXXXXXX or 0XXXXXXXXX (9 digits starting with 2-9)", "error");
-            return;
-        }
+    const formattedPhone = formData.phoneNumber.trim();
+    if (!validatePhoneNumber(formattedPhone)) {
+        showToast("Invalid phone number format. Use 0XXXXXXXXX or XXXXXXXXX", "error");
+        return;
+    }
 
         if (!formData.officeId) {
             showToast("Office/Station is required", "error");
@@ -360,14 +313,24 @@ export const UserManagement = (): JSX.Element => {
                                             <Label className="block text-sm font-semibold text-neutral-800 mb-2">
                                                 Phone Number <span className="text-[#e22420]">*</span>
                                             </Label>
-                                            <Input
-                                                type="tel"
-                                                value={formData.phoneNumber}
-                                                onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-                                                placeholder="+233620037006 or 0620037006"
-                                                className="border border-[#d1d1d1]"
-                                            />
-                                            <p className="text-xs text-[#5d5d5d] mt-1">Format: +233XXXXXXXXX or 0XXXXXXXXX (9 digits, first digit 2-9)</p>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm font-medium pointer-events-none z-10">
+                                                    +233
+                                                </span>
+                                                <Input
+                                                    type="tel"
+                                                    value={formData.phoneNumber.startsWith("+233") ? formData.phoneNumber.substring(4) : formData.phoneNumber}
+                                                    onChange={(e) => {
+                                                        const digits = e.target.value.replace(/\D/g, "").substring(0, 10);
+                                                        const normalized = normalizePhoneNumber(digits);
+                                                        setFormData({ ...formData, phoneNumber: normalized });
+                                                    }}
+                                                    placeholder="0XXXXXXXXX or XXXXXXXXX"
+                                                    className="pl-14 pr-3 border border-[#d1d1d1] w-full rounded-lg bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c]"
+                                                    maxLength={10}
+                                                />
+                                            </div>
+                                            <p className="text-xs text-[#5d5d5d] mt-1">Enter 10 digits (e.g. 0550123456 or 550123456)</p>
                                         </div>
 
                                         <div>

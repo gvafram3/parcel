@@ -13,34 +13,24 @@ import { Label } from "../../components/ui/label";
 import { Card, CardContent } from "../../components/ui/card";
 import authService from "../../services/authService";
 import { useToast } from "../../components/ui/toast";
+import { normalizePhoneNumber, validatePhoneNumber } from "../../utils/dataHelpers";
 
 export const ForgotPassword = (): JSX.Element => {
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const { showToast } = useToast();
 
-  const formatPhoneInput = (value: string) => {
-    // Remove all non-digit characters
-    const digits = value.replace(/\D/g, '');
-    
-    // Limit to 9 digits (after +233 prefix)
-    const limitedDigits = digits.slice(0, 9);
-    
-    // Format based on length
-    if (limitedDigits.length === 0) return '';
-    if (limitedDigits.length <= 3) return limitedDigits;
-    if (limitedDigits.length <= 6) return `${limitedDigits.slice(0, 3)} ${limitedDigits.slice(3)}`;
-    return `${limitedDigits.slice(0, 3)} ${limitedDigits.slice(3, 6)} ${limitedDigits.slice(6)}`;
-  };
-
-  const validatePhoneNumber = (phone: string): boolean => {
-    // Remove spaces and check format: should be 9 digits after +233
-    const cleaned = phone.replace(/\s+/g, '');
-    // Should be exactly 9 digits and start with 2-9
-    const pattern = /^[2-9][0-9]{8}$/;
-    return pattern.test(cleaned);
+  const handlePhoneChange = (input: string) => {
+    const digits = input.replace(/\D/g, "").substring(0, 10);
+    const normalized = normalizePhoneNumber(digits);
+    setPhoneNumber(normalized);
+    if (phoneError && validatePhoneNumber(normalized)) {
+      setPhoneError("");
+    }
+    setError("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,19 +38,16 @@ export const ForgotPassword = (): JSX.Element => {
     setError("");
     setLoading(true);
 
-    // Validate phone number (should be 9 digits)
-    const cleanedPhone = phoneNumber.replace(/\s+/g, '');
-    if (!validatePhoneNumber(cleanedPhone)) {
-      setError("Please enter a valid phone number (9 digits starting with 2-9)");
+    // Validate phone number
+    if (!validatePhoneNumber(phoneNumber)) {
+      setPhoneError("Invalid phone number format. Use 0XXXXXXXXX or XXXXXXXXX");
+      setError("Invalid phone number format. Use 0XXXXXXXXX or XXXXXXXXX");
       setLoading(false);
       return;
     }
 
-    // Prepend +233 to the phone number
-    const fullPhoneNumber = `+233${cleanedPhone}`;
-
     try {
-      const response = await authService.requestPasswordReset(fullPhoneNumber);
+      const response = await authService.requestPasswordReset(phoneNumber);
       
       if (response.success) {
         showToast(response.message || "OTP sent successfully to your phone", "success");
@@ -68,7 +55,7 @@ export const ForgotPassword = (): JSX.Element => {
         if (response.data?.verificationId) {
           sessionStorage.setItem('passwordResetVerificationId', response.data.verificationId);
         }
-        sessionStorage.setItem('passwordResetPhone', fullPhoneNumber);
+        sessionStorage.setItem('passwordResetPhone', phoneNumber);
         navigate("/reset-password");
       } else {
         setError(response.message);
@@ -140,9 +127,9 @@ export const ForgotPassword = (): JSX.Element => {
             </p>
 
             {/* Error Message */}
-            {error && (
+            {(error || phoneError) && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-800">{error}</p>
+                <p className="text-sm text-red-800">{error || phoneError}</p>
               </div>
             )}
 
@@ -159,20 +146,17 @@ export const ForgotPassword = (): JSX.Element => {
                      <Input
                        id="phone"
                        type="tel"
-                       placeholder="24 XXX XXXX"
-                       value={phoneNumber}
-                       onChange={(e) => {
-                         const formatted = formatPhoneInput(e.target.value);
-                         setPhoneNumber(formatted);
-                         setError("");
-                       }}
+                       placeholder="0XXXXXXXXX or XXXXXXXXX"
+                       value={phoneNumber.startsWith("+233") ? phoneNumber.substring(4) : phoneNumber}
+                       onChange={(e) => handlePhoneChange(e.target.value)}
                        disabled={loading}
                        required
                        className="pl-12 pr-3 w-full rounded-lg border border-[#d1d1d1] bg-white py-2.5 [font-family:'Lato',Helvetica] font-normal text-neutral-700 placeholder:text-[#b0b0b0] focus:outline-none focus:ring-2 focus:ring-[#ea690c] focus:border-[#ea690c] disabled:opacity-50 disabled:cursor-not-allowed"
+                       maxLength={10}
                      />
                    </div>
                   <p className="text-xs text-[#5d5d5d] mt-1">
-                    Enter 9 digits starting with 2-9 (e.g., 24 XXX XXXX)
+                    Enter 10 digits (e.g. 0550123456 or 550123456)
                   </p>
               </div>
 

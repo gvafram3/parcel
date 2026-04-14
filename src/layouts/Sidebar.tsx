@@ -40,7 +40,7 @@ const navItems = [
 
     // Manager Only - Parcel Editing
     { label: "Edit Parcels", path: "/parcel-edit", icon: Edit, roles: ["MANAGER", "FRONTDESK"] },
-    // { label: "Parcel Transfer", path: "/parcel-transfer", icon: ClipboardListIcon, roles: ["FRONTDESK", "MANAGER"] },
+    { label: "Parcel Transfer", path: "/parcel-transfer", icon: ClipboardListIcon, roles: ["FRONTDESK", "MANAGER"] },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {

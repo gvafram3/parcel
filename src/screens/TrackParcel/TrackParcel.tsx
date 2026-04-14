@@ -15,6 +15,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Card, CardContent } from "../../components/ui/card";
 import { searchParcelsByPhone, type CustomerParcel } from "../../services/customerService";
+import { normalizePhoneNumber } from "../../utils/dataHelpers";
 
 function formatDate(ts: number | null | undefined): string {
   if (ts == null) return "—";
@@ -114,7 +115,7 @@ export const TrackParcel = (): JSX.Element => {
                   Phone number
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium pointer-events-none">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium pointer-events-none z-10">
                     +233
                   </span>
                   <Input
@@ -122,20 +123,22 @@ export const TrackParcel = (): JSX.Element => {
                     type="tel"
                     inputMode="numeric"
                     autoComplete="tel"
-                    value={phoneNumber}
+                    value={phoneNumber.startsWith("+233") ? phoneNumber.substring(4) : phoneNumber}
                     onChange={(e) => {
-                      const v = e.target.value.replace(/\D/g, "").slice(0, 10);
-                      setPhoneNumber(v);
+                      const digits = e.target.value.replace(/\D/g, "").substring(0, 10);
+                      const normalized = normalizePhoneNumber(digits);
+                      setPhoneNumber(normalized);
                       setError("");
                     }}
-                    placeholder="550123456"
+                    placeholder="0XXXXXXXXX or XXXXXXXXX"
                     className="pl-14 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white py-3 text-base"
                     disabled={loading}
                     aria-describedby={error ? "track-error" : undefined}
+                    maxLength={10}
                   />
                   <PhoneIcon className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-300 pointer-events-none" />
                 </div>
-                <p className="text-xs text-slate-500 mt-1.5">Enter 9 digits without 0 (e.g. 550123456)</p>
+                <p className="text-xs text-slate-500 mt-1.5">Enter 10 digits (e.g. 0550123456 or 550123456)</p>
               </div>
               <Button
                 type="submit"

@@ -101,7 +101,12 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             return;
         }
 
-        setLoading(true);
+        // Only show loading on initial fetch (when there's no data)
+        const isInitialLoad = locations.length === 0;
+        if (isInitialLoad) {
+            setLoading(true);
+        }
+        
         try {
             const response = await locationService.getLocations();
             if (response.success && Array.isArray(response.data)) {
@@ -122,10 +127,13 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
         } catch (error) {
             console.error('Failed to load locations:', error);
+            // Keep using cached data on error
         } finally {
-            setLoading(false);
+            if (isInitialLoad) {
+                setLoading(false);
+            }
         }
-    }, [lastFetchTime]);
+    }, [lastFetchTime, locations.length]);
 
     const refreshLocations = useCallback(async () => {
         await loadLocations(true);
@@ -142,8 +150,19 @@ export const LocationProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (!lastFetchTime || (now - lastFetchTime) >= CACHE_DURATION) {
             loadLocations(false);
         }
+        
+        // Set up automatic refresh interval - runs in background
+        const refreshInterval = setInterval(() => {
+            const currentTime = Date.now();
+            // Silently refresh in background when cache expires
+            if (lastFetchTime && (currentTime - lastFetchTime) >= CACHE_DURATION) {
+                loadLocations(false);
+            }
+        }, 60000); // Check every minute
+        
+        return () => clearInterval(refreshInterval);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [lastFetchTime]);
 
     return (
         <LocationContext.Provider
