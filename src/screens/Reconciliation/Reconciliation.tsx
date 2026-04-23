@@ -60,6 +60,8 @@ interface RiderGroup {
   deliveredInboundCost: number;
   failedDeliveryCost: number;
   failedInboundCost: number;
+  pendingDeliveryCost: number;
+  pendingInboundCost: number;
   totalFailedAmount: number; // Sum of parcel amounts for failed (returned) parcels
   expectedAmount: number; // Delivered amount + failed amount
   assignments: Map<string, AssignmentData>; // Map of assignmentId to assignment data with amounts
@@ -154,6 +156,8 @@ export const Reconciliation = (): JSX.Element => {
           deliveredInboundCost: 0,
           failedDeliveryCost: 0,
           failedInboundCost: 0,
+          pendingDeliveryCost: 0,
+          pendingInboundCost: 0,
           totalFailedAmount: 0,
           expectedAmount: 0,
           assignments: new Map<string, AssignmentData>(),
@@ -225,6 +229,10 @@ export const Reconciliation = (): JSX.Element => {
             group.failedDeliveryCost += parcelDeliveryCost;
             group.failedInboundCost += parcelInboundCost;
             group.totalFailedAmount += parcelAmount;
+          } else {
+            // Pending parcels (not delivered and not returned)
+            group.pendingDeliveryCost += parcelDeliveryCost;
+            group.pendingInboundCost += parcelInboundCost;
           }
         });
       }
@@ -244,14 +252,14 @@ export const Reconciliation = (): JSX.Element => {
       });
 
     groups.forEach(group => {
-      // Expected amount = delivered amount + failed amount + all delivery fees + all inbound fees
+      // Expected amount = all delivery fees + all inbound fees (delivered + failed + pending)
       group.expectedAmount = Math.round(
-        group.totalDeliveredAmount + 
-        group.totalFailedAmount + 
         group.deliveredDeliveryCost + 
         group.deliveredInboundCost + 
         group.failedDeliveryCost + 
-        group.failedInboundCost
+        group.failedInboundCost +
+        group.pendingDeliveryCost +
+        group.pendingInboundCost
       );
     });
 
