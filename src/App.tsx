@@ -51,6 +51,7 @@ import { HomeDeliveryWatchlist } from "./screens/CallCenter/HomeDeliveryWatchlis
 import { SmartSearch } from "./screens/SmartSearch/SmartSearch";
 import RiderFuelRequest from "./screens/RiderFuelRequest";
 import AdminFuelRequests from "./screens/AdminFuelRequests";
+import AdminStatistics from "./screens/Admin/AdminStatistics";
 
 export const App = (): JSX.Element => {
   // Some environments cache component prop types aggressively; this keeps routing flexible.
@@ -420,6 +421,17 @@ export const App = (): JSX.Element => {
                           <ProtectedRoute allowedRoles={["ADMIN"]}>
                             <MainLayout>
                               <FinancialReports />
+                            </MainLayout>
+                          </ProtectedRoute>
+                        }
+                      />
+
+                      <Route
+                        path="/admin/statistics"
+                        element={
+                          <ProtectedRoute allowedRoles={["ADMIN"]}>
+                            <MainLayout>
+                              <AdminStatistics />
                             </MainLayout>
                           </ProtectedRoute>
                         }

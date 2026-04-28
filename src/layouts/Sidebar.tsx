@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, MapPin, BarChart3, PhoneIcon, CarIcon, ScrollTextIcon, CheckCircleIcon, HomeIcon, ZapIcon, Fuel } from "lucide-react";
+import { X, InboxIcon, ClipboardListIcon, TruckIcon, DollarSignIcon, Layers, SearchIcon, Package, Users, Building2, LogOut, Edit, MapPin, BarChart3, PhoneIcon, CarIcon, ScrollTextIcon, CheckCircleIcon, HomeIcon, ZapIcon, Fuel, TrendingUp } from "lucide-react";
 import { useStation } from "../contexts/StationContext";
 
 interface SidebarProps {
@@ -12,6 +12,7 @@ const navItems = [
 
     // Admin Only - System Management
     // { label: "Admin Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, roles: ["ADMIN"] },
+    { label: "Statistics", path: "/admin/statistics", icon: TrendingUp, roles: ["ADMIN"] },
     { label: "Station Management", path: "/admin/stations", icon: Building2, roles: ["ADMIN"] },
     { label: "User Management", path: "/admin/users", icon: Users, roles: ["ADMIN"] },
     { label: "System Parcels", path: "/admin/parcels", icon: Package, roles: ["ADMIN"] },
