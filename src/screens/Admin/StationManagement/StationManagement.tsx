@@ -110,6 +110,13 @@ export const StationManagement = (): JSX.Element => {
         return result;
     }, [stations, locations, searchQuery, locationFilter, sortBy, sortDirection]);
 
+    // Load locations on mount if not already loaded
+    useEffect(() => {
+        if (locations.length === 0 && !loadingLocations) {
+            refreshLocations();
+        }
+    }, []);
+
     const handleSort = (column: keyof Station) => {
         if (sortBy === column) {
             setSortDirection((d) => (d === "asc" ? "desc" : "asc"));

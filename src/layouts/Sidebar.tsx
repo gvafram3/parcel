@@ -65,41 +65,41 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
 
             {/* Sidebar */}
             <aside
-                className={`fixed inset-y-0 left-0 z-30 w-64 transform bg-white dark:bg-gray-900 transition-transform duration-200 ease-in-out lg:translate-x-0 border-r border-[#d1d1d1] dark:border-gray-700 flex flex-col ${isOpen ? "translate-x-0" : "-translate-x-full"
+                className={`fixed inset-y-0 left-0 z-30 w-64 transform bg-gradient-to-b from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-950 transition-transform duration-300 ease-in-out lg:translate-x-0 border-r border-gray-200 dark:border-gray-800 shadow-xl flex flex-col ${isOpen ? "translate-x-0" : "-translate-x-full"
                     }`}
             >
                 {/* Header with Logo - Fixed at top */}
-                <div className="flex h-auto flex-col items-center gap-3 border-b border-[#d1d1d1] dark:border-gray-700 p-4 text-center flex-shrink-0">
+                <div className="flex h-auto flex-col items-center gap-3 border-b border-gray-200 dark:border-gray-800 p-6 text-center flex-shrink-0 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm">
                     <div className="flex items-center justify-between w-full lg:justify-center">
-                        <img
-                            className="h-[100px] w-[100px] object-cover"
-                            alt="M&M Logo"
-                            src="/logo-1.png"
-                        />
+                        <div>
+                            <img
+                                className="h-[90px] w-[90px] object-cover rounded-2xl shadow-lg ring-2 ring-orange-100 dark:ring-orange-900/30"
+                                alt="M&M Logo"
+                                src="/logo-1.png"
+                            />
+                        </div>
                         <button
                             onClick={onToggle}
-                            className="rounded-lg p-2 text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-gray-800 lg:hidden"
+                            className="rounded-lg p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors lg:hidden"
                         >
                             <X size={24} />
                         </button>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                        <div className="font-semibold text-[#ea690c] dark:text-orange-500">
-                            Mealex &amp; Mailex
+                    <div className="flex flex-col items-center gap-1">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-lg bg-gradient-to-r from-orange-600 to-orange-500 bg-clip-text text-transparent">
+                                Mealex & Mailex
+                            </span>
                         </div>
-                        <div className="font-semibold text-neutral-800 dark:text-gray-100">
-                            (M&amp;M)
+                        <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Parcel Delivery System
                         </div>
-                    </div>
-
-                    <div className="text-sm font-semibold text-[#5d5d5d] dark:text-gray-400">
-                        Parcel Delivery System
                     </div>
                 </div>
 
                 {/* Navigation - Scrollable */}
-                <nav className="flex-1 overflow-y-auto overflow-x-hidden space-y-2 px-2 py-6">
+                <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 space-y-1">
                     {filteredNavItems.map((item) => {
                         const Icon = item.icon;
                         const isActive = location.pathname === item.path;
@@ -109,26 +109,37 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                                 key={item.path}
                                 to={item.path}
                                 onClick={onToggle}
-                                className={`flex items-center gap-3 rounded-xl px-4 py-3 font-medium transition-colors ${isActive
-                                    ? "bg-[#ea690c] text-white shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
-                                    : "border border-transparent text-[#5d5d5d] dark:text-gray-300 hover:border-[#f0f0f0] dark:hover:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 font-medium transition-all duration-200 ${isActive
+                                    ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/30"
+                                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/50 hover:translate-x-1"
                                     }`}
                             >
-                                <Icon size={20} />
-                                <span>{item.label}</span>
+                                <div className={`p-1.5 rounded-lg transition-colors ${
+                                    isActive 
+                                        ? "bg-white/20" 
+                                        : "bg-gray-100 dark:bg-gray-800 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20"
+                                }`}>
+                                    <Icon size={18} className={isActive ? "" : "text-gray-600 dark:text-gray-400 group-hover:text-orange-600"} />
+                                </div>
+                                <span className="text-sm">{item.label}</span>
+                                {isActive && (
+                                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div>
+                                )}
                             </Link>
                         );
                     })}
                 </nav>
 
-                {/* Logout Button Only - User info shown in navbar - Fixed at bottom */}
-                <div className="border-t border-[#d1d1d1] dark:border-gray-700 p-4 flex-shrink-0">
+                {/* Logout Button - Fixed at bottom */}
+                <div className="border-t border-gray-200 dark:border-gray-800 p-3 flex-shrink-0 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm">
                     <button
                         onClick={() => setShowLogoutConfirm(true)}
-                        className="flex w-full items-center gap-3 rounded-xl bg-red-50 px-4 py-3 font-medium text-[#e22420] transition-colors hover:bg-red-100"
+                        className="flex w-full items-center gap-3 rounded-lg bg-gradient-to-r from-red-50 to-red-100 dark:from-red-900/20 dark:to-red-800/20 px-3 py-2.5 font-medium text-red-600 dark:text-red-400 transition-all duration-200 hover:shadow-lg hover:shadow-red-500/20 hover:scale-[1.02] group"
                     >
-                        <LogOut size={20} />
-                        <span>Logout</span>
+                        <div className="p-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 group-hover:bg-red-200 dark:group-hover:bg-red-800/40 transition-colors">
+                            <LogOut size={18} />
+                        </div>
+                        <span className="text-sm font-semibold">Logout</span>
                     </button>
                 </div>
             </aside>

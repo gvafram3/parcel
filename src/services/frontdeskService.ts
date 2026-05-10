@@ -758,6 +758,66 @@ class FrontdeskService {
     }
 
     /**
+     * Get unpaid driver assignments (for Driver Tracker page)
+     * Endpoint: GET /driver-assignments/unpaid
+     */
+    async getUnpaidDriverAssignments(page: number = 0, size: number = 500): Promise<ApiResponse> {
+        try {
+            const params = new URLSearchParams();
+            params.append('page', page.toString());
+            params.append('size', size.toString());
+
+            const response = await this.apiClient.get<any>(`/driver-assignments/unpaid?${params.toString()}`);
+
+            return {
+                success: true,
+                message: 'Unpaid driver assignments retrieved successfully',
+                data: {
+                    content: response.data?.content || [],
+                    totalElements: response.data?.totalElements || 0,
+                    totalPages: response.data?.totalPages || 0,
+                    number: response.data?.number || page,
+                    size: response.data?.size || size,
+                },
+            };
+        } catch (error: any) {
+            console.error('Get unpaid driver assignments error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to retrieve unpaid driver assignments.',
+                data: {
+                    content: [],
+                    totalElements: 0,
+                    totalPages: 0,
+                    number: page,
+                    size: size,
+                },
+            };
+        }
+    }
+
+    /**
+     * Pay driver assignments (mark as paid)
+     * Endpoint: POST /driver-assignments/pay
+     * Body: array of assignment IDs
+     */
+    async payDriverAssignments(assignmentIds: string[]): Promise<ApiResponse> {
+        try {
+            const response = await this.apiClient.post<{ message: string }>('/driver-assignments/pay', assignmentIds);
+            return {
+                success: true,
+                message: response.data.message || 'Driver assignments marked as paid successfully',
+            };
+        } catch (error: any) {
+            console.error('Pay driver assignments error:', error);
+            return {
+                success: false,
+                message: error.response?.data?.message || 'Failed to mark driver assignments as paid.',
+            };
+        }
+    }
+
+    /**
      * Get addresses stored for the current office.
      * Endpoint: GET /addresses
      * Optional query: name (filter by address name).

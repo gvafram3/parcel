@@ -169,13 +169,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
     return (
         <>
-        <nav className="sticky top-0 z-10 border-b border-[#d1d1d1] dark:border-gray-700 bg-white dark:bg-gray-900">
-            <div className="flex h-20 items-center justify-between px-4 sm:px-6 lg:px-8">
+        <nav className="sticky top-0 z-10 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl shadow-sm">
+            <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
                 {/* Left Section - Menu and Title */}
                 <div className="flex items-center gap-4 flex-1">
                     <button
                         onClick={onMenuClick}
-                        className="rounded-lg p-2 text-[#5d5d5d] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors lg:hidden"
+                        className="rounded-lg p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 hover:scale-105 lg:hidden"
                     >
                         <Menu size={24} />
                     </button>
@@ -217,10 +217,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="relative h-10 w-10 rounded-lg hover:bg-gray-100 transition-colors"
+                        className="relative h-10 w-10 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 hover:scale-105"
                     >
-                        <BellIcon className="h-5 w-5 text-[#5d5d5d]" />
-                        <Badge className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#e22420] px-0 hover:bg-[#e22420]">
+                        <BellIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        <Badge className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-r from-red-500 to-red-600 px-0 hover:from-red-500 hover:to-red-600 shadow-lg shadow-red-500/30">
                             <span className="text-white text-[9px] font-bold">
                                 9
                             </span>
@@ -231,21 +231,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="h-10 w-10 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        className="h-10 w-10 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200 hover:scale-105"
                     >
-                        <SettingsIcon className="h-5 w-5 text-[#5d5d5d] dark:text-gray-300" />
+                        <SettingsIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </Button>
 
                     {/* Divider */}
-                    <div className="hidden sm:block w-px h-6 bg-[#d1d1d1] dark:bg-gray-700 mx-1 lg:mx-2" />
+                    <div className="hidden sm:block w-px h-6 bg-gray-300 dark:bg-gray-700 mx-1" />
 
                     {/* Account Menu */}
                     {currentUser && (
                         <div className="relative inline-flex items-center gap-2 sm:gap-3" ref={menuRef}>
                             <div className="hidden sm:inline-flex items-center gap-2 sm:gap-3 cursor-pointer hover:opacity-80 transition-opacity">
-                                <Avatar className="h-9 w-9 border border-solid border-[#d1d1d1]">
+                                <Avatar className="h-9 w-9 border-2 border-orange-200 dark:border-orange-900/30 shadow-md ring-2 ring-orange-100 dark:ring-orange-900/20">
                                     <AvatarImage src="/vector.svg" alt={currentUser.name} />
-                                    <AvatarFallback>
+                                    <AvatarFallback className="bg-gradient-to-br from-orange-400 to-orange-600 text-white font-semibold">
                                         {currentUser.name
                                             .split(" ")
                                             .map((n) => n[0])
@@ -256,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                 </Avatar>
 
                                 <div className="hidden md:flex flex-col items-start gap-0.5">
-                                    <div className="font-medium text-sm text-neutral-800 dark:text-gray-100">
+                                    <div className="font-semibold text-sm text-neutral-800 dark:text-gray-100">
                                         {currentUser.name}
                                     </div>
                                     <div className="text-xs text-[#5d5d5d] dark:text-gray-400">
@@ -266,9 +266,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                             </div>
 
                             <div className="sm:hidden">
-                                <Avatar className="h-8 w-8 border border-solid border-[#d1d1d1]">
+                                <Avatar className="h-8 w-8 border-2 border-orange-200 dark:border-orange-900/30 shadow-md">
                                     <AvatarImage src="/vector.svg" alt={currentUser.name} />
-                                    <AvatarFallback>
+                                    <AvatarFallback className="bg-gradient-to-br from-orange-400 to-orange-600 text-white font-semibold text-xs">
                                         {currentUser.name
                                             .split(" ")
                                             .map((n) => n[0])

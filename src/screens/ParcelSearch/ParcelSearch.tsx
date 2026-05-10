@@ -305,65 +305,53 @@ export const ParcelSearch = (): JSX.Element => {
         <div className="w-full">
             <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                 <main className="flex-1 space-y-6">
-                    {/* Header */}
-                    {/* <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <div>
-                            <h1 className="text-xl font-bold text-neutral-800">Parcel Search</h1>
-                            <p className="text-xs text-[#5d5d5d] mt-0.5">
-                                Find parcels by recipient, phone, ID, shelf, driver, or date range
-                            </p>
-                        </div>
-                        <Button
-                            onClick={handleExport}
-                            size="sm"
-                            className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2 h-8 text-xs"
-                        >
-                            <Download size={14} />
-                            Export
-                        </Button>
-                    </div> */}
-
                     {/* Quick Search Bar */}
-                    <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                        <CardContent className="p-3 sm:p-4">
+                    <Card className="border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-orange-50/30 dark:from-gray-800 dark:to-gray-900 shadow-lg">
+                        <CardContent className="p-4 sm:p-5">
                             <div className="flex flex-col sm:flex-row gap-3">
-                                <div className="flex-1 relative">
-                                    <SearchIcon className="absolute left-3 top-3 w-5 h-5 text-[#5d5d5d]" />
+                                <div className="flex-1 relative group">
+                                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-orange-500 transition-colors" />
                                     <Input
                                         placeholder="Search by recipient name, parcel ID, phone, or driver..."
                                         value={generalSearch}
                                         onChange={(e) => {
                                             setGeneralSearch(e.target.value);
                                         }}
-                                        className="pl-10 border border-[#d1d1d1]"
+                                        className="pl-10 h-11 border-2 border-gray-200 dark:border-gray-700 focus:border-orange-500 dark:focus:border-orange-500 transition-colors"
                                     />
                                 </div>
-                                <Button
-                                    onClick={() => setShowFilters(!showFilters)}
-                                    variant={showFilters ? "default" : "outline"}
-                                    className={`flex items-center gap-2 ${showFilters ? "bg-[#ea690c] text-white" : "border border-[#d1d1d1]"
-                                        }`}
-                                >
-                                    <FilterIcon size={18} />
-                                    <span className="hidden sm:inline">{showFilters ? "Hide" : "Show"} Filters</span>
-                                </Button>
-                                <Button
-                                    onClick={handleExport}
-                                    size="sm"
-                                    className="bg-[#ea690c] text-white hover:bg-[#ea690c]/90 flex items-center gap-2 h-8 text-xs"
-                                >
-                                    <Download size={14} />
-                                    Export
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button
+                                        onClick={() => setShowFilters(!showFilters)}
+                                        variant={showFilters ? "default" : "outline"}
+                                        className={`flex items-center gap-2 h-11 transition-all ${showFilters ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/30" : "border-2 border-gray-200 dark:border-gray-700 hover:border-orange-500"
+                                            }`}
+                                    >
+                                        <FilterIcon size={18} />
+                                        <span className="hidden sm:inline">{showFilters ? "Hide" : "Show"} Filters</span>
+                                    </Button>
+                                    <Button
+                                        onClick={handleExport}
+                                        disabled={filteredParcels.length === 0}
+                                        className="bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 flex items-center gap-2 h-11 shadow-lg shadow-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <Download size={16} />
+                                        <span className="hidden sm:inline">Export</span>
+                                    </Button>
+                                </div>
                             </div>
 
                             {/* Advanced Filters */}
                             {showFilters && (
-                                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-700 animate-in slide-in-from-top-2 duration-300">
+                                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4 flex items-center gap-2">
+                                        <FilterIcon size={16} className="text-orange-500" />
+                                        Advanced Filters
+                                    </h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                         {/* Phone Number Filter */}
                                         <div>
-                                            <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                 Phone Number
                                             </label>
                                             <Input
@@ -375,13 +363,13 @@ export const ParcelSearch = (): JSX.Element => {
                                                         phoneNumber: e.target.value,
                                                     }))
                                                 }
-                                                className="border border-[#d1d1d1]"
+                                                className="border-2 border-gray-200 dark:border-gray-700 focus:border-orange-500"
                                             />
                                         </div>
 
                                         {/* Status Filter */}
                                         <div>
-                                            <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                 Status
                                             </label>
                                             <select
@@ -392,7 +380,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                         status: e.target.value,
                                                     }))
                                                 }
-                                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-neutral-800 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                                                className="w-full px-3 py-2 border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                                             >
                                                 <option value="">All Status</option>
                                                 <option value="registered">Registered</option>
@@ -404,7 +392,7 @@ export const ParcelSearch = (): JSX.Element => {
 
                                         {/* Shelf Location Filter */}
                                         <div>
-                                            <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                 Shelf Location
                                             </label>
                                             <select
@@ -415,7 +403,7 @@ export const ParcelSearch = (): JSX.Element => {
                                                         shelfLocation: e.target.value,
                                                     }))
                                                 }
-                                                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-neutral-800 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ea690c]"
+                                                className="w-full px-3 py-2 border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                                             >
                                                 <option value="">All Shelves</option>
                                                 {uniqueShelves.map((shelf) => (
@@ -428,7 +416,7 @@ export const ParcelSearch = (): JSX.Element => {
 
                                         {/* Receiver Name Filter */}
                                         <div>
-                                            <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                 Receiver Name
                                             </label>
                                             <Input
@@ -440,13 +428,13 @@ export const ParcelSearch = (): JSX.Element => {
                                                         recipientName: e.target.value,
                                                     }))
                                                 }
-                                                className="border border-[#d1d1d1]"
+                                                className="border-2 border-gray-200 dark:border-gray-700 focus:border-orange-500"
                                             />
                                         </div>
 
                                         {/* Start Date Filter */}
                                         <div>
-                                            <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                 From Date
                                             </label>
                                             <Input
@@ -458,13 +446,13 @@ export const ParcelSearch = (): JSX.Element => {
                                                         startDate: e.target.value,
                                                     }))
                                                 }
-                                                className="border border-[#d1d1d1]"
+                                                className="border-2 border-gray-200 dark:border-gray-700 focus:border-orange-500"
                                             />
                                         </div>
 
                                         {/* End Date Filter */}
                                         <div>
-                                            <label className="block text-sm font-semibold text-neutral-800 mb-2">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                 To Date
                                             </label>
                                             <Input
@@ -476,14 +464,23 @@ export const ParcelSearch = (): JSX.Element => {
                                                         endDate: e.target.value,
                                                     }))
                                                 }
-                                                className="border border-[#d1d1d1]"
+                                                className="border-2 border-gray-200 dark:border-gray-700 focus:border-orange-500"
                                             />
                                         </div>
                                     </div>
 
-                                    <div className="mt-3 flex justify-end">
-                                        <Button onClick={handleClearFilters} variant="outline" size="sm" className="border border-[#d1d1d1] text-xs h-8">
-                                            Clear Filters
+                                    <div className="mt-4 flex justify-between items-center">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            {Object.values(searchParams).filter(v => v).length} filter(s) active
+                                        </span>
+                                        <Button 
+                                            onClick={handleClearFilters} 
+                                            variant="outline" 
+                                            size="sm" 
+                                            className="border-2 border-gray-200 dark:border-gray-700 hover:border-orange-500 hover:text-orange-600 transition-all"
+                                        >
+                                            <X size={14} className="mr-1" />
+                                            Clear All Filters
                                         </Button>
                                     </div>
                                 </div>
@@ -495,31 +492,37 @@ export const ParcelSearch = (): JSX.Element => {
 
                     {/* Results Summary */}
                     {loading ? (
-                        <div className="text-center py-8">
-                            <Loader className="w-8 h-8 text-[#ea690c] mx-auto mb-4 animate-spin" />
-                            <p className="text-sm text-neutral-700 dark:text-gray-300">Loading parcels...</p>
+                        <div className="text-center py-12">
+                            <Loader className="w-12 h-12 text-orange-500 mx-auto mb-4 animate-spin" />
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Loading parcels...</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Please wait</p>
                         </div>
                     ) : (
                         <>
-                            <div className="flex items-center justify-between text-xs text-[#5d5d5d] mb-2">
-                                <span className="flex items-center gap-2">
-                                    Showing {filteredParcels.length} of {pagination.totalElements} parcel(s)
+                            <div className="flex items-center justify-between px-1">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2 text-sm">
+                                        <span className="font-semibold text-gray-900 dark:text-gray-100">{filteredParcels.length}</span>
+                                        <span className="text-gray-600 dark:text-gray-400">of</span>
+                                        <span className="font-semibold text-gray-900 dark:text-gray-100">{pagination.totalElements}</span>
+                                        <span className="text-gray-600 dark:text-gray-400">parcel(s)</span>
+                                    </div>
                                     {backgroundLoading && (
-                                        <span className="inline-flex items-center gap-1.5 text-[#ea690c]">
-                                            <Loader className="w-4 h-4 animate-spin" />
-                                            Loading next page...
+                                        <span className="inline-flex items-center gap-1.5 text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded-full">
+                                            <Loader className="w-3 h-3 animate-spin" />
+                                            Loading...
                                         </span>
                                     )}
-                                </span>
+                                </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-xs">Rows per page:</span>
+                                    <span className="text-xs text-gray-600 dark:text-gray-400">Rows per page:</span>
                                     <select
                                         value={pagination.size}
                                         onChange={(e) => {
                                             const newSize = parseInt(e.target.value);
                                             loadParcelsIfNeeded({}, 0, newSize, true);
                                         }}
-                                        className="text-xs border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-neutral-800 dark:text-gray-200 rounded px-2 py-1"
+                                        className="text-sm border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                                     >
                                         <option value={1000}>1000</option>
                                         <option value={2000}>2000</option>
@@ -529,37 +532,40 @@ export const ParcelSearch = (): JSX.Element => {
                             </div>
 
                             {/* Parcels Table */}
-                            <Card className="border border-[#d1d1d1] bg-white overflow-hidden">
+                            <Card className="border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden shadow-lg pb-20">
                                 <CardContent className="p-0">
-                                    <div className="overflow-x-auto max-h-[calc(100vh-200px)] overflow-y-auto">
-                                        <table className="w-full divide-y divide-[#d1d1d1] text-xs">
-                                            <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10">
+                                    <div className="overflow-x-auto max-h-[calc(100vh-180px)] overflow-y-auto">
+                                        <table className="w-full table-fixed divide-y divide-gray-200 dark:divide-gray-700 text-xs">
+                                            <colgroup>
+                                                <col style={{width: '18%'}} />
+                                                <col style={{width: '13%'}} />
+                                                <col style={{width: '15%'}} />
+                                                <col style={{width: '10%'}} />
+                                                <col style={{width: '10%'}} />
+                                                <col style={{width: '22%'}} />
+                                                <col style={{width: '12%'}} />
+                                            </colgroup>
+                                            <thead className="bg-gradient-to-r from-gray-50 to-orange-50/30 dark:from-gray-800 dark:to-gray-900 sticky top-0 z-10 shadow-sm">
                                                 <tr>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-3 px-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Recipient
                                                     </th>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-3 px-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Phone
                                                     </th>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
-                                                        Address
-                                                    </th>
-
-                                                    {/* NEW: Date column */}
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-3 px-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Date
                                                     </th>
-
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-3 px-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Status
                                                     </th>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-3 px-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Shelf
                                                     </th>
-                                                    <th className="py-2 px-2 text-left text-xs font-semibold text-neutral-800 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-3 px-3 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Driver
                                                     </th>
-                                                    <th className="py-2 px-2 text-center text-xs font-semibold text-neutral-800 uppercase tracking-wider whitespace-nowrap">
+                                                    <th className="py-3 px-3 text-center text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider whitespace-nowrap">
                                                         Actions
                                                     </th>
                                                 </tr>
@@ -567,9 +573,16 @@ export const ParcelSearch = (): JSX.Element => {
                                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                                 {filteredParcels.length === 0 ? (
                                                     <tr>
-                                                        {/* UPDATED colSpan to account for Date column */}
-                                                        <td colSpan={8} className="py-8 px-4 text-center">
-                                                            <p className="text-xs text-neutral-700">No parcels found matching your search criteria.</p>
+                                                        <td colSpan={7} className="py-12 px-4 text-center">
+                                                            <div className="flex flex-col items-center gap-3">
+                                                                <div className="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-900/20 dark:to-orange-800/20 rounded-full flex items-center justify-center">
+                                                                    <SearchIcon className="w-8 h-8 text-orange-500" />
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">No parcels found</p>
+                                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Try adjusting your search criteria</p>
+                                                                </div>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ) : (
@@ -592,70 +605,57 @@ export const ParcelSearch = (): JSX.Element => {
                                                         return (
                                                             <tr
                                                                 key={parcel.parcelId}
-                                                                className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 ${index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50/50 dark:bg-gray-800/50'} align-middle`}
+                                                                className={`transition-all duration-200 hover:bg-orange-50/50 dark:hover:bg-orange-900/10 hover:shadow-sm ${index % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50/50 dark:bg-gray-800/50'} align-middle cursor-pointer`}
+                                                                onClick={() => {
+                                                                    setSelectedParcel(parcel);
+                                                                    setNewShelfLocation(parcel.shelfId || parcel.shelfNumber || "");
+                                                                    setEditingShelf(false);
+                                                                }}
                                                             >
-                                                                <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
                                                                     <div>
-                                                                        <p className="font-medium text-neutral-800 dark:text-gray-200 text-xs">{parcel.receiverName || "N/A"}</p>
+                                                                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-xs">{parcel.receiverName || "N/A"}</p>
                                                                         {parcel.senderName && (
-                                                                            <p className="text-[#5d5d5d] text-[10px] mt-0.5">From: {parcel.senderName}</p>
+                                                                            <p className="text-gray-500 dark:text-gray-400 text-[10px] mt-0.5">From: {parcel.senderName}</p>
                                                                         )}
                                                                     </div>
                                                                 </td>
-                                                                <td className="py-1.5 px-2 whitespace-nowrap">
-                                                                    <div className="text-neutral-700 dark:text-gray-300 text-xs">
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                                                    <div className="text-gray-700 dark:text-gray-300 text-xs font-medium">
                                                                         {parcel.recieverPhoneNumber ? formatPhoneNumber(parcel.recieverPhoneNumber) : "N/A"}
                                                                     </div>
                                                                 </td>
-                                                                <td className="py-1.5 px-2">
-                                                                    <div className="text-neutral-700 dark:text-gray-300 text-xs max-w-[180px] truncate">
-                                                                        {parcel.receiverAddress || "—"}
-                                                                    </div>
-                                                                </td>
-
-                                                                {/* NEW: createdAt/date cell */}
-                                                                <td className="py-1.5 px-2 whitespace-nowrap">
-                                                                    <div className="text-neutral-700 dark:text-gray-300 text-xs">
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                                                    <div className="text-gray-700 dark:text-gray-300 text-xs">
                                                                         {parcel.createdAt ? new Date(parcel.createdAt).toLocaleString() : "—"}
                                                                     </div>
                                                                 </td>
-
-                                                                <td className="py-1.5 px-2 whitespace-nowrap">
-                                                                    <Badge className={`${statusColor} text-[10px] px-1.5 py-0.5`}>
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                                                    <Badge className={`${statusColor} text-[10px] px-2 py-1 font-medium shadow-sm`}>
                                                                         {statusLabel}
                                                                     </Badge>
                                                                 </td>
-                                                                <td className="py-1.5 px-2 whitespace-nowrap">
-                                                                    <span className="text-neutral-700 dark:text-gray-300 text-xs">{parcel.shelfName || parcel.shelfNumber || "—"}</span>
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                                                    <span className="text-gray-700 dark:text-gray-300 text-xs font-medium">{parcel.shelfName || parcel.shelfNumber || "—"}</span>
                                                                 </td>
-                                                                <td className="py-1.5 px-2 whitespace-nowrap">
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
                                                                     <div className="text-xs">
                                                                         {parcel.driverName ? (
                                                                             <>
-                                                                                <p className="text-neutral-800 dark:text-gray-200 font-medium text-xs">{parcel.driverName}</p>
+                                                                                <p className="text-gray-900 dark:text-gray-100 font-semibold text-xs">{parcel.driverName}</p>
                                                                                 {parcel.driverPhoneNumber && (
-                                                                                    <p className="text-[#5d5d5d] text-[10px]">{formatPhoneNumber(parcel.driverPhoneNumber)}</p>
+                                                                                    <p className="text-gray-500 dark:text-gray-400 text-[10px]">{formatPhoneNumber(parcel.driverPhoneNumber)}</p>
                                                                                 )}
                                                                                 {parcel.vehicleNumber && (
-                                                                                    <p className="text-[#5d5d5d] text-[10px]">{parcel.vehicleNumber}</p>
+                                                                                    <p className="text-gray-500 dark:text-gray-400 text-[10px]">{parcel.vehicleNumber}</p>
                                                                                 )}
                                                                             </>
                                                                         ) : (
-                                                                            <span className="text-neutral-500 text-xs">—</span>
-                                                                        )}
-
-                                                                        {/* NEW: show rider info if present */}
-                                                                        {parcel.riderInfo && (
-                                                                            <div className="mt-1">
-                                                                                <p className="text-neutral-800 dark:text-gray-200 font-medium text-xs">Rider: {parcel.riderInfo.riderName}</p>
-                                                                                {parcel.riderInfo.riderPhoneNumber && (
-                                                                                    <p className="text-[#5d5d5d] text-[10px]">{formatPhoneNumber(parcel.riderInfo.riderPhoneNumber)}</p>
-                                                                                )}
-                                                                            </div>
+                                                                            <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
                                                                         )}
                                                                     </div>
                                                                 </td>
-                                                                <td className="py-1.5 px-2 whitespace-nowrap text-center">
+                                                                <td className="py-2.5 px-3 whitespace-nowrap text-center">
                                                                     <Button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
@@ -665,10 +665,10 @@ export const ParcelSearch = (): JSX.Element => {
                                                                         }}
                                                                         variant="outline"
                                                                         size="sm"
-                                                                        className="border border-[#ea690c] text-[#ea690c] hover:bg-orange-50 h-7 px-2 text-xs"
+                                                                        className="border-2 border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20 h-8 px-3 text-xs font-medium transition-all shadow-sm hover:shadow-md"
                                                                     >
-                                                                        <Eye className="w-3 h-3 mr-1" />
-                                                                        <span className="hidden sm:inline">View</span>
+                                                                        <Eye className="w-3.5 h-3.5 mr-1.5" />
+                                                                        <span>View</span>
                                                                     </Button>
                                                                 </td>
                                                             </tr>
@@ -681,44 +681,11 @@ export const ParcelSearch = (): JSX.Element => {
                                 </CardContent>
                             </Card>
 
-                            {/* Pagination */}
+                            {/* Pagination - Floating */}
                             {pagination.totalPages > 1 && (
-                                <div className="flex items-center justify-between px-4 py-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 sm:px-6">
-                                    <div className="flex flex-1 justify-between sm:hidden">
-                                        <Button
-                                            onClick={() => {
-                                                const newPage = pagination.page - 1;
-                                                loadParcelsIfNeeded({}, newPage, pagination.size, false);
-                                            }}
-                                            disabled={pagination.page === 0 || backgroundLoading}
-                                            variant="outline"
-                                            className="border border-[#d1d1d1]"
-                                        >
-                                            Previous
-                                        </Button>
-                                        <Button
-                                            onClick={() => {
-                                                const newPage = pagination.page + 1;
-                                                loadParcelsIfNeeded({}, newPage, pagination.size, false);
-                                            }}
-                                            disabled={pagination.page >= pagination.totalPages - 1 || backgroundLoading}
-                                            variant="outline"
-                                            className="border border-[#d1d1d1]"
-                                        >
-                                            Next
-                                        </Button>
-                                    </div>
-                                    <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="text-sm text-neutral-700 dark:text-gray-300">
-                                                Showing <span className="font-medium">{pagination.page * pagination.size + 1}</span> to{" "}
-                                                <span className="font-medium">
-                                                    {Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)}
-                                                </span>{" "}
-                                                of <span className="font-medium">{pagination.totalElements}</span> results
-                                            </p>
-                                        </div>
-                                        <div className="flex gap-2">
+                                <Card className="fixed bottom-4 left-[260px] right-4 border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl z-50">
+                                    <CardContent className="px-4 py-4">
+                                        <div className="flex flex-1 justify-between sm:hidden">
                                             <Button
                                                 onClick={() => {
                                                     const newPage = pagination.page - 1;
@@ -726,11 +693,8 @@ export const ParcelSearch = (): JSX.Element => {
                                                 }}
                                                 disabled={pagination.page === 0 || backgroundLoading}
                                                 variant="outline"
-                                                className="border border-[#d1d1d1]"
+                                                className="border-2 border-gray-200 dark:border-gray-700 hover:border-orange-500 disabled:opacity-50"
                                             >
-                                                {backgroundLoading ? (
-                                                    <Loader className="w-4 h-4 animate-spin mr-2" />
-                                                ) : null}
                                                 Previous
                                             </Button>
                                             <Button
@@ -740,16 +704,53 @@ export const ParcelSearch = (): JSX.Element => {
                                                 }}
                                                 disabled={pagination.page >= pagination.totalPages - 1 || backgroundLoading}
                                                 variant="outline"
-                                                className="border border-[#d1d1d1]"
+                                                className="border-2 border-gray-200 dark:border-gray-700 hover:border-orange-500 disabled:opacity-50"
                                             >
-                                                {backgroundLoading ? (
-                                                    <Loader className="w-4 h-4 animate-spin mr-2" />
-                                                ) : null}
                                                 Next
                                             </Button>
                                         </div>
-                                    </div>
-                                </div>
+                                        <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                                                    Showing <span className="font-bold text-gray-900 dark:text-gray-100">{pagination.page * pagination.size + 1}</span> to{" "}
+                                                    <span className="font-bold text-gray-900 dark:text-gray-100">
+                                                        {Math.min((pagination.page + 1) * pagination.size, pagination.totalElements)}
+                                                    </span>{" "}
+                                                    of <span className="font-bold text-gray-900 dark:text-gray-100">{pagination.totalElements}</span> results
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <Button
+                                                    onClick={() => {
+                                                        const newPage = pagination.page - 1;
+                                                        loadParcelsIfNeeded({}, newPage, pagination.size, false);
+                                                    }}
+                                                    disabled={pagination.page === 0 || backgroundLoading}
+                                                    variant="outline"
+                                                    className="border-2 border-gray-200 dark:border-gray-700 hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                                >
+                                                    {backgroundLoading && pagination.page > 0 ? (
+                                                        <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                    ) : null}
+                                                    Previous
+                                                </Button>
+                                                <Button
+                                                    onClick={() => {
+                                                        const newPage = pagination.page + 1;
+                                                        loadParcelsIfNeeded({}, newPage, pagination.size, false);
+                                                    }}
+                                                    disabled={pagination.page >= pagination.totalPages - 1 || backgroundLoading}
+                                                    className="bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-orange-500/30 transition-all"
+                                                >
+                                                    {backgroundLoading && pagination.page < pagination.totalPages - 1 ? (
+                                                        <Loader className="w-4 h-4 animate-spin mr-2" />
+                                                    ) : null}
+                                                    Next
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
                             )}
                         </>
                     )}

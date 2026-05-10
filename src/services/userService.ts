@@ -91,15 +91,25 @@ class UserService {
 
         const addAuthInterceptor = (config: any) => {
             const token = authService.getToken();
+            console.log('Auth interceptor - Token exists:', !!token);
             if (token) {
+                console.log('Auth interceptor - Adding token to request:', config.url);
                 config.headers.Authorization = `Bearer ${token}`;
+            } else {
+                console.warn('Auth interceptor - No token found!');
             }
             return config;
         };
         const addErrorInterceptor = (error: any) => {
+            console.error('API Error interceptor:', error.response?.status, error.response?.data);
             if (error.response?.status === 401) {
+                console.error('401 Unauthorized - Logging out');
                 authService.logout();
                 window.location.href = '/login';
+            }
+            if (error.response?.status === 403) {
+                console.error('403 Forbidden - User does not have permission');
+                console.error('Response data:', error.response?.data);
             }
             return Promise.reject(error);
         };
@@ -144,28 +154,59 @@ class UserService {
      */
     async getUsers(pageable: PageableRequest = { page: 0, size: 50 }): Promise<{ success: boolean; message: string; data?: PageUser }> {
         try {
-            // Build query parameters - Spring Boot pagination format
-            const params = new URLSearchParams();
-            params.append('page', (pageable.page || 0).toString());
-            params.append('size', (pageable.size || 50).toString());
-
-            if (pageable.sort && pageable.sort.length > 0) {
-                pageable.sort.forEach(sort => {
-                    params.append('sort', sort);
-                });
+            // Check if user has ADMIN role
+            const currentUser = authService.getUser();
+            console.log('Current user:', currentUser);
+            console.log('Current user role:', currentUser?.role);
+            
+            if (!currentUser || currentUser.role !== 'ADMIN') {
+                console.error('User is not ADMIN. Role:', currentUser?.role);
+                return {
+                    success: false,
+                    message: 'You must be an admin to view users',
+                };
             }
 
-            const response = await this.apiClientAdmin.get<PageUser>(
-                `/users?${params.toString()}`
-            );
+            // Call endpoint without pagination parameters (backend doesn't support them)
+            const url = `/users`;
+            console.log('Fetching users from:', url);
+            console.log('Full URL:', `${API_BASE_URL_ADMIN}${url}`);
 
+            const response = await this.apiClientAdmin.get<any>(url);
+
+            console.log('Users response:', response.data);
+
+            // If response is an array, wrap it in pagination format
+            const users = Array.isArray(response.data) ? response.data : response.data?.content || [];
+            
             return {
                 success: true,
                 message: 'Users retrieved successfully',
-                data: response.data,
+                data: {
+                    content: users,
+                    totalElements: users.length,
+                    totalPages: 1,
+                    number: 0,
+                    size: users.length,
+                    first: true,
+                    last: true,
+                    numberOfElements: users.length,
+                    empty: users.length === 0,
+                },
             };
         } catch (error: any) {
             console.error('Get users error:', error);
+            console.error('Error response:', error.response);
+            console.error('Error message:', error.message);
+            console.error('Error status:', error.response?.status);
+            
+            if (error.response?.status === 403) {
+                return {
+                    success: false,
+                    message: 'Access denied. You do not have permission to view users. Please ensure you are logged in as an admin.',
+                };
+            }
+            
             return {
                 success: false,
                 message: error.response?.data?.message || 'Failed to retrieve users. Please try again.',
