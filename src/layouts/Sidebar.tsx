@@ -11,7 +11,7 @@ interface SidebarProps {
 const navItems = [
 
     // Admin Only - System Management
-    // { label: "Admin Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, roles: ["ADMIN"] },
+    { label: "Admin Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, roles: ["ADMIN"] },
     { label: "Statistics", path: "/admin/statistics", icon: TrendingUp, roles: ["ADMIN"] },
     { label: "Station Management", path: "/admin/stations", icon: Building2, roles: ["ADMIN"] },
     { label: "User Management", path: "/admin/users", icon: Users, roles: ["ADMIN"] },
@@ -110,8 +110,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
                                     }`}
                             >
                                 <div className={`p-1.5 rounded-lg transition-colors ${isActive
-                                        ? "bg-white/20"
-                                        : "bg-gray-100 dark:bg-gray-800 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20"
+                                    ? "bg-white/20"
+                                    : "bg-gray-100 dark:bg-gray-800 group-hover:bg-orange-50 dark:group-hover:bg-orange-900/20"
                                     }`}>
                                     <Icon size={18} className={isActive ? "" : "text-gray-600 dark:text-gray-400 group-hover:text-orange-600"} />
                                 </div>
