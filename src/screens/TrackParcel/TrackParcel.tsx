@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import {
   PackageIcon,
   SearchIcon,
@@ -332,9 +333,15 @@ export const TrackParcel = (): JSX.Element => {
         )}
 
         {/* Footer */}
-        <footer className="mt-auto pt-10 text-center">
+        <footer className="mt-auto pt-10 text-center space-y-2">
           <p className="text-xs text-slate-500 max-w-sm">
             Use the receiver or sender phone number. For help, contact your branch.
+          </p>
+          <p className="text-xs text-slate-500">
+            Ready to pick up or get delivery?{" "}
+            <Link to="/receive" className="font-medium text-[#ea690c] hover:underline">
+              Go to receive portal
+            </Link>
           </p>
         </footer>
       </main>

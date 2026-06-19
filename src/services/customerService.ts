@@ -8,6 +8,7 @@ import axios from 'axios';
 import { API_ENDPOINTS } from '../config/api';
 
 const API_BASE_USER = API_ENDPOINTS.USER;
+const API_BASE_OFFICES = API_ENDPOINTS.OFFICES;
 
 export interface CustomerParcel {
     parcelId: string;
@@ -19,6 +20,7 @@ export interface CustomerParcel {
     parcelDescription?: string | null;
     shelfName?: string | null;
     officeId?: string | null;
+    officeName?: string | null;
     delivered?: boolean;
     pod?: boolean;
     parcelAssigned?: boolean;
@@ -32,6 +34,8 @@ export interface CustomerParcel {
     paymentMethod?: string | null;
     inboudPayed?: boolean | null;
     typeofParcel?: 'PARCEL' | 'ONLINE' | 'PICKUP';
+    /** Parcel photo URL when available from API */
+    parcelImageUrl?: string | null;
     createdAt?: number | null;
     updatedAt?: number | null;
 }
@@ -93,5 +97,30 @@ export async function searchParcelsByPhone(phoneNumber: string): Promise<SearchB
             message,
             data: [],
         };
+    }
+}
+
+/** Best-effort office name lookup for public receive flow. */
+export async function fetchOfficeNameMap(): Promise<Record<string, string>> {
+    try {
+        const client = axios.create({
+            baseURL: API_BASE_OFFICES,
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000,
+        });
+        const response = await client.get<{ offices?: { id: string; name: string }[] }[] | { id: string; name: string }[]>(
+            '/locations',
+        );
+        const map: Record<string, string> = {};
+        const raw = response.data;
+        const locations = Array.isArray(raw) ? raw : [];
+        locations.forEach((loc: { offices?: { id: string; name: string }[] }) => {
+            (loc.offices || []).forEach(office => {
+                if (office.id && office.name) map[office.id] = office.name;
+            });
+        });
+        return map;
+    } catch {
+        return {};
     }
 }

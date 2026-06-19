@@ -265,3 +265,8 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* Google Places autocomplete dropdown above modals */
+.pac-container {
+  z-index: 10000 !important;
+}

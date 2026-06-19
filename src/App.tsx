@@ -44,6 +44,7 @@ import { AdminFinancialDashboard } from "./screens/Admin/AdminFinancialDashboard
 import { Preferences } from "./screens/Preferences/Preferences";
 import { Help } from "./screens/Help/Help";
 import { TrackParcel } from "./screens/TrackParcel/TrackParcel";
+import { CustomerParcelHub } from "./screens/CustomerParcelHub/CustomerParcelHub";
 import { ParcelTransfer } from "./screens/ParcelTransfer";
 import { OutgoingParcels } from "./screens/OutgoingParcels";
 import { IncomingParcels } from "./screens/IncomingParcels";
@@ -81,6 +82,7 @@ export const App = (): JSX.Element => {
 
                         {/* Public: Customer parcel lookup (no login) */}
                         <Route path="/track" element={<TrackParcel />} />
+                        <Route path="/receive" element={<CustomerParcelHub />} />
 
                         {/* Vendor partner portal */}
                         <Route
