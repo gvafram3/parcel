@@ -56,18 +56,21 @@ export const OtpVerifyStep = ({
         <div className="w-14 h-14 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
           <ShieldCheck className="w-7 h-7 text-[#ea690c]" />
         </div>
-        <h1 className="text-xl font-bold text-neutral-800">Verify your phone</h1>
-        <p className="text-slate-600 mt-2 text-sm leading-relaxed">
-          We found <span className="font-semibold text-neutral-800">{parcelCount}</span> parcel
-          {parcelCount !== 1 ? "s" : ""} for <span className="font-semibold text-neutral-800">{maskPhone(phone)}</span>.
-          Enter the 6-digit code we sent to view details.
+        <h1 className="text-xl font-bold text-neutral-800">Verify phone</h1>
+        <p className="text-slate-600 mt-1.5 text-sm">
+          Code sent to <span className="font-semibold text-neutral-800">{maskPhone(phone)}</span>
+          {parcelCount > 0 && (
+            <>
+              {" "}
+              · {parcelCount} parcel{parcelCount !== 1 ? "s" : ""}
+            </>
+          )}
         </p>
       </div>
 
       <Card className="border border-slate-200 bg-white shadow-sm rounded-2xl">
         <CardContent className="p-5 space-y-4">
           <div className="space-y-2">
-            <p className="text-sm font-medium text-neutral-700 text-center">Verification code</p>
             <OtpDigitInput
               value={otp}
               onChange={onOtpChange}

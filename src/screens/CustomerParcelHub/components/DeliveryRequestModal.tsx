@@ -24,6 +24,7 @@ import {
 interface Props {
   parcels: EnrichedParcel[];
   customerPhone: string;
+  customerEmail?: string;
   onClose: () => void;
   onSubmit: (
     coords: GpsCoordinates,
@@ -33,7 +34,7 @@ interface Props {
   ) => void;
 }
 
-export const DeliveryRequestModal = ({ parcels, customerPhone, onClose, onSubmit }: Props) => {
+export const DeliveryRequestModal = ({ parcels, customerPhone, customerEmail, onClose, onSubmit }: Props) => {
   const { showToast } = useToast();
   const [coords, setCoords] = useState<GpsCoordinates | null>(null);
   const [notes, setNotes] = useState("");
@@ -80,7 +81,7 @@ export const DeliveryRequestModal = ({ parcels, customerPhone, onClose, onSubmit
 
     try {
       await openPaystackPayment({
-        email: paystackEmailFromPhone(customerPhone),
+        email: customerEmail?.trim() || paystackEmailFromPhone(customerPhone),
         amountGhc: grandTotal,
         reference,
         metadata: {

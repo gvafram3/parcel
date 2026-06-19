@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 import { useToast } from "../../components/ui/toast";
+import { useCustomerAuth } from "../../contexts/CustomerAuthContext";
 import { useStation } from "../../contexts/StationContext";
 import { fetchOfficeNameMap, searchParcelsByPhone } from "../../services/customerService";
+import { customerAuthService } from "../../services/customerAuthService";
 import { validatePhoneNumber } from "../../utils/dataHelpers";
 import { DeliveryRequestModal } from "./components/DeliveryRequestModal";
+import { CustomerReceiveLanding, type LandingTab } from "./components/CustomerReceiveLanding";
+import type { AuthMode } from "./components/CustomerEmailAuthForm";
+import { LinkPhoneModal } from "./components/LinkPhoneModal";
 import { OtpVerifyStep } from "./components/OtpVerifyStep";
 import { ParcelDetailView, type ParcelActionSuccess } from "./components/ParcelDetailView";
 import { ParcelListStep } from "./components/ParcelListStep";
-import { PhoneSearchStep } from "./components/PhoneSearchStep";
 import { ReceiveFooter } from "./components/ReceiveFooter";
-import { StepIndicator } from "./components/StepIndicator";
 import { TrackHeader } from "./components/TrackHeader";
+import { preloadGoogleIdentity, type GoogleCredentialPayload } from "../../utils/googleAuth";
 import { sendTrackOtp, verifyTrackOtp } from "./trackOtpMock";
 import {
   EnrichedParcel,
@@ -25,15 +29,16 @@ import {
 } from "./trackParcelUtils";
 
 const HEADER_SUBTITLES: Record<TrackStep, string> = {
-  search: "Receive your parcel",
-  otp: "Verify your phone",
-  list: "Your parcels",
-  detail: "Parcel details",
+  search: "Receive",
+  otp: "Verify",
+  list: "Parcels",
+  detail: "Details",
 };
 
 export const CustomerParcelHub = (): JSX.Element => {
   const { showToast } = useToast();
   const { isAuthenticated } = useStation();
+  const { isCustomerSignedIn, customer, signOutCustomer, completeGoogleSignIn } = useCustomerAuth();
 
   const [step, setStep] = useState<TrackStep>("search");
   const [phone, setPhone] = useState("");
@@ -41,6 +46,12 @@ export const CustomerParcelHub = (): JSX.Element => {
   const [parcels, setParcels] = useState<EnrichedParcel[]>([]);
   const [selectedParcel, setSelectedParcel] = useState<EnrichedParcel | null>(null);
   const [deliveryParcels, setDeliveryParcels] = useState<EnrichedParcel[] | null>(null);
+  const [pendingDeliveryParcels, setPendingDeliveryParcels] = useState<EnrichedParcel[] | null>(null);
+  const [landingTab, setLandingTab] = useState<LandingTab>("account");
+  const [authMode, setAuthMode] = useState<AuthMode>("signin");
+  const [deliveryAuthPrompt, setDeliveryAuthPrompt] = useState(false);
+  const [pendingGoogleProfile, setPendingGoogleProfile] = useState<GoogleCredentialPayload | null>(null);
+  const [googleLinkLoading, setGoogleLinkLoading] = useState(false);
   const [selectedDeliveryIds, setSelectedDeliveryIds] = useState<Set<string>>(new Set());
   const [actionSuccess, setActionSuccess] = useState<ParcelActionSuccess>(null);
   const [deliverySuccess, setDeliverySuccess] = useState<DeliverySuccessInfo>(null);
@@ -52,7 +63,12 @@ export const CustomerParcelHub = (): JSX.Element => {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    preloadGoogleIdentity();
     fetchOfficeNameMap().then(setOfficeNames);
+
+    import("virtual:pwa-register").then(({ registerSW }) => {
+      registerSW({ immediate: true });
+    });
   }, []);
 
   useEffect(() => {
@@ -61,6 +77,53 @@ export const CustomerParcelHub = (): JSX.Element => {
     setSelectedParcel(prev => (prev ? enrichParcel(prev, officeNames) : null));
   }, [officeNames]);
 
+  useEffect(() => {
+    if (customer?.phone && validatePhoneNumber(customer.phone) && !phone) {
+      setPhone(customer.phone);
+    }
+  }, [customer, phone]);
+
+  const focusAccountTab = (mode: AuthMode = "signin") => {
+    setStep("search");
+    setLandingTab("account");
+    setAuthMode(mode);
+  };
+
+  const finishGoogleSignIn = (profile: GoogleCredentialPayload, linkedPhone: string) => {
+    const result = completeGoogleSignIn({
+      name: profile.name,
+      email: profile.email,
+      pictureUrl: profile.picture,
+      phone: linkedPhone,
+    });
+    if (result.success) {
+      setPhone(linkedPhone);
+      setPendingGoogleProfile(null);
+      return true;
+    }
+    showToast(result.message, "error");
+    return false;
+  };
+
+  const handleGoogleSuccess = (profile: GoogleCredentialPayload) => {
+    if (validatePhoneNumber(phone)) {
+      if (finishGoogleSignIn(profile, phone)) {
+        handleAuthSuccess();
+      }
+      return;
+    }
+    setPendingGoogleProfile(profile);
+  };
+
+  const handleLinkPhoneSubmit = (linkedPhone: string) => {
+    if (!pendingGoogleProfile) return;
+    setGoogleLinkLoading(true);
+    if (finishGoogleSignIn(pendingGoogleProfile, linkedPhone)) {
+      handleAuthSuccess();
+    }
+    setGoogleLinkLoading(false);
+  };
+
   const resetAll = () => {
     setStep("search");
     setPhone("");
@@ -68,6 +131,9 @@ export const CustomerParcelHub = (): JSX.Element => {
     setParcels([]);
     setSelectedParcel(null);
     setDeliveryParcels(null);
+    setPendingDeliveryParcels(null);
+    setDeliveryAuthPrompt(false);
+    setLandingTab(isCustomerSignedIn ? "find" : "account");
     setSelectedDeliveryIds(new Set());
     setActionSuccess(null);
     setDeliverySuccess(null);
@@ -191,7 +257,31 @@ export const CustomerParcelHub = (): JSX.Element => {
 
   const openDeliveryModal = (items: EnrichedParcel[]) => {
     if (items.length === 0) return;
+    if (!isAuthenticated && !isCustomerSignedIn) {
+      setPendingDeliveryParcels(items);
+      setDeliveryAuthPrompt(true);
+      setStep("search");
+      setLandingTab("account");
+      setAuthMode("signin");
+      return;
+    }
     setDeliveryParcels(items);
+  };
+
+  const handleAuthSuccess = () => {
+    setDeliveryAuthPrompt(false);
+    const session = customerAuthService.getSession();
+    if (session?.phone && validatePhoneNumber(session.phone)) {
+      setPhone(session.phone);
+    }
+    setLandingTab("find");
+    if (pendingDeliveryParcels?.length) {
+      setDeliveryParcels(pendingDeliveryParcels);
+      setPendingDeliveryParcels(null);
+      showToast("Signed in. Continue with delivery.", "success");
+    } else {
+      showToast("Welcome!", "success");
+    }
   };
 
   const handleBack = () => {
@@ -210,26 +300,51 @@ export const CustomerParcelHub = (): JSX.Element => {
   const backLabel = step === "detail" ? "← All parcels" : "Back";
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-b from-orange-50/80 via-slate-50 to-slate-100 flex flex-col">
       <TrackHeader
         onBack={step !== "search" ? handleBack : undefined}
         backLabel={backLabel}
         subtitle={HEADER_SUBTITLES[step]}
+        customerAccount={
+          !isAuthenticated
+            ? {
+                isSignedIn: isCustomerSignedIn,
+                name: customer?.name,
+                pictureUrl: customer?.pictureUrl,
+                onSignUp: () => focusAccountTab("signup"),
+                onSignIn: () => focusAccountTab("signin"),
+                onSignOut: () => {
+                  signOutCustomer();
+                  showToast("Signed out.", "info");
+                },
+              }
+            : undefined
+        }
       />
 
-      <main className="flex-1 w-full max-w-lg mx-auto px-4 py-6">
-        {!isAuthenticated && <StepIndicator current={step} />}
-
+      <main className="flex-1 w-full max-w-xl mx-auto px-4 py-6">
         {step === "search" && (
-          <PhoneSearchStep
+          <CustomerReceiveLanding
             phone={phone}
             loading={searchLoading}
             error={error}
+            tab={landingTab}
+            onTabChange={setLandingTab}
+            authMode={authMode}
+            onAuthModeChange={setAuthMode}
+            isSignedIn={isCustomerSignedIn}
+            customerName={customer?.name}
+            customerEmail={customer?.email}
+            customerPicture={customer?.pictureUrl}
+            deliveryAuthPrompt={deliveryAuthPrompt}
+            pendingDeliveryCount={pendingDeliveryParcels?.length}
             onPhoneChange={value => {
               setPhone(value);
               setError("");
             }}
             onSubmit={handleSearch}
+            onGoogleSuccess={handleGoogleSuccess}
+            onAuthSuccess={handleAuthSuccess}
           />
         )}
 
@@ -300,10 +415,20 @@ export const CustomerParcelHub = (): JSX.Element => {
         )}
       </main>
 
+      {pendingGoogleProfile && (
+        <LinkPhoneModal
+          profile={pendingGoogleProfile}
+          loading={googleLinkLoading}
+          onClose={() => setPendingGoogleProfile(null)}
+          onSubmit={handleLinkPhoneSubmit}
+        />
+      )}
+
       {deliveryParcels && deliveryParcels.length > 0 && (
         <DeliveryRequestModal
           parcels={deliveryParcels}
           customerPhone={phone}
+          customerEmail={customer?.email}
           onClose={() => setDeliveryParcels(null)}
           onSubmit={handleDeliverySubmit}
         />
