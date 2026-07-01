@@ -1453,7 +1453,7 @@ export const ParcelSearch = (): JSX.Element => {
 const SearchParcelLabel: React.FC<{ parcel: import("../../services/frontdeskService").ParcelResponse }> = ({ parcel }) => {
     const totalAmount = (parcel.inboundCost || 0) + (parcel.deliveryCost || 0) + (parcel.pickUpCost || 0);
 
-    const qrValue = `${window.location.origin}/scan?id=${parcel.parcelId}`;
+    const qrValue = `${window.location.origin}/p/${parcel.parcelId}`;
 
     return (
         <div className="bg-white border-2 border-black p-2">

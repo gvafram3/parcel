@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
-import { Loader, PackageIcon, CheckCircleIcon, XCircleIcon, AlertCircleIcon, ArrowLeftIcon } from "lucide-react";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { Loader, PackageIcon, CheckCircleIcon, XCircleIcon, AlertCircleIcon, ArrowLeftIcon, MapPinIcon, PhoneIcon, ClockIcon } from "lucide-react";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -8,38 +8,75 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { useStation } from "../../contexts/StationContext";
 import { useToast } from "../../components/ui/toast";
-import frontdeskService, { ParcelResponse } from "../../services/frontdeskService";
-import riderService from "../../services/riderService";
+import { ParcelResponse } from "../../services/frontdeskService";
 import authService from "../../services/authService";
 import { formatPhoneNumber, normalizePhoneNumber, validatePhoneNumber } from "../../utils/dataHelpers";
 import axios from "axios";
-import API_BASE_URL from "../../config/api";
+import { API_ENDPOINTS } from "../../config/api";
 
-const fetchParcelPublic = async (parcelId: string): Promise<ParcelResponse | null> => {
+type TrackingParcel = ParcelResponse & {
+    parcelStatus?: string;
+    isDelivered?: boolean;
+    isParcelAssigned?: boolean;
+    fromOfficeName?: string;
+    toOfficeName?: string;
+    timeline?: { status: string; description: string; timestamp: number }[];
+    isPOD?: boolean;
+    isFragile?: boolean;
+};
+
+type FetchError = "not_found" | "unauthorized" | "network";
+
+const fetchParcel = async (
+    parcelId: string,
+): Promise<{ data: TrackingParcel | null; error?: FetchError }> => {
+    const token = authService.getToken();
     try {
-        const res = await axios.get(`${API_BASE_URL}/api-frontdesk/parcel/${parcelId}`);
-        return res.data ?? null;
-    } catch {
-        return null;
+        if (token) {
+            const res = await axios.get(`${API_ENDPOINTS.TRACKING}/${parcelId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            return { data: res.data ?? null };
+        } else {
+            const res = await axios.get(`${API_ENDPOINTS.TRACKING}/${parcelId}/track`);
+            return { data: res.data ?? null };
+        }
+    } catch (err: any) {
+        const status = err?.response?.status;
+        if (status === 401) return { data: null, error: "unauthorized" };
+        if (status === 404 || status === 409) return { data: null, error: "not_found" };
+        return { data: null, error: "network" };
     }
 };
 
+const patchStatus = async (parcelId: string, body: Record<string, unknown>) => {
+    const token = authService.getToken();
+    const res = await axios.patch(
+        `${API_ENDPOINTS.TRACKING}/${parcelId}/status`,
+        body,
+        { headers: { Authorization: `Bearer ${token}` } },
+    );
+    return res.data;
+};
+
 export const ParcelScan = (): JSX.Element => {
+    const { parcelId: paramId } = useParams<{ parcelId: string }>();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { userRole } = useStation();
     const { showToast } = useToast();
 
-    const raw = searchParams.get("id") ?? searchParams.get("parcelId") ?? "";
+    // Support both /p/:parcelId and legacy /scan?id=
+    const raw = paramId ?? searchParams.get("id") ?? searchParams.get("parcelId") ?? "";
     let parcelId = raw;
     try {
         const parsed = JSON.parse(raw);
         if (parsed?.id) parcelId = parsed.id;
     } catch { /* raw is plain string */ }
 
-    const [parcel, setParcel] = useState<ParcelResponse | null>(null);
+    const [parcel, setParcel] = useState<TrackingParcel | null>(null);
     const [loading, setLoading] = useState(true);
-    const [notFound, setNotFound] = useState(false);
+    const [fetchError, setFetchError] = useState<FetchError | null>(null);
 
     // Staff pickup states
     const [showPickupModal, setShowPickupModal] = useState(false);
@@ -65,16 +102,23 @@ export const ParcelScan = (): JSX.Element => {
     ];
 
     useEffect(() => {
-        if (!parcelId) { setLoading(false); setNotFound(true); return; }
-        fetchParcelPublic(parcelId).then(data => {
+        if (!parcelId) { setLoading(false); setFetchError("not_found"); return; }
+        fetchParcel(parcelId).then(({ data, error }) => {
             if (data) setParcel(data);
-            else setNotFound(true);
+            else {
+                if (error === "unauthorized") {
+                    // Preserve return URL then redirect to login
+                    window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+                    return;
+                }
+                setFetchError(error ?? "not_found");
+            }
             setLoading(false);
         });
     }, [parcelId]);
 
     const reload = async () => {
-        const data = await fetchParcelPublic(parcelId);
+        const { data } = await fetchParcel(parcelId);
         if (data) setParcel(data);
     };
 
@@ -84,14 +128,17 @@ export const ParcelScan = (): JSX.Element => {
         try {
             const name = pickupIsOwner ? (parcel.receiverName ?? "") : pickupName.trim();
             const phone = pickupIsOwner ? (parcel.recieverPhoneNumber ?? "") : normalizePhoneNumber(pickupPhone.trim());
-            const res = await frontdeskService.markParcelPickedUp(parcel.parcelId, name || undefined, phone || undefined);
-            if (res.success) {
-                showToast("Parcel marked as picked up", "success");
-                setShowPickupModal(false);
-                await reload();
-            } else {
-                showToast(res.message || "Failed", "error");
-            }
+            await patchStatus(parcel.parcelId, {
+                parcelStatus: "COLLECTED",
+                notes: name ? `Picked up by ${name}${phone ? ` (${phone})` : ""}` : undefined,
+            });
+            showToast("Parcel marked as picked up", "success");
+            setShowPickupModal(false);
+            await reload();
+        } catch (err: any) {
+            const status = err?.response?.status;
+            if (status === 403) showToast("You don't have permission to do this", "error");
+            else showToast(err?.response?.data?.message || "Failed", "error");
         } finally {
             setPickupLoading(false);
         }
@@ -101,20 +148,18 @@ export const ParcelScan = (): JSX.Element => {
         if (!parcel || !paymentMethod) { showToast("Select a payment method", "error"); return; }
         setActionLoading(true);
         try {
-            const assignRes = await frontdeskService.getActiveDeliveryForParcel(parcel.parcelId);
-            const assignmentId = assignRes.data?.assignmentId ?? parcel.parcelId;
-            const res = await riderService.updateAssignmentStatus(
-                assignmentId, "DELIVERED",
-                confirmationCode.trim() || undefined,
-                undefined, paymentMethod, parcel.parcelId,
-            );
-            if (res.success) {
-                showToast("Delivery confirmed!", "success");
-                setShowDeliveredModal(false);
-                await reload();
-            } else {
-                showToast(res.message || "Failed", "error");
-            }
+            await patchStatus(parcel.parcelId, {
+                parcelStatus: "DELIVERD",
+                notes: confirmationCode.trim() || undefined,
+                paymentMethod,
+            });
+            showToast("Delivery confirmed!", "success");
+            setShowDeliveredModal(false);
+            await reload();
+        } catch (err: any) {
+            const status = err?.response?.status;
+            if (status === 403) showToast("You don't have permission to do this", "error");
+            else showToast(err?.response?.data?.message || "Failed", "error");
         } finally {
             setActionLoading(false);
         }
@@ -126,18 +171,17 @@ export const ParcelScan = (): JSX.Element => {
         if (!reason) { showToast("Select a failure reason", "error"); return; }
         setActionLoading(true);
         try {
-            const assignRes = await frontdeskService.getActiveDeliveryForParcel(parcel.parcelId);
-            const assignmentId = assignRes.data?.assignmentId ?? parcel.parcelId;
-            const res = await riderService.updateAssignmentStatus(
-                assignmentId, "RETURNED", undefined, reason, undefined, parcel.parcelId,
-            );
-            if (res.success) {
-                showToast("Delivery failure recorded", "success");
-                setShowFailedModal(false);
-                await reload();
-            } else {
-                showToast(res.message || "Failed", "error");
-            }
+            await patchStatus(parcel.parcelId, {
+                parcelStatus: "FAILED",
+                notes: reason,
+            });
+            showToast("Delivery failure recorded", "success");
+            setShowFailedModal(false);
+            await reload();
+        } catch (err: any) {
+            const status = err?.response?.status;
+            if (status === 403) showToast("You don't have permission to do this", "error");
+            else showToast(err?.response?.data?.message || "Failed", "error");
         } finally {
             setActionLoading(false);
         }
@@ -147,23 +191,24 @@ export const ParcelScan = (): JSX.Element => {
     const isRider = userRole === "RIDER";
     const isLoggedIn = !!authService.getToken();
 
-    const statusLabel = parcel
-        ? parcel.delivered ? "Delivered"
-            : parcel.pickedUp ? "Picked Up"
-                : parcel.pod ? "POD"
-                    : parcel.parcelAssigned ? "Assigned"
-                        : parcel.hasCalled ? "Called"
-                            : "Registered"
-        : "";
-
-    const statusColor: Record<string, string> = {
-        Delivered: "bg-green-100 text-green-800",
-        "Picked Up": "bg-orange-100 text-orange-800",
-        POD: "bg-purple-100 text-purple-800",
-        Assigned: "bg-blue-100 text-blue-800",
-        Called: "bg-yellow-100 text-yellow-800",
-        Registered: "bg-gray-100 text-gray-800",
+    const status = parcel?.parcelStatus ?? "";
+    const statusLabel: Record<string, string> = {
+        RECEIVED: "Received",
+        PENDING: "Pending",
+        DELIVERD: "Delivered",
+        COLLECTED: "Collected",
+        FAILED: "Failed",
+        REVERSED: "Reversed",
     };
+    const statusColor: Record<string, string> = {
+        RECEIVED: "bg-blue-100 text-blue-800",
+        PENDING: "bg-yellow-100 text-yellow-800",
+        DELIVERD: "bg-green-100 text-green-800",
+        COLLECTED: "bg-orange-100 text-orange-800",
+        FAILED: "bg-red-100 text-red-800",
+        REVERSED: "bg-gray-100 text-gray-800",
+    };
+    const isFinished = status === "DELIVERD" || status === "COLLECTED" || status === "REVERSED";
 
     if (loading) return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -171,18 +216,37 @@ export const ParcelScan = (): JSX.Element => {
         </div>
     );
 
-    if (notFound || !parcel) return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
-            <PackageIcon className="w-16 h-16 text-gray-300 mb-4" />
-            <h2 className="text-lg font-bold text-neutral-800 mb-1">Parcel Not Found</h2>
-            <p className="text-sm text-gray-500 mb-4">No parcel found for ID: <span className="font-mono">{parcelId || "—"}</span></p>
-            {isLoggedIn && (
-                <Button onClick={() => navigate(-1)} variant="outline" className="border-[#d1d1d1]">
-                    <ArrowLeftIcon className="w-4 h-4 mr-2" />Go Back
-                </Button>
-            )}
-        </div>
-    );
+    if (fetchError || !parcel) {
+        const isNetwork = fetchError === "network";
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
+                <PackageIcon className="w-16 h-16 text-gray-300 mb-4" />
+                <h2 className="text-lg font-bold text-neutral-800 mb-1">
+                    {isNetwork ? "Connection Error" : "Parcel Not Found"}
+                </h2>
+                <p className="text-sm text-gray-500 mb-4">
+                    {isNetwork
+                        ? "Could not reach the server. Check your connection and try again."
+                        : <>No parcel found for ID: <span className="font-mono">{parcelId || "—"}</span></>}
+                </p>
+                <div className="flex gap-3">
+                    {isNetwork && (
+                        <Button
+                            onClick={() => { setLoading(true); setFetchError(null); fetchParcel(parcelId).then(({ data, error }) => { if (data) setParcel(data); else setFetchError(error ?? "network"); setLoading(false); }); }}
+                            className="bg-[#ea690c] text-white hover:bg-[#d45d0a]"
+                        >
+                            Retry
+                        </Button>
+                    )}
+                    {isLoggedIn && (
+                        <Button onClick={() => navigate(-1)} variant="outline" className="border-[#d1d1d1]">
+                            <ArrowLeftIcon className="w-4 h-4 mr-2" />Go Back
+                        </Button>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -209,8 +273,8 @@ export const ParcelScan = (): JSX.Element => {
                                 <p className="text-xs text-gray-500 mb-0.5">Parcel ID</p>
                                 <p className="font-bold text-neutral-800 text-base font-mono">{parcel.parcelId}</p>
                             </div>
-                            <Badge className={`${statusColor[statusLabel] ?? "bg-gray-100 text-gray-800"} text-xs shrink-0`}>
-                                {statusLabel}
+                            <Badge className={`${statusColor[status] ?? "bg-gray-100 text-gray-800"} text-xs shrink-0`}>
+                                {statusLabel[status] ?? status}
                             </Badge>
                         </div>
                         {parcel.createdAt && (
@@ -219,23 +283,55 @@ export const ParcelScan = (): JSX.Element => {
                     </CardContent>
                 </Card>
 
-                {/* Recipient */}
-                <Card className="border border-[#d1d1d1] bg-white">
-                    <CardContent className="p-4 space-y-2">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recipient</p>
-                        <Row label="Name" value={parcel.receiverName} />
-                        <Row label="Phone" value={parcel.recieverPhoneNumber ? formatPhoneNumber(parcel.recieverPhoneNumber) : undefined} />
-                        {parcel.receiverAddress && <Row label="Address" value={parcel.receiverAddress} />}
-                    </CardContent>
-                </Card>
+                {/* Rider delivery detail cards — shown only when backend returns rider-specific fields */}
+                {parcel.pickupInstructions != null || parcel.deliveryAddress != null ? (
+                    <RiderDetailCards parcel={parcel} />
+                ) : (
+                    <>
+                        {/* Recipient */}
+                        <Card className="border border-[#d1d1d1] bg-white">
+                            <CardContent className="p-4 space-y-2">
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recipient</p>
+                                <Row label="Name" value={parcel.receiverName} />
+                                <Row label="Phone" value={parcel.recieverPhoneNumber ? formatPhoneNumber(parcel.recieverPhoneNumber) : undefined} />
+                                {parcel.receiverAddress && <Row label="Address" value={parcel.receiverAddress} />}
+                            </CardContent>
+                        </Card>
 
-                {/* Sender */}
-                {(parcel.senderName || parcel.senderPhoneNumber) && (
+                        {/* Sender */}
+                        {(parcel.senderName || parcel.senderPhoneNumber) && (
+                            <Card className="border border-[#d1d1d1] bg-white">
+                                <CardContent className="p-4 space-y-2">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sender</p>
+                                    <Row label="Name" value={parcel.senderName} />
+                                    <Row label="Phone" value={parcel.senderPhoneNumber ? formatPhoneNumber(parcel.senderPhoneNumber) : undefined} />
+                                </CardContent>
+                            </Card>
+                        )}
+                    </>
+                )}
+
+                {/* Timeline — shown when backend returns timeline array (Customer/Vendor view) */}
+                {parcel.timeline && parcel.timeline.length > 0 && (
+                    <Timeline events={parcel.timeline} />
+                )}
+
+                {/* Route — shown for public view */}
+                {(parcel.fromOfficeName || parcel.toOfficeName) && (
                     <Card className="border border-[#d1d1d1] bg-white">
-                        <CardContent className="p-4 space-y-2">
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sender</p>
-                            <Row label="Name" value={parcel.senderName} />
-                            <Row label="Phone" value={parcel.senderPhoneNumber ? formatPhoneNumber(parcel.senderPhoneNumber) : undefined} />
+                        <CardContent className="p-4">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Route</p>
+                            <div className="flex items-center gap-2">
+                                <div className="flex-1 text-center">
+                                    <p className="text-xs text-gray-400">From</p>
+                                    <p className="text-sm font-semibold text-neutral-800">{parcel.fromOfficeName ?? "—"}</p>
+                                </div>
+                                <div className="text-gray-300 text-lg">→</div>
+                                <div className="flex-1 text-center">
+                                    <p className="text-xs text-gray-400">To</p>
+                                    <p className="text-sm font-semibold text-neutral-800">{parcel.toOfficeName ?? "—"}</p>
+                                </div>
+                            </div>
                         </CardContent>
                     </Card>
                 )}
@@ -247,8 +343,8 @@ export const ParcelScan = (): JSX.Element => {
                         {parcel.parcelDescription && <Row label="Description" value={parcel.parcelDescription} />}
                         <Row label="Shelf" value={parcel.shelfName || parcel.shelfNumber} />
                         <div className="flex gap-1.5 flex-wrap pt-0.5">
-                            {parcel.fragile && <Badge className="bg-red-100 text-red-700 text-xs">Fragile</Badge>}
-                            {parcel.pod && <Badge className="bg-purple-100 text-purple-700 text-xs">POD</Badge>}
+                            {(parcel.isFragile || parcel.fragile) && <Badge className="bg-red-100 text-red-700 text-xs">Fragile</Badge>}
+                            {(parcel.isPOD || parcel.pod) && <Badge className="bg-purple-100 text-purple-700 text-xs">POD</Badge>}
                             {parcel.homeDelivery && <Badge className="bg-blue-100 text-blue-700 text-xs">Home Delivery</Badge>}
                         </div>
                     </CardContent>
@@ -273,7 +369,7 @@ export const ParcelScan = (): JSX.Element => {
                 )}
 
                 {/* Staff actions */}
-                {isStaff && !parcel.pickedUp && !parcel.delivered && (
+                {isStaff && !isFinished && (
                     <div className="space-y-2">
                         <Button
                             onClick={() => { setPickupIsOwner(true); setPickupName(""); setPickupPhone(""); setShowPickupModal(true); }}
@@ -292,7 +388,7 @@ export const ParcelScan = (): JSX.Element => {
                 )}
 
                 {/* Rider actions */}
-                {isRider && !parcel.delivered && (
+                {isRider && !isFinished && (
                     <div className="grid grid-cols-2 gap-3">
                         <Button
                             onClick={() => { setAmountCollected(""); setPaymentMethod(""); setConfirmationCode(""); setShowDeliveredModal(true); }}
@@ -475,4 +571,132 @@ const CostRow = ({ label, value }: { label: string; value: number }) => (
         <span className="text-xs text-gray-500">{label}</span>
         <span className="text-xs font-medium text-neutral-800">GHC {value.toFixed(2)}</span>
     </div>
+);
+
+const timelineStatusIcon: Record<string, string> = {
+    RECEIVED: "📦", ASSIGNED: "🚴", PICKED_UP: "✅", DELIVERED: "🏠",
+    COLLECTED: "🤝", FAILED: "❌", REVERSED: "↩️", PENDING: "⏳",
+};
+
+const Timeline = ({ events }: { events: { status: string; description: string; timestamp: number }[] }) => (
+    <Card className="border border-[#d1d1d1] bg-white">
+        <CardContent className="p-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tracking History</p>
+            <div className="space-y-0">
+                {events.map((e, i) => (
+                    <div key={i} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                            <div className="w-7 h-7 rounded-full bg-[#ea690c]/10 border-2 border-[#ea690c] flex items-center justify-center text-sm shrink-0">
+                                {timelineStatusIcon[e.status] ?? "•"}
+                            </div>
+                            {i < events.length - 1 && <div className="w-0.5 flex-1 bg-gray-200 my-1" />}
+                        </div>
+                        <div className="pb-4">
+                            <p className="text-sm font-semibold text-neutral-800">{e.description}</p>
+                            <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                                <ClockIcon className="w-3 h-3" />
+                                {new Date(e.timestamp).toLocaleString()}
+                            </p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </CardContent>
+    </Card>
+);
+
+const RiderDetailCards = ({ parcel }: { parcel: TrackingParcel }) => (
+    <>
+        {/* Receiver contact */}
+        <Card className="border border-[#d1d1d1] bg-white">
+            <CardContent className="p-4 space-y-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recipient</p>
+                <Row label="Name" value={parcel.receiverName} />
+                {parcel.recieverPhoneNumber && (
+                    <div className="flex justify-between gap-4">
+                        <span className="text-xs text-gray-500 shrink-0">Phone</span>
+                        <a href={`tel:${parcel.recieverPhoneNumber}`} className="text-xs font-medium text-[#ea690c] flex items-center gap-1">
+                            <PhoneIcon className="w-3 h-3" />{parcel.recieverPhoneNumber}
+                        </a>
+                    </div>
+                )}
+                {(parcel as any).alternativePhoneNumber && (
+                    <div className="flex justify-between gap-4">
+                        <span className="text-xs text-gray-500 shrink-0">Alt. Phone</span>
+                        <a href={`tel:${(parcel as any).alternativePhoneNumber}`} className="text-xs font-medium text-[#ea690c] flex items-center gap-1">
+                            <PhoneIcon className="w-3 h-3" />{(parcel as any).alternativePhoneNumber}
+                        </a>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+
+        {/* Pickup details */}
+        {((parcel as any).pickupAddress || parcel.pickupInstructions) && (
+            <Card className="border border-[#d1d1d1] bg-white">
+                <CardContent className="p-4 space-y-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Pickup</p>
+                    {(parcel as any).pickupAddress && (
+                        <div className="flex justify-between gap-4">
+                            <span className="text-xs text-gray-500 shrink-0">Address</span>
+                            <a
+                                href={`https://maps.google.com/?q=${encodeURIComponent((parcel as any).pickupAddress)}`}
+                                target="_blank" rel="noreferrer"
+                                className="text-xs font-medium text-[#ea690c] flex items-center gap-1 text-right">
+                                <MapPinIcon className="w-3 h-3 shrink-0" />{(parcel as any).pickupAddress}
+                            </a>
+                        </div>
+                    )}
+                    <Row label="Contact" value={(parcel as any).pickupContactName} />
+                    {(parcel as any).pickupContactPhoneNumber && (
+                        <div className="flex justify-between gap-4">
+                            <span className="text-xs text-gray-500 shrink-0">Phone</span>
+                            <a href={`tel:${(parcel as any).pickupContactPhoneNumber}`} className="text-xs font-medium text-[#ea690c] flex items-center gap-1">
+                                <PhoneIcon className="w-3 h-3" />{(parcel as any).pickupContactPhoneNumber}
+                            </a>
+                        </div>
+                    )}
+                    {parcel.pickupInstructions && (
+                        <div className="mt-1 bg-yellow-50 border border-yellow-200 rounded-lg p-2">
+                            <p className="text-xs text-yellow-800">📋 {parcel.pickupInstructions}</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        )}
+
+        {/* Delivery details */}
+        {((parcel as any).deliveryAddress || (parcel as any).specialInstructions) && (
+            <Card className="border border-[#d1d1d1] bg-white">
+                <CardContent className="p-4 space-y-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Delivery</p>
+                    {(parcel as any).deliveryAddress && (
+                        <div className="flex justify-between gap-4">
+                            <span className="text-xs text-gray-500 shrink-0">Address</span>
+                            <a
+                                href={`https://maps.google.com/?q=${encodeURIComponent((parcel as any).deliveryAddress)}`}
+                                target="_blank" rel="noreferrer"
+                                className="text-xs font-medium text-[#ea690c] flex items-center gap-1 text-right">
+                                <MapPinIcon className="w-3 h-3 shrink-0" />{(parcel as any).deliveryAddress}
+                            </a>
+                        </div>
+                    )}
+                    <Row label="Contact" value={(parcel as any).deliveryContactName} />
+                    {(parcel as any).deliveryContactPhoneNumber && (
+                        <div className="flex justify-between gap-4">
+                            <span className="text-xs text-gray-500 shrink-0">Phone</span>
+                            <a href={`tel:${(parcel as any).deliveryContactPhoneNumber}`} className="text-xs font-medium text-[#ea690c] flex items-center gap-1">
+                                <PhoneIcon className="w-3 h-3" />{(parcel as any).deliveryContactPhoneNumber}
+                            </a>
+                        </div>
+                    )}
+                    {(parcel as any).specialInstructions && (
+                        <div className="mt-1 bg-orange-50 border border-orange-200 rounded-lg p-2">
+                            <p className="text-xs text-orange-800">⚠️ {(parcel as any).specialInstructions}</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        )}
+    </>
 );

@@ -84,6 +84,7 @@ export const App = (): JSX.Element => {
 
                         {/* Public: Customer parcel lookup (no login) */}
                         <Route path="/track" element={<TrackParcel />} />
+                        <Route path="/p/:parcelId" element={<ParcelScan />} />
                         <Route path="/scan" element={<ParcelScan />} />
                         <Route
                           path="/receive"

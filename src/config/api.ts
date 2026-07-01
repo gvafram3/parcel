@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
     OFFICES: `${API_BASE_URL}/api/offices`,
     CALL_CENTER: `${API_BASE_URL}/api-call-center`,
     VENDOR: `${API_BASE_URL}/api-vendor`,
+    TRACKING: `${API_BASE_URL}/api-tracking`,
 };
 
 export default API_BASE_URL;
